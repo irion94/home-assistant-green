@@ -1,0 +1,7 @@
+# Example package file; anything here is merged into main config
+sensor:
+  - platform: template
+    sensors:
+      enterprise_example_hello:
+        friendly_name: "Enterprise Example Hello"
+        value_template: "world"

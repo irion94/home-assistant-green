@@ -1,0 +1,11 @@
+[project]
+name = "ha-enterprise-starter"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-asyncio", "homeassistant>=2024.7.0"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

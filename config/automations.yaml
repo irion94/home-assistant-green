@@ -1,0 +1,11 @@
+# Example automation
+- id: restart_on_git_pull_webhook
+  alias: "Restart after Git Pull (manual/example)"
+  description: "Placeholder for a restart automation triggered by Git Pull add-on webhook"
+  mode: single
+  trigger:
+    - platform: webhook
+      webhook_id: example_restart_after_pull
+  action:
+    - service: homeassistant.check_config
+    - service: homeassistant.restart

@@ -1,0 +1,10 @@
+{
+  "title": "Enterprise Example",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Enterprise Example Setup"
+      }
+    }
+  }
+}

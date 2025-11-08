@@ -1,0 +1,19 @@
+# Main configuration for Home Assistant (project-driven)
+homeassistant:
+  name: Enterprise Home
+  packages: !include_dir_named packages
+
+# Enable default config
+default_config:
+
+# Automations
+automation: !include automations.yaml
+
+# Example of exposing our custom integration (if it provides platforms)
+# enterprise_example:
+
+# Logger level (reduce noise in prod)
+logger:
+  default: warning
+  logs:
+    custom_components.enterprise_example: debug

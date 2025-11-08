@@ -1,0 +1,27 @@
+name: Deploy (SSH rsync)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - "config/**"
+      - "!config/home-assistant_v2.db*"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write SSH key
+        run: |
+          echo "${{ secrets.HA_SSH_KEY }}" > id_ha
+          chmod 600 id_ha
+      - name: Deploy over SSH
+        env:
+          HA_HOST: ${{ secrets.HA_HOST }}
+          HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
+          HA_SSH_KEY: ${{ github.workspace }}/id_ha
+          HA_SSH_PORT: ${{ secrets.HA_SSH_PORT }}
+        run: |
+          ./scripts/deploy_via_ssh.sh
