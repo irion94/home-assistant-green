@@ -1,0 +1,89 @@
+# Home Assistant database files
+config/home-assistant_v2.db
+config/home-assistant_v2.db-shm
+config/home-assistant_v2.db-wal
+config/*.db
+config/*.db-shm
+config/*.db-wal
+
+# Home Assistant runtime state and storage
+config/.storage/
+config/.cloud/
+config/.HA_VERSION
+config/.uuid
+config/deps/
+config/tts/
+config/www/
+
+# Secrets and credentials
+config/secrets.yaml
+config/ip_bans.yaml
+*.pem
+*.key
+
+# Logs and temporary files
+config/*.log
+config/*.log.*
+*.tmp
+*.temp
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Node modules (if using frontend dev)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# CI/CD artifacts
+ci_artifacts/
+
+# Backup files
+*.bak
+*.backup
+config/backups/
+
+# OS specific
+Thumbs.db
+.Spotlight-V100
+.Trashes
+
+# Home Assistant add-on specific
+config/addons/
+config/ssl/
+
+# HACS (Home Assistant Community Store)
+config/custom_components/*
+!config/custom_components/enterprise_example/
+config/www/community/
+
+# Temporary testing files
+test_*.yaml
+debug_*.log
