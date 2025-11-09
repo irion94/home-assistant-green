@@ -82,3 +82,10 @@ coverage/
 pytest_cache/
 .mypy_cache/
 .tox/
+
+##############################
+# INVENTORY DATA
+##############################
+
+# Raw registry snapshots (can contain sensitive data, large files)
+data/inventory/raw/

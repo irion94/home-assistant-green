@@ -1,0 +1,61 @@
+name: Inventory Snapshot
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"  # 03:00 UTC daily
+
+permissions:
+  contents: write
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.HA_SSH_KEY }}" > ~/.ssh/ha_green
+          chmod 600 ~/.ssh/ha_green
+
+      - name: Pull inventory from Home Assistant
+        env:
+          HA_HOST: ${{ secrets.HA_HOST }}
+          HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
+          HA_SSH_PORT: ${{ secrets.HA_SSH_PORT }}
+          HA_SSH_KEY: /home/runner/.ssh/ha_green
+        run: bash scripts/pull_inventory.sh
+
+      - name: Build inventory CSV and summary
+        run: python3 scripts/build_inventory.py
+
+      - name: Upload inventory artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inventory-${{ github.run_id }}
+          path: data/inventory/**
+          retention-days: 90
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit inventory updates
+        run: |
+          git add data/inventory/
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update inventory snapshot $(date +%Y-%m-%d)"
+            git push
+          fi
