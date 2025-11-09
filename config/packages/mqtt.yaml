@@ -1,0 +1,97 @@
+# ============================================================================
+# MQTT INTEGRATION
+# ============================================================================
+# Documentation: https://www.home-assistant.io/integrations/mqtt/
+#
+# Setup Instructions:
+# 1. Install MQTT broker (Mosquitto recommended):
+#    - Via HA add-on: Settings → Add-ons → Mosquitto broker
+#    - Or external broker: CloudMQTT, HiveMQ, self-hosted
+# 2. Configure via UI: Settings → Devices & Services → Add Integration → MQTT
+# 3. Enter broker details from secrets.yaml
+# 4. Enable MQTT discovery for automatic device detection
+#
+# Common uses:
+# - Zigbee2MQTT / ZHA device integration
+# - DIY ESP8266/ESP32 sensors
+# - Third-party smart devices with MQTT support
+# ============================================================================
+
+mqtt:
+  broker: !secret mqtt_broker
+  port: !secret mqtt_port
+  username: !secret mqtt_username
+  password: !secret mqtt_password
+  client_id: !secret mqtt_client_id
+  discovery: true  # Enable auto-discovery
+  discovery_prefix: homeassistant  # Default discovery prefix
+  birth_message:
+    topic: "homeassistant/status"
+    payload: "online"
+  will_message:
+    topic: "homeassistant/status"
+    payload: "offline"
+
+# Example MQTT sensors for custom devices
+sensor:
+  - platform: mqtt
+    name: "MQTT Example Temperature"
+    state_topic: "home/sensor/temperature"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    # Example topic: home/sensor/temperature with payload: 22.5
+
+  - platform: mqtt
+    name: "MQTT Example Humidity"
+    state_topic: "home/sensor/humidity"
+    unit_of_measurement: "%"
+    device_class: humidity
+
+# Example MQTT binary sensor
+binary_sensor:
+  - platform: mqtt
+    name: "MQTT Example Motion"
+    state_topic: "home/sensor/motion"
+    payload_on: "ON"
+    payload_off: "OFF"
+    device_class: motion
+
+# Example MQTT light
+light:
+  - platform: mqtt
+    name: "MQTT Example Light"
+    command_topic: "home/light/set"
+    state_topic: "home/light/state"
+    payload_on: "ON"
+    payload_off: "OFF"
+    brightness_command_topic: "home/light/brightness/set"
+    brightness_state_topic: "home/light/brightness/state"
+    brightness_scale: 255
+
+# Example automation for MQTT device
+automation:
+  - id: mqtt_device_offline_alert
+    alias: "MQTT: Device Offline Alert"
+    description: "Alert when MQTT device goes offline"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.mqtt_example_motion
+        to: "unavailable"
+        for:
+          minutes: 5
+    action:
+      - service: persistent_notification.create
+        data:
+          title: "MQTT Device Offline"
+          message: "{{ trigger.to_state.attributes.friendly_name }} is offline"
+
+# MQTT monitoring sensors
+  - platform: template
+    sensors:
+      mqtt_connected_devices:
+        friendly_name: "MQTT Connected Devices"
+        value_template: >
+          {{ states | selectattr('entity_id', 'search', 'mqtt')
+             | rejectattr('state', 'equalto', 'unavailable')
+             | list | count }}
+        unit_of_measurement: "devices"

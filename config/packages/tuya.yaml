@@ -1,0 +1,42 @@
+# ============================================================================
+# TUYA INTEGRATION (Official)
+# ============================================================================
+# Documentation: https://www.home-assistant.io/integrations/tuya/
+#
+# Setup Instructions:
+# 1. Create Tuya Cloud project: https://iot.tuya.com/
+# 2. Navigate to: Cloud → Development → Create Cloud Project
+# 3. Get Client ID and Client Secret
+# 4. Add credentials to secrets.yaml
+# 5. Configure via UI: Settings → Devices & Services → Add Integration → Tuya
+# 6. Enter credentials from secrets.yaml
+#
+# Note: This is a UI-based integration. Configuration below is for reference only.
+# ============================================================================
+
+# Tuya integration is configured via UI, not YAML
+# After setup, devices will appear automatically
+
+# Example automation for Tuya devices
+automation:
+  - id: tuya_device_example
+    alias: "Tuya: Example Automation"
+    description: "Example automation for Tuya smart devices"
+    trigger:
+      - platform: state
+        entity_id: light.tuya_living_room  # Replace with your Tuya entity
+    action:
+      - service: persistent_notification.create
+        data:
+          message: "Tuya device state changed"
+
+# Example template sensor for Tuya device monitoring
+sensor:
+  - platform: template
+    sensors:
+      tuya_devices_count:
+        friendly_name: "Tuya Devices Count"
+        value_template: >
+          {{ states.light | selectattr('entity_id', 'search', 'tuya') | list | count +
+             states.switch | selectattr('entity_id', 'search', 'tuya') | list | count }}
+        unit_of_measurement: "devices"

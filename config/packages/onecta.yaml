@@ -1,0 +1,77 @@
+# ============================================================================
+# DAIKIN ONECTA INTEGRATION (Official/Community)
+# ============================================================================
+# Documentation:
+# - Official: https://www.home-assistant.io/integrations/daikin/
+# - Onecta Cloud: https://developer.cloud.daikineurope.com/
+#
+# Setup Instructions:
+#
+# OPTION A: Official Daikin Integration (Local Control)
+# 1. Ensure Daikin AC is on local network
+# 2. Configure via UI: Settings → Devices & Services → Add Integration → Daikin
+# 3. HA will auto-discover local Daikin devices
+#
+# OPTION B: Daikin Onecta Cloud (Newer models)
+# 1. Register developer account: https://developer.cloud.daikineurope.com/
+# 2. Create OAuth2 application to get client_id and client_secret
+# 3. Add credentials to secrets.yaml
+# 4. May require community integration from HACS:
+#    - Search HACS for "Daikin Onecta" or "Daikin Cloud"
+#
+# Note: Some newer models only support cloud control via Onecta platform
+# ============================================================================
+
+# Daikin integration is configured via UI
+
+# Example automation for climate control
+automation:
+  - id: daikin_auto_cooling
+    alias: "Daikin: Auto Cooling on Hot Days"
+    description: "Enable AC cooling when temperature exceeds threshold"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.living_room_temperature  # Replace with your sensor
+        above: 26
+    condition:
+      - condition: state
+        entity_id: climate.daikin_living_room  # Replace with your Daikin entity
+        state: "off"
+    action:
+      - service: climate.set_temperature
+        target:
+          entity_id: climate.daikin_living_room
+        data:
+          temperature: 22
+          hvac_mode: cool
+
+  - id: daikin_eco_mode_night
+    alias: "Daikin: Eco Mode at Night"
+    description: "Switch to eco mode during night hours"
+    trigger:
+      - platform: time
+        at: "22:00:00"
+    condition:
+      - condition: state
+        entity_id: climate.daikin_living_room
+        state: "cool"
+    action:
+      - service: climate.set_preset_mode
+        target:
+          entity_id: climate.daikin_living_room
+        data:
+          preset_mode: eco
+
+# Example sensor for energy monitoring
+sensor:
+  - platform: template
+    sensors:
+      daikin_daily_runtime:
+        friendly_name: "Daikin Daily Runtime"
+        value_template: >
+          {% set on_states = states.climate
+             | selectattr('entity_id', 'search', 'daikin')
+             | selectattr('state', 'in', ['cool', 'heat', 'fan_only'])
+             | list %}
+          {{ on_states | length }}
+        unit_of_measurement: "units"
