@@ -2,7 +2,7 @@ name: Deploy (SSH rsync)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
     paths:
       - "config/**"
       - "!config/.storage/**"

@@ -2,7 +2,7 @@ name: Deploy (Git Pull webhook)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
 
 jobs:
   deploy:
