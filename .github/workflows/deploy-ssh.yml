@@ -1,12 +1,11 @@
-name: Deploy (SSH rsync)
+name: Deploy (SSH rsync) - MANUAL FALLBACK
+
+# This workflow is DISABLED for automatic runs.
+# Git Pull webhook is the primary deployment method.
+# Enable this only for manual fallback deployments via workflow_dispatch.
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
-    paths:
-      - "config/**"
-      - "!config/home-assistant_v2.db*"
 
 jobs:
   deploy:
