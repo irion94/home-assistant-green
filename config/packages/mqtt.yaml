@@ -17,20 +17,22 @@
 # - Third-party smart devices with MQTT support
 # ============================================================================
 
-mqtt:
-  broker: !secret mqtt_broker
-  port: !secret mqtt_port
-  username: !secret mqtt_username
-  password: !secret mqtt_password
-  client_id: !secret mqtt_client_id
-  discovery: true  # Enable auto-discovery
-  discovery_prefix: homeassistant  # Default discovery prefix
-  birth_message:
-    topic: "homeassistant/status"
-    payload: "online"
-  will_message:
-    topic: "homeassistant/status"
-    payload: "offline"
+# MQTT broker configuration
+# Uncomment and configure after adding secrets to secrets.yaml
+# mqtt:
+#   broker: !secret mqtt_broker
+#   port: !secret mqtt_port
+#   username: !secret mqtt_username
+#   password: !secret mqtt_password
+#   client_id: !secret mqtt_client_id
+#   discovery: true  # Enable auto-discovery
+#   discovery_prefix: homeassistant  # Default discovery prefix
+#   birth_message:
+#     topic: "homeassistant/status"
+#     payload: "online"
+#   will_message:
+#     topic: "homeassistant/status"
+#     payload: "offline"
 
 # Example MQTT sensors for custom devices
 sensor:
@@ -46,6 +48,17 @@ sensor:
     state_topic: "home/sensor/humidity"
     unit_of_measurement: "%"
     device_class: humidity
+
+  # MQTT monitoring sensor
+  - platform: template
+    sensors:
+      mqtt_connected_devices:
+        friendly_name: "MQTT Connected Devices"
+        value_template: >
+          {{ states | selectattr('entity_id', 'search', 'mqtt')
+             | rejectattr('state', 'equalto', 'unavailable')
+             | list | count }}
+        unit_of_measurement: "devices"
 
 # Example MQTT binary sensor
 binary_sensor:
@@ -84,14 +97,3 @@ automation:
         data:
           title: "MQTT Device Offline"
           message: "{{ trigger.to_state.attributes.friendly_name }} is offline"
-
-# MQTT monitoring sensors
-  - platform: template
-    sensors:
-      mqtt_connected_devices:
-        friendly_name: "MQTT Connected Devices"
-        value_template: >
-          {{ states | selectattr('entity_id', 'search', 'mqtt')
-             | rejectattr('state', 'equalto', 'unavailable')
-             | list | count }}
-        unit_of_measurement: "devices"

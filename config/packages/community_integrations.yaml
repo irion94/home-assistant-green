@@ -28,22 +28,6 @@
 # - Zone tariff support (G11, G12, G12w)
 # ----------------------------------------------------------------------------
 
-# Tauron is configured via UI after HACS installation
-# Example automation for high consumption alerts
-automation:
-  - id: tauron_high_consumption_alert
-    alias: "Tauron: High Consumption Alert"
-    description: "Alert when hourly consumption exceeds threshold"
-    trigger:
-      - platform: numeric_state
-        entity_id: sensor.tauron_current_power  # Replace with actual entity
-        above: 3000  # 3 kW
-    action:
-      - service: persistent_notification.create
-        data:
-          title: "High Energy Consumption"
-          message: "Current usage: {{ states('sensor.tauron_current_power') }} W"
-
 # ----------------------------------------------------------------------------
 # ELICZNIK - Polish Smart Meter Integration
 # ----------------------------------------------------------------------------
@@ -63,19 +47,6 @@ automation:
 # - Tariff zone tracking
 # ----------------------------------------------------------------------------
 
-# eLicznik is configured via UI after HACS installation
-# Example sensor for daily cost calculation
-sensor:
-  - platform: template
-    sensors:
-      elicznik_daily_cost:
-        friendly_name: "eLicznik Daily Cost"
-        value_template: >
-          {% set daily_kwh = states('sensor.elicznik_daily_consumption') | float(0) %}
-          {% set price_per_kwh = 0.75 %}  # PLN - adjust to your tariff
-          {{ (daily_kwh * price_per_kwh) | round(2) }}
-        unit_of_measurement: "PLN"
-
 # ----------------------------------------------------------------------------
 # BLUESECURE - Security System Integration
 # ----------------------------------------------------------------------------
@@ -93,24 +64,6 @@ sensor:
 # - Event logging
 # - Integration with HA alarm panel
 # ----------------------------------------------------------------------------
-
-# BlueSecure configuration depends on specific integration
-# Example alarm panel automation
-automation:
-  - id: bluesecure_arm_at_night
-    alias: "BlueSecure: Arm at Night"
-    description: "Automatically arm security system at night"
-    trigger:
-      - platform: time
-        at: "23:00:00"
-    condition:
-      - condition: state
-        entity_id: alarm_control_panel.bluesecure  # Replace with actual entity
-        state: disarmed
-    action:
-      - service: alarm_control_panel.alarm_arm_night
-        target:
-          entity_id: alarm_control_panel.bluesecure
 
 # ----------------------------------------------------------------------------
 # EMODULE / TECH CONTROLLERS - Heating System
@@ -132,9 +85,42 @@ automation:
 # - Fuel/energy consumption tracking
 # ----------------------------------------------------------------------------
 
-# TECH controllers configured via UI after HACS installation
-# Example automation for heating optimization
+# ============================================================================
+# CONSOLIDATED AUTOMATIONS
+# ============================================================================
+# All automations for community integrations in one place
 automation:
+  # Tauron - High consumption alert
+  - id: tauron_high_consumption_alert
+    alias: "Tauron: High Consumption Alert"
+    description: "Alert when hourly consumption exceeds threshold"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.tauron_current_power  # Replace with actual entity
+        above: 3000  # 3 kW
+    action:
+      - service: persistent_notification.create
+        data:
+          title: "High Energy Consumption"
+          message: "Current usage: {{ states('sensor.tauron_current_power') }} W"
+
+  # BlueSecure - Arm at night
+  - id: bluesecure_arm_at_night
+    alias: "BlueSecure: Arm at Night"
+    description: "Automatically arm security system at night"
+    trigger:
+      - platform: time
+        at: "23:00:00"
+    condition:
+      - condition: state
+        entity_id: alarm_control_panel.bluesecure  # Replace with actual entity
+        state: disarmed
+    action:
+      - service: alarm_control_panel.alarm_arm_night
+        target:
+          entity_id: alarm_control_panel.bluesecure
+
+  # TECH - Eco mode when away
   - id: tech_heating_eco_mode
     alias: "TECH: Eco Mode When Away"
     description: "Lower heating when nobody is home"
@@ -151,8 +137,23 @@ automation:
         data:
           temperature: 18
 
-# Example sensor for heating cost estimation
+# ============================================================================
+# CONSOLIDATED SENSORS
+# ============================================================================
+# All sensors for community integrations in one place
 sensor:
+  # eLicznik - Daily cost calculation
+  - platform: template
+    sensors:
+      elicznik_daily_cost:
+        friendly_name: "eLicznik Daily Cost"
+        value_template: >
+          {% set daily_kwh = states('sensor.elicznik_daily_consumption') | float(0) %}
+          {% set price_per_kwh = 0.75 %}  # PLN - adjust to your tariff
+          {{ (daily_kwh * price_per_kwh) | round(2) }}
+        unit_of_measurement: "PLN"
+
+  # TECH - Daily heating hours
   - platform: template
     sensors:
       tech_daily_heating_hours:
