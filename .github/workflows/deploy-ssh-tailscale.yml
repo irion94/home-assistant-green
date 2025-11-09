@@ -1,15 +1,18 @@
 name: Deploy (SSH) - via Tailscale
 
-# This workflow uses Tailscale to connect GitHub-hosted runners
-# to your private network without exposing ports.
+# ✅ ACTIVE: This workflow deploys via Tailscale VPN
 #
-# Setup requirements:
-# 1. Install Tailscale on your HA instance
-# 2. Create Tailscale auth key: https://login.tailscale.com/admin/settings/keys
-# 3. Add GitHub Secrets:
-#    - TAILSCALE_AUTH_KEY (ephemeral auth key)
-#    - HA_HOST (Tailscale IP like 100.x.x.x)
-# 4. HA_SSH_KEY, HA_SSH_USER, HA_SSH_PORT (already set)
+# Tailscale connects GitHub-hosted runners to your private network
+# securely without port forwarding.
+#
+# Setup completed:
+# ✅ Tailscale installed on HA (100.116.140.76)
+# ✅ OAuth credentials configured
+# ✅ GitHub Secrets updated
+#
+# Triggers:
+# - Push to master when config/** changes
+# - Manual workflow_dispatch
 
 on:
   push:
