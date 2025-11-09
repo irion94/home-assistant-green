@@ -19,6 +19,11 @@ backups/
 *.tar
 *.zip
 
+# HA runtime directories
+deps/
+tts/
+.cloud/
+
 # Logs
 *.log
 *.log.*

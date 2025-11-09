@@ -1,26 +1,35 @@
-name: Deploy (SSH rsync) - MANUAL FALLBACK
-
-# This workflow is DISABLED for automatic runs.
-# Git Pull webhook is the primary deployment method.
-# Enable this only for manual fallback deployments via workflow_dispatch.
+name: Deploy (SSH rsync)
 
 on:
+  push:
+    branches: [ main ]
+    paths:
+      - "config/**"
+      - "!config/.storage/**"
+      - "!config/home-assistant_v2.db*"
+      - "!config/*.db"
+      - "!config/*.db-shm"
+      - "!config/*.db-wal"
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Write SSH key
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Write SSH key file
+        id: key
         run: |
           echo "${{ secrets.HA_SSH_KEY }}" > id_ha
           chmod 600 id_ha
-      - name: Deploy over SSH
+
+      - name: Deploy via SSH
         env:
           HA_HOST: ${{ secrets.HA_HOST }}
           HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
-          HA_SSH_KEY: ${{ github.workspace }}/id_ha
           HA_SSH_PORT: ${{ secrets.HA_SSH_PORT }}
+          HA_SSH_KEY: ${{ github.workspace }}/id_ha
         run: |
           ./scripts/deploy_via_ssh.sh
