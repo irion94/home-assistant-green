@@ -1,89 +1,79 @@
-# Home Assistant database files
-config/home-assistant_v2.db
-config/home-assistant_v2.db-shm
-config/home-assistant_v2.db-wal
-config/*.db
-config/*.db-shm
-config/*.db-wal
+##############################
+# Home Assistant – SAFE GITIGNORE
+##############################
 
-# Home Assistant runtime state and storage
-config/.storage/
-config/.cloud/
-config/.HA_VERSION
-config/.uuid
-config/deps/
-config/tts/
-config/www/
+# --- CRITICAL: NEVER COMMIT THESE ---
+# HA internal registry + credentials
+.storage/
+secrets.yaml
 
-# Secrets and credentials
-config/secrets.yaml
-config/ip_bans.yaml
-*.pem
-*.key
+# HA database (history, energy etc.)
+home-assistant_v2.db
+home-assistant_v2.db-*
+*.db
+*.db-shm
+*.db-wal
 
-# Logs and temporary files
-config/*.log
-config/*.log.*
+# Backups / snapshots
+backups/
+*.tar
+*.zip
+
+# Logs
+*.log
+*.log.*
+config/home-assistant.log
+
+# Temporary files
 *.tmp
-*.temp
-
-# Python artifacts
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
-*.egg
-
-# Virtual environments
-venv/
-env/
-ENV/
-.venv
-
-# IDE and editor files
-.vscode/
-.idea/
 *.swp
 *.swo
-*~
-.DS_Store
+*.orig
 
-# Node modules (if using frontend dev)
+# Python cache (for custom_components)
+__pycache__/
+*.pyc
+*.pyo
+
+# VSCode
+.vscode/
+.code/
+.history/
+
+# HA Add-ons local files
+addons/local/*
+
+# HACS (safe to version config but not internal storage)
+www/community/*
+
+# Node / JS temp (if used anywhere)
 node_modules/
-package-lock.json
-yarn.lock
 
-# Environment files
+# Pipenv / virtual envs
+venv/
+ENV/
 .env
 .env.*
-!.env.example
 
-# CI/CD artifacts
-ci_artifacts/
-
-# Backup files
-*.bak
-*.backup
-config/backups/
-
-# OS specific
+# System-level rubbish
+.DS_Store
 Thumbs.db
-.Spotlight-V100
-.Trashes
 
-# Home Assistant add-on specific
-config/addons/
-config/ssl/
+##############################
+# EXTRA SAFETY FOR ENTERPRISE MODE
+##############################
 
-# HACS (Home Assistant Community Store)
-config/custom_components/*
-!config/custom_components/enterprise_example/
-config/www/community/
+# Prevent committing local device config
+.ipython/
+.python_history
 
-# Temporary testing files
-test_*.yaml
-debug_*.log
+# Temporary deployment files
+deploy-artifacts/
+tmp/
+cache/
+
+# CI files (if generated locally)
+coverage/
+pytest_cache/
+.mypy_cache/
+.tox/
