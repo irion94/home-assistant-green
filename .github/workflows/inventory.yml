@@ -28,12 +28,27 @@ jobs:
           chmod 600 ~/.ssh/ha_green
 
       - name: Pull inventory from Home Assistant
+        id: pull_inventory
         env:
           HA_HOST: ${{ secrets.HA_HOST }}
           HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
           HA_SSH_PORT: ${{ secrets.HA_SSH_PORT }}
           HA_SSH_KEY: /home/runner/.ssh/ha_green
         run: bash scripts/pull_inventory.sh
+        continue-on-error: true
+
+      - name: Diagnose SSH connection (on pull failure)
+        if: steps.pull_inventory.outcome == 'failure'
+        env:
+          HA_HOST: ${{ secrets.HA_HOST }}
+          HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
+          HA_SSH_PORT: ${{ secrets.HA_SSH_PORT }}
+          HA_SSH_KEY: /home/runner/.ssh/ha_green
+        run: bash scripts/diagnose_ssh.sh
+
+      - name: Fail if pull failed
+        if: steps.pull_inventory.outcome == 'failure'
+        run: exit 1
 
       - name: Build inventory CSV and summary
         run: python3 scripts/build_inventory.py

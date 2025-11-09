@@ -90,15 +90,50 @@ grep -E 'setup_retry|setup_error' data/inventory/derived/integrations.csv
 
 ## Troubleshooting
 
+### Diagnostic Script
+
+Run the diagnostic script to test SSH connectivity and file access:
+
+```bash
+export HA_HOST=192.168.1.100  # or Tailscale IP
+export HA_SSH_USER=root
+export HA_SSH_PORT=22
+export HA_SSH_KEY=~/.ssh/ha_green
+bash scripts/diagnose_ssh.sh
+```
+
+This will test:
+- SSH connectivity
+- User permissions
+- Directory structure
+- File accessibility
+
+### Common Issues
+
 **SSH connection fails:**
 - Verify SSH key is correct and has no passphrase
 - Check `HA_HOST` is reachable from your network
 - Ensure Advanced SSH & Web Terminal add-on is running
+- Verify SSH port (default: 22)
+
+**"Files not found or inaccessible":**
+- Run diagnostic script first: `bash scripts/diagnose_ssh.sh`
+- Check if files exist: `ssh -i ~/.ssh/ha_green root@HOST "ls -la /config/.storage/core.*"`
+- Verify user has read permissions on `/config/.storage/`
+- On some HA setups, you may need to use Docker exec approach instead
 
 **Missing registry files:**
 - Registry files may not exist if HA is freshly installed
 - Check `/config/.storage/` on HA via SSH: `ls -la /config/.storage/core.*`
+- Files are created after first device/entity/integration is added
 
 **Empty CSV output:**
 - Verify `data/inventory/raw/latest/` contains JSON files
 - Check JSON structure matches expected schema (HA version compatibility)
+- Ensure files are not empty: `ls -lh data/inventory/raw/latest/`
+
+**GitHub Actions fails but local works:**
+- Verify GitHub Secrets are set correctly
+- Check that Tailscale connection is established (if using Tailscale deployment)
+- Ensure `HA_HOST` secret uses Tailscale IP if deploying via Tailscale
+- Check workflow logs for specific error messages

@@ -24,15 +24,26 @@ REGISTRY_FILES=(
   "core.config_entries"
 )
 
-# Pull each file
+# Pull each file using SSH + cat (more reliable than scp)
+SSH_CMD="ssh -i ${HA_SSH_KEY} -p ${HA_SSH_PORT} -o StrictHostKeyChecking=no ${HA_SSH_USER}@${HA_HOST}"
+
 for file in "${REGISTRY_FILES[@]}"; do
   echo "[inventory] Fetching ${file}..."
-  if scp -i "${HA_SSH_KEY}" -P "${HA_SSH_PORT}" -o StrictHostKeyChecking=no \
-    "${HA_SSH_USER}@${HA_HOST}:/config/.storage/${file}" \
-    "${RAW_DIR}/${file}" 2>/dev/null; then
-    echo "[inventory] ✓ ${file}"
+  REMOTE_PATH="/config/.storage/${file}"
+  LOCAL_PATH="${RAW_DIR}/${file}"
+
+  # Use SSH with cat to stream the file
+  if $SSH_CMD "test -f ${REMOTE_PATH} && cat ${REMOTE_PATH}" > "${LOCAL_PATH}" 2>/dev/null; then
+    # Verify file was actually written and has content
+    if [ -s "${LOCAL_PATH}" ]; then
+      echo "[inventory] ✓ ${file} ($(stat -f%z "${LOCAL_PATH}" 2>/dev/null || stat -c%s "${LOCAL_PATH}" 2>/dev/null) bytes)"
+    else
+      echo "[inventory] ⚠ ${file} downloaded but empty (removing)"
+      rm -f "${LOCAL_PATH}"
+    fi
   else
     echo "[inventory] ⚠ ${file} not found or inaccessible (skipping)"
+    rm -f "${LOCAL_PATH}"  # Clean up any partial file
   fi
 done
 

@@ -1,0 +1,15 @@
+domain,title,source,state,entry_id
+sun,Sun,import,,01K9M3R86D5BMAFZ1V661FWZTW
+hassio,Supervisor,system,,01K9M3R97PZWASX0SHHKFABE18
+go2rtc,go2rtc,system,,01K9M3R97R313QKHXYYDXF24Y7
+backup,Backup,system,,01K9M3R9AG9TZPTF9P36K55XR0
+cast,Google Cast,zeroconf,,01K9M3RM1ER954BH6KYH6XV1ED
+homeassistant_green,Home Assistant Green,system,,01K9M3RM2AT1PWGAHDAXRH220N
+shopping_list,Shopping list,onboarding,,01K9M3ZG3YWPSXE3GHP4WSABBB
+google_translate,Google Translate text-to-speech,onboarding,,01K9M3ZG5D3B77MDNCVYP7Q3CY
+radio_browser,Radio Browser,onboarding,,01K9M3ZGW1NXQV2C9413ZNP1E6
+met,Home,onboarding,,01K9M3ZGX4ZRKPKQTCSGG2DFEZ
+upnp,GVC-Rd.Soho Router,ssdp,,01K9MKXYGTDG4MCK6JRRGEE5AY
+mqtt,Mosquitto Mqtt Broker,user,,01K9MM06NYP11XB3SRQRKXREB1
+homekit,HASS Bridge:21064,user,,01K9MRF6G2JTZKZ3HRDJ8ZTM7E
+matter,Matter,zeroconf,,01K9MSHK7HK7RX2M88GECYBSN9
