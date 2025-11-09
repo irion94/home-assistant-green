@@ -1,0 +1,52 @@
+name: Deploy (SSH) - via Tailscale
+
+# This workflow uses Tailscale to connect GitHub-hosted runners
+# to your private network without exposing ports.
+#
+# Setup requirements:
+# 1. Install Tailscale on your HA instance
+# 2. Create Tailscale auth key: https://login.tailscale.com/admin/settings/keys
+# 3. Add GitHub Secrets:
+#    - TAILSCALE_AUTH_KEY (ephemeral auth key)
+#    - HA_HOST (Tailscale IP like 100.x.x.x)
+# 4. HA_SSH_KEY, HA_SSH_USER, HA_SSH_PORT (already set)
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - "config/**"
+      - "!config/.storage/**"
+      - "!config/home-assistant_v2.db*"
+      - "!config/*.db"
+      - "!config/*.db-shm"
+      - "!config/*.db-wal"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
+
+      - name: Write SSH key file
+        run: |
+          echo "${{ secrets.HA_SSH_KEY }}" > id_ha
+          chmod 600 id_ha
+
+      - name: Deploy via SSH
+        env:
+          HA_HOST: ${{ secrets.HA_HOST }}
+          HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
+          HA_SSH_PORT: ${{ secrets.HA_SSH_PORT }}
+          HA_SSH_KEY: ${{ github.workspace }}/id_ha
+        run: |
+          ./scripts/deploy_via_ssh.sh
