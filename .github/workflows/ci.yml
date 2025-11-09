@@ -10,26 +10,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Home Assistant configuration check
-        uses: frenck/action-home-assistant@v2
-        with:
-          path: ./config
-          secrets: |
-            tuya_client_id=${{ secrets.TUYA_CLIENT_ID }}
-            tuya_client_secret=${{ secrets.TUYA_CLIENT_SECRET }}
-            xiaomi_username=${{ secrets.XIAOMI_USERNAME }}
-            xiaomi_password=${{ secrets.XIAOMI_PASSWORD }}
-            daikin_onecta_client_id=${{ secrets.DAIKIN_ONECTA_CLIENT_ID }}
-            daikin_onecta_client_secret=${{ secrets.DAIKIN_ONECTA_CLIENT_SECRET }}
-            solarman_app_id=${{ secrets.SOLARMAN_APP_ID }}
-            solarman_app_secret=${{ secrets.SOLARMAN_APP_SECRET }}
-            mqtt_broker=${{ secrets.MQTT_BROKER }}
-            mqtt_username=${{ secrets.MQTT_USERNAME }}
-            mqtt_password=${{ secrets.MQTT_PASSWORD }}
-            tauron_username=${{ secrets.TAURON_USERNAME }}
-            tauron_password=${{ secrets.TAURON_PASSWORD }}
-            elicznik_username=${{ secrets.ELICZNIK_USERNAME }}
-            elicznik_password=${{ secrets.ELICZNIK_PASSWORD }}
+
+      - name: Create secrets.yaml for validation
+        run: |
+          cat > config/secrets.yaml << 'EOF'
+          # Auto-generated secrets for CI validation
+          tuya_client_id: ${{ secrets.TUYA_CLIENT_ID || 'test_value' }}
+          tuya_client_secret: ${{ secrets.TUYA_CLIENT_SECRET || 'test_value' }}
+          tuya_user_id: test_value
+          tuya_country_code: 48
+          xiaomi_username: ${{ secrets.XIAOMI_USERNAME || 'test@example.com' }}
+          xiaomi_password: ${{ secrets.XIAOMI_PASSWORD || 'test_value' }}
+          aqara_app_id: test_value
+          aqara_app_key: test_value
+          aqara_key_id: test_value
+          daikin_onecta_client_id: ${{ secrets.DAIKIN_ONECTA_CLIENT_ID || 'test_value' }}
+          daikin_onecta_client_secret: ${{ secrets.DAIKIN_ONECTA_CLIENT_SECRET || 'test_value' }}
+          solarman_app_id: ${{ secrets.SOLARMAN_APP_ID || 'test_value' }}
+          solarman_app_secret: ${{ secrets.SOLARMAN_APP_SECRET || 'test_value' }}
+          solarman_username: test@example.com
+          solarman_password: test_value
+          mqtt_broker: mqtt.example.com
+          mqtt_port: 1883
+          mqtt_username: ${{ secrets.MQTT_USERNAME || 'test_user' }}
+          mqtt_password: ${{ secrets.MQTT_PASSWORD || 'test_value' }}
+          mqtt_client_id: homeassistant
+          tauron_username: ${{ secrets.TAURON_USERNAME || 'test@example.com' }}
+          tauron_password: ${{ secrets.TAURON_PASSWORD || 'test_value' }}
+          elicznik_username: ${{ secrets.ELICZNIK_USERNAME || 'test@example.com' }}
+          elicznik_password: ${{ secrets.ELICZNIK_PASSWORD || 'test_value' }}
+          bluesecure_host: 192.168.1.100
+          bluesecure_username: admin
+          bluesecure_password: test_value
+          tech_user_id: test_value
+          tech_token: test_value
+          home_latitude: 52.2297
+          home_longitude: 21.0122
+          home_elevation: 100
+          telegram_bot_token: test_value
+          telegram_chat_id: test_value
+          openweathermap_api_key: test_value
+          http_password: test_value
+          EOF
+
+      - name: Validate Home Assistant configuration
+        run: |
+          docker run --rm \
+            -v "$PWD/config":/config \
+            ghcr.io/home-assistant/home-assistant:stable \
+            python -m homeassistant --script check_config --config /config
 
       - name: Upload config snapshot as artifact
         uses: actions/upload-artifact@v4
