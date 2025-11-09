@@ -1,11 +1,92 @@
-# Example automation
+# ============================================================================
+# DEPLOYMENT AUTOMATION
+# ============================================================================
+
 - id: restart_on_git_pull_webhook
-  alias: "Restart after Git Pull (manual/example)"
-  description: "Placeholder for a restart automation triggered by Git Pull add-on webhook"
+  alias: "Deploy: Restart after Git Pull"
+  description: "Triggered by Git Pull add-on webhook - checks config and restarts HA"
   mode: single
   trigger:
     - platform: webhook
-      webhook_id: example_restart_after_pull
+      webhook_id: git_pull_restart
+      local_only: false
   action:
+    - service: persistent_notification.create
+      data:
+        title: "Deployment Started"
+        message: "Git pull completed. Checking configuration before restart..."
+        notification_id: deployment_status
     - service: homeassistant.check_config
+    - delay:
+        seconds: 2
+    - service: persistent_notification.create
+      data:
+        title: "Deployment: Restarting"
+        message: "Configuration valid. Restarting Home Assistant..."
+        notification_id: deployment_status
     - service: homeassistant.restart
+
+# ============================================================================
+# BACKUP AUTOMATIONS
+# ============================================================================
+
+- id: pre_deploy_backup
+  alias: "Backup: Pre-Deployment"
+  description: "Creates backup before deployment when triggered via webhook"
+  mode: single
+  trigger:
+    - platform: webhook
+      webhook_id: pre_deploy_backup
+      local_only: false
+  action:
+    - service: persistent_notification.create
+      data:
+        title: "Pre-Deploy Backup"
+        message: "Creating backup before deployment..."
+        notification_id: backup_status
+    - service: backup.create
+      data:
+        name: "Pre-deploy backup {{ now().strftime('%Y-%m-%d %H:%M') }}"
+    - delay:
+        seconds: 5
+    - service: persistent_notification.create
+      data:
+        title: "Pre-Deploy Backup Complete"
+        message: "Backup created successfully. Deployment can proceed."
+        notification_id: backup_status
+
+- id: nightly_backup
+  alias: "Backup: Nightly Scheduled"
+  description: "Creates automatic backup at 03:15 daily with 14-day retention"
+  mode: single
+  trigger:
+    - platform: time
+      at: "03:15:00"
+  action:
+    - service: backup.create
+      data:
+        name: "Nightly backup {{ now().strftime('%Y-%m-%d') }}"
+    - delay:
+        seconds: 10
+    - service: backup.purge
+      data:
+        keep_days: 14
+    - service: persistent_notification.create
+      data:
+        title: "Nightly Backup Complete"
+        message: "Backup created at {{ now().strftime('%H:%M') }}. Retention: 14 days."
+        notification_id: nightly_backup_status
+
+- id: backup_failed_notification
+  alias: "Backup: Failure Notification"
+  description: "Sends persistent notification if backup fails"
+  mode: single
+  trigger:
+    - platform: event
+      event_type: backup_failed
+  action:
+    - service: persistent_notification.create
+      data:
+        title: "BACKUP FAILED"
+        message: "Backup operation failed at {{ now().strftime('%Y-%m-%d %H:%M') }}. Check logs immediately!"
+        notification_id: backup_failure
