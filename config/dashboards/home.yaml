@@ -1446,6 +1446,434 @@ views:
             secondary_info: last-triggered
 
   # ========================================
+  # SECURITY - Camera monitoring system
+  # ========================================
+  - title: Kamery
+    path: security
+    icon: mdi:cctv
+    badges: []
+    cards:
+      # Header
+      - type: markdown
+        content: |
+          # 📹 System monitoringu
+          Monitoring kamer i czujników ruchu w czasie rzeczywistym.
+
+      # =====================================
+      # MOTION ALERTS - Quick Status
+      # =====================================
+      - type: entities
+        title: Alerty ruchu
+        state_color: true
+        show_header_toggle: false
+        entities:
+          - entity: binary_sensor.rejestrator_motion_alarm
+            name: Rejestrator
+            icon: mdi:motion-sensor
+
+          - entity: binary_sensor.kamera_brama_motion_alarm
+            name: Kamera Brama
+            icon: mdi:gate
+
+          - entity: binary_sensor.kamera_na_garaz_motion_alarm
+            name: Na Garaż
+            icon: mdi:garage
+
+          - entity: binary_sensor.kamera_za_garazem_motion_alarm
+            name: Za Garażem
+            icon: mdi:garage-variant
+
+          - entity: binary_sensor.kamera_altana_motion_alarm
+            name: Altana
+            icon: mdi:gazebo
+
+          - entity: binary_sensor.kamera_garaz_motion_alarm_1
+            name: Garaż - Kanał 1
+            icon: mdi:camera
+
+          - entity: binary_sensor.kamera_garaz_motion_alarm_2
+            name: Garaż - Kanał 2
+            icon: mdi:camera
+
+          - entity: binary_sensor.kamera_garaz_motion_alarm_3
+            name: Garaż - Kanał 3
+            icon: mdi:camera
+
+          - entity: binary_sensor.kamera_garaz_motion_alarm_4
+            name: Garaż - Kanał 4
+            icon: mdi:camera
+
+          - entity: binary_sensor.kamera_garaz_motion_alarm_5
+            name: Garaż - Kanał 5
+            icon: mdi:camera
+
+      # =====================================
+      # LIVE CAMERA FEEDS
+      # =====================================
+      - type: markdown
+        content: |
+          ## 📺 Podgląd na żywo
+
+      # Main cameras grid
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          # Kamera Brama
+          - type: picture-entity
+            entity: camera.kamera_brama_mediaprofile_channel1_substream1
+            name: Kamera Brama
+            show_state: false
+            show_name: true
+            camera_view: live
+
+          # Kamera Na Garaż
+          - type: picture-entity
+            entity: camera.kamera_na_garaz_mediaprofile_channel1_substream1
+            name: Na Garaż
+            show_state: false
+            show_name: true
+            camera_view: live
+
+          # Kamera Za Garażem
+          - type: picture-entity
+            entity: camera.kamera_za_garazem_mediaprofile_channel1_substream1
+            name: Za Garażem
+            show_state: false
+            show_name: true
+            camera_view: live
+
+          # Kamera Altana
+          - type: picture-entity
+            entity: camera.kamera_altana_mediaprofile_channel1_substream1
+            name: Altana
+            show_state: false
+            show_name: true
+            camera_view: live
+
+      # NVR Multi-channel view
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: "### Rejestrator - Kanały NVR"
+
+          - type: picture-entity
+            entity: camera.rejestrator_kotlownia_mediaprofile_channel5_substream1
+            name: Kotłownia (Kanał 5)
+            show_state: false
+            show_name: true
+            camera_view: live
+
+      # =====================================
+      # CAMERA CONTROLS
+      # =====================================
+      - type: markdown
+        content: |
+          ## 🎛️ Sterowanie kamerami
+
+      # Rejestrator Controls
+      - type: entities
+        title: Rejestrator (NVR)
+        state_color: true
+        entities:
+          - entity: switch.rejestrator_ir_lamp
+            name: Lampa IR
+            icon: mdi:lightbulb-night
+
+          - entity: switch.rejestrator_autofocus
+            name: Autofocus
+            icon: mdi:focus-auto
+
+          - type: divider
+
+          - entity: binary_sensor.rejestrator_field_detection
+            name: Detekcja pola
+            icon: mdi:image-filter-center-focus
+
+          - entity: binary_sensor.rejestrator_cell_motion_detection
+            name: Detekcja ruchu komórkowego
+            icon: mdi:grid
+
+          - entity: binary_sensor.rejestrator_global_scene_change
+            name: Zmiana sceny globalnej
+            icon: mdi:image-multiple
+
+          - type: divider
+
+          - entity: button.rejestrator_reboot
+            name: Restart
+            icon: mdi:restart
+
+          - entity: button.rejestrator_set_system_date_and_time
+            name: Synchronizuj czas
+            icon: mdi:clock-sync
+
+      # Kamera Brama Controls
+      - type: entities
+        title: Kamera Brama
+        state_color: true
+        entities:
+          - entity: switch.kamera_brama_ir_lamp
+            name: Lampa IR
+            icon: mdi:lightbulb-night
+
+          - entity: switch.kamera_brama_autofocus
+            name: Autofocus
+            icon: mdi:focus-auto
+
+          - type: divider
+
+          - entity: binary_sensor.kamera_brama_cell_motion_detection
+            name: Detekcja ruchu
+            icon: mdi:motion-sensor
+
+          - entity: binary_sensor.kamera_brama_global_scene_change
+            name: Zmiana sceny
+            icon: mdi:image-multiple
+
+          - type: divider
+
+          - entity: sensor.kamera_brama_processor_usage
+            name: Użycie procesora
+            icon: mdi:chip
+
+          - entity: sensor.kamera_brama_last_reboot
+            name: Ostatni restart
+            icon: mdi:restart
+
+          - type: divider
+
+          - entity: button.kamera_brama_reboot
+            name: Restart
+            icon: mdi:restart
+
+          - entity: button.kamera_brama_set_system_date_and_time
+            name: Synchronizuj czas
+            icon: mdi:clock-sync
+
+      # Kamera Na Garaż Controls
+      - type: entities
+        title: Kamera Na Garaż
+        state_color: true
+        entities:
+          - entity: switch.kamera_na_garaz_ir_lamp
+            name: Lampa IR
+            icon: mdi:lightbulb-night
+
+          - entity: switch.kamera_na_garaz_autofocus
+            name: Autofocus
+            icon: mdi:focus-auto
+
+          - type: divider
+
+          - entity: binary_sensor.kamera_na_garaz_cell_motion_detection
+            name: Detekcja ruchu
+            icon: mdi:motion-sensor
+
+          - entity: binary_sensor.kamera_na_garaz_global_scene_change
+            name: Zmiana sceny
+            icon: mdi:image-multiple
+
+          - type: divider
+
+          - entity: sensor.kamera_na_garaz_processor_usage
+            name: Użycie procesora
+            icon: mdi:chip
+
+          - entity: sensor.kamera_na_garaz_last_reboot
+            name: Ostatni restart
+            icon: mdi:restart
+
+          - type: divider
+
+          - entity: button.kamera_na_garaz_reboot
+            name: Restart
+            icon: mdi:restart
+
+          - entity: button.kamera_na_garaz_set_system_date_and_time
+            name: Synchronizuj czas
+            icon: mdi:clock-sync
+
+      # Kamera Za Garażem Controls
+      - type: entities
+        title: Kamera Za Garażem
+        state_color: true
+        entities:
+          - entity: switch.kamera_za_garazem_ir_lamp
+            name: Lampa IR
+            icon: mdi:lightbulb-night
+
+          - entity: switch.kamera_za_garazem_autofocus
+            name: Autofocus
+            icon: mdi:focus-auto
+
+          - type: divider
+
+          - entity: binary_sensor.kamera_za_garazem_cell_motion_detection
+            name: Detekcja ruchu
+            icon: mdi:motion-sensor
+
+          - entity: binary_sensor.kamera_za_garazem_global_scene_change
+            name: Zmiana sceny
+            icon: mdi:image-multiple
+
+          - type: divider
+
+          - entity: sensor.kamera_za_garazem_processor_usage
+            name: Użycie procesora
+            icon: mdi:chip
+
+          - entity: sensor.kamera_za_garazem_last_reboot
+            name: Ostatni restart
+            icon: mdi:restart
+
+          - type: divider
+
+          - entity: button.kamera_za_garazem_reboot
+            name: Restart
+            icon: mdi:restart
+
+          - entity: button.kamera_za_garazem_set_system_date_and_time
+            name: Synchronizuj czas
+            icon: mdi:clock-sync
+
+      # Kamera Altana Controls
+      - type: entities
+        title: Kamera Altana
+        state_color: true
+        entities:
+          - entity: switch.kamera_altana_ir_lamp
+            name: Lampa IR
+            icon: mdi:lightbulb-night
+
+          - entity: switch.kamera_altana_autofocus
+            name: Autofocus
+            icon: mdi:focus-auto
+
+          - type: divider
+
+          - entity: binary_sensor.kamera_altana_cell_motion_detection
+            name: Detekcja ruchu
+            icon: mdi:motion-sensor
+
+          - entity: binary_sensor.kamera_altana_global_scene_change
+            name: Zmiana sceny
+            icon: mdi:image-multiple
+
+          - type: divider
+
+          - entity: sensor.kamera_altana_processor_usage
+            name: Użycie procesora
+            icon: mdi:chip
+
+          - entity: sensor.kamera_altana_last_reboot
+            name: Ostatni restart
+            icon: mdi:restart
+
+          - type: divider
+
+          - entity: button.kamera_altana_reboot
+            name: Restart
+            icon: mdi:restart
+
+          - entity: button.kamera_altana_set_system_date_and_time
+            name: Synchronizuj czas
+            icon: mdi:clock-sync
+
+      # =====================================
+      # NVR MULTI-CHANNEL STATUS
+      # =====================================
+      - type: markdown
+        content: |
+          ## 🎬 Rejestrator - Status kanałów
+
+      # Recording Status
+      - type: entities
+        title: Status nagrywania
+        state_color: true
+        entities:
+          - entity: binary_sensor.kamera_garaz_recording_job_state_1
+            name: Kanał 1 - Nagrywanie
+            icon: mdi:record-rec
+
+          - entity: binary_sensor.kamera_garaz_recording_job_state_2
+            name: Kanał 2 - Nagrywanie
+            icon: mdi:record-rec
+
+          - entity: binary_sensor.kamera_garaz_recording_job_state_3
+            name: Kanał 3 - Nagrywanie
+            icon: mdi:record-rec
+
+          - entity: binary_sensor.kamera_garaz_recording_job_state_4
+            name: Kanał 4 - Nagrywanie
+            icon: mdi:record-rec
+
+          - entity: binary_sensor.kamera_garaz_recording_job_state_5
+            name: Kanał 5 - Nagrywanie
+            icon: mdi:record-rec
+
+          - entity: binary_sensor.kamera_garaz_recording_job_state_6
+            name: Kanał 6 - Nagrywanie
+            icon: mdi:record-rec
+
+          - entity: binary_sensor.kamera_garaz_recording_job_state_7
+            name: Kanał 7 - Nagrywanie
+            icon: mdi:record-rec
+
+          - entity: binary_sensor.kamera_garaz_recording_job_state_8
+            name: Kanał 8 - Nagrywanie
+            icon: mdi:record-rec
+
+          - entity: binary_sensor.kamera_garaz_recording_job_state_9
+            name: Kanał 9 - Nagrywanie
+            icon: mdi:record-rec
+
+          - entity: binary_sensor.kamera_garaz_recording_job_state_10
+            name: Kanał 10 - Nagrywanie
+            icon: mdi:record-rec
+
+          - entity: binary_sensor.kamera_garaz_recording_job_state_11
+            name: Kanał 11 - Nagrywanie
+            icon: mdi:record-rec
+
+      # NVR System Status
+      - type: entities
+        title: System rejestratora
+        state_color: true
+        entities:
+          - entity: sensor.kamera_garaz_processor_usage
+            name: Użycie procesora
+            icon: mdi:chip
+
+          - entity: sensor.kamera_garaz_last_reboot
+            name: Ostatni restart
+            icon: mdi:restart
+
+          - type: divider
+
+          - entity: switch.kamera_garaz_wiper
+            name: Wycieraczka
+            icon: mdi:car-wash
+
+          - entity: switch.kamera_garaz_autofocus
+            name: Autofocus
+            icon: mdi:focus-auto
+
+          - entity: switch.kamera_garaz_ir_lamp
+            name: Lampa IR
+            icon: mdi:lightbulb-night
+
+          - type: divider
+
+          - entity: button.kamera_garaz_reboot
+            name: Restart
+            icon: mdi:restart
+
+          - entity: button.kamera_garaz_set_system_date_and_time
+            name: Synchronizuj czas
+            icon: mdi:clock-sync
+
+  # ========================================
   # MEDIA - Entertainment controls
   # ========================================
   - title: Media
