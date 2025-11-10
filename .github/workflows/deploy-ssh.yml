@@ -33,5 +33,11 @@ jobs:
           HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
           HA_SSH_PORT: ${{ secrets.HA_SSH_PORT }}
           HA_SSH_KEY: ${{ github.workspace }}/id_ha
+          # Strava Coach credentials
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
+          # Add other secrets as needed
+          # TUYA_CLIENT_ID: ${{ secrets.TUYA_CLIENT_ID }}
+          # MQTT_BROKER: ${{ secrets.MQTT_BROKER }}
         run: |
           ./scripts/deploy_via_ssh.sh

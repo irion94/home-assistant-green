@@ -1,0 +1,33 @@
+# Strava Coach Configuration Examples
+
+# ============================================
+# Method 1: Using secrets.yaml (Recommended)
+# ============================================
+
+# Add to configuration.yaml:
+strava_coach:
+  client_id: !secret strava_client_id
+  client_secret: !secret strava_client_secret
+
+# Add to secrets.yaml:
+# strava_client_id: "YOUR_CLIENT_ID"
+# strava_client_secret: "YOUR_CLIENT_SECRET"
+
+# ============================================
+# Method 2: Direct in configuration.yaml
+# ============================================
+
+# Add directly to configuration.yaml (NOT recommended for security):
+strava_coach:
+  client_id: "123456"  # Replace with your Strava Client ID
+  client_secret: "abc123def456..."  # Replace with your Strava Client Secret
+
+# ============================================
+# After Configuration
+# ============================================
+
+# 1. Restart Home Assistant
+# 2. Go to Settings → Devices & Services → Add Integration
+# 3. Search for "Strava Coach"
+# 4. Follow OAuth flow to authorize with Strava
+# 5. Configure preferences (sync time, LLM, etc.)

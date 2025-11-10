@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Konfiguracja Strava Coach",
+        "description": "Skonfiguruj połączenie ze Strava i preferencje",
+        "data": {
+          "sync_time": "Czas codziennej synchronizacji (HH:MM)",
+          "history_window_days": "Okno historii (dni)"
+        }
+      },
+      "llm": {
+        "title": "Konfiguracja LLM (Opcjonalne)",
+        "description": "Konfiguruj sugestie treningowe oparte na AI. LLM otrzyma tylko zagregowane metryki, nigdy surowe dane Strava.",
+        "data": {
+          "llm_enabled": "Włącz sugestie LLM",
+          "llm_provider": "Dostawca",
+          "llm_api_key": "Klucz API",
+          "llm_model": "Nazwa modelu",
+          "aggregates_only": "Wysyłaj tylko zagregowane metryki (zalecane)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Uwierzytelnianie nie powiodło się. Sprawdź dane logowania.",
+      "cannot_connect": "Nie można połączyć się ze Strava. Spróbuj ponownie.",
+      "invalid_time": "Nieprawidłowy format czasu. Użyj HH:MM (format 24-godzinny).",
+      "invalid_window": "Okno historii musi wynosić od 7 do 365 dni."
+    },
+    "abort": {
+      "already_configured": "Strava Coach jest już skonfigurowany.",
+      "oauth_error": "Uwierzytelnianie OAuth nie powiodło się. Spróbuj ponownie."
+    }
+  }
+}

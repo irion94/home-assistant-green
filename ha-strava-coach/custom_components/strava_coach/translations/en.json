@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Strava Coach Setup",
+        "description": "Configure your Strava connection and preferences",
+        "data": {
+          "sync_time": "Daily sync time (HH:MM)",
+          "history_window_days": "History window (days)"
+        }
+      },
+      "llm": {
+        "title": "LLM Configuration (Optional)",
+        "description": "Configure AI-powered coaching suggestions. LLM will only receive aggregated metrics, never raw Strava data.",
+        "data": {
+          "llm_enabled": "Enable LLM suggestions",
+          "llm_provider": "Provider",
+          "llm_api_key": "API Key",
+          "llm_model": "Model name",
+          "aggregates_only": "Send only aggregated metrics (recommended)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Authentication failed. Please check your credentials.",
+      "cannot_connect": "Cannot connect to Strava. Please try again.",
+      "invalid_time": "Invalid time format. Use HH:MM (24-hour format).",
+      "invalid_window": "History window must be between 7 and 365 days."
+    },
+    "abort": {
+      "already_configured": "Strava Coach is already configured.",
+      "oauth_error": "OAuth authentication failed. Please try again."
+    }
+  }
+}

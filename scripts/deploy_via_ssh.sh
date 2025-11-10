@@ -8,6 +8,12 @@ HA_SSH_PORT="${HA_SSH_PORT:-22}"
 
 CONFIG_DIR="${CONFIG_DIR:-config}"
 
+# Generate secrets.yaml from environment variables (if any secrets are set)
+if [[ -n "${STRAVA_CLIENT_ID:-}" ]] || [[ -n "${TUYA_CLIENT_ID:-}" ]] || [[ -n "${MQTT_BROKER:-}" ]]; then
+    echo "[deploy] Generating secrets.yaml from environment variables..."
+    ./scripts/deploy_secrets.sh
+fi
+
 echo "[deploy] rsync -> ${HA_SSH_USER}@${HA_HOST}:/config"
 rsync -avz --delete \
   -e "ssh -i ${HA_SSH_KEY} -p ${HA_SSH_PORT} -o StrictHostKeyChecking=no" \

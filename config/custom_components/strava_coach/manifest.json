@@ -1,0 +1,19 @@
+{
+  "domain": "strava_coach",
+  "name": "Strava Coach",
+  "codeowners": ["@yourusername"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/yourusername/ha-strava-coach",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/yourusername/ha-strava-coach/issues",
+  "requirements": [
+    "aiohttp>=3.9.0",
+    "sqlalchemy>=2.0.0",
+    "alembic>=1.13.0",
+    "pydantic>=2.5.0",
+    "openai>=1.0.0"
+  ],
+  "version": "0.1.0"
+}

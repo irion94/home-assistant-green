@@ -277,6 +277,105 @@ views:
             secondary_info: last-triggered
 
   # ========================================
+  # FITNESS - Strava Coach Training Metrics
+  # ========================================
+  - title: Fitness
+    path: fitness
+    icon: mdi:run
+    badges: []
+    cards:
+      # Manual Sync Button
+      - type: button
+        name: Sync Strava Now
+        icon: mdi:sync
+        tap_action:
+          action: call-service
+          service: strava_coach.sync_now
+          data: {}
+
+      # Readiness Gauge (Main Metric)
+      - type: gauge
+        entity: sensor.strava_coach_readiness
+        name: Training Readiness
+        min: 0
+        max: 100
+        needle: true
+        severity:
+          green: 70
+          yellow: 50
+          red: 0
+        unit: '%'
+
+      # Metric Cards Row
+      - type: horizontal-stack
+        cards:
+          - type: statistic
+            entity: sensor.strava_coach_fitness
+            name: Fitness (CTL)
+            icon: mdi:trending-up
+
+          - type: statistic
+            entity: sensor.strava_coach_fatigue
+            name: Fatigue (ATL)
+            icon: mdi:tire
+
+          - type: statistic
+            entity: sensor.strava_coach_form
+            name: Form (TSB)
+            icon: mdi:chart-line
+
+      # Detailed Metrics Table
+      - type: entities
+        title: Training Metrics
+        entities:
+          - entity: sensor.strava_coach_readiness
+            name: Readiness Score
+            icon: mdi:gauge
+
+          - entity: sensor.strava_coach_fitness
+            name: Fitness (CTL)
+            icon: mdi:trending-up
+
+          - entity: sensor.strava_coach_fatigue
+            name: Fatigue (ATL)
+            icon: mdi:tire
+
+          - entity: sensor.strava_coach_form
+            name: Form (TSB)
+            icon: mdi:chart-line
+
+          - type: attribute
+            entity: sensor.strava_coach_readiness
+            attribute: data_age_days
+            name: Data Age (days)
+            icon: mdi:calendar-clock
+
+          - type: attribute
+            entity: sensor.strava_coach_readiness
+            attribute: last_activity_date
+            name: Last Activity
+            icon: mdi:calendar
+
+      # History Graph (7 days)
+      - type: history-graph
+        title: Training Load History
+        hours_to_show: 168
+        entities:
+          - entity: sensor.strava_coach_fitness
+            name: Fitness (CTL)
+          - entity: sensor.strava_coach_fatigue
+            name: Fatigue (ATL)
+          - entity: sensor.strava_coach_form
+            name: Form (TSB)
+
+      # Today's Suggestion
+      - type: markdown
+        content: |
+          ## Today's Training Suggestion
+          {{ states('sensor.strava_coach_today_suggestion') }}
+        title: Daily Recommendation
+
+  # ========================================
   # SYSTEM - Monitoring and maintenance
   # ========================================
   - title: System

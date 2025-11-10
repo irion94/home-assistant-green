@@ -1,8 +1,9 @@
 name: Deploy (Git Pull webhook)
 
+# DISABLED: Manual trigger only
+# Primary deployment uses deploy-ssh-tailscale.yml
 on:
-  push:
-    branches: [ master ]
+  workflow_dispatch:
 
 jobs:
   deploy:

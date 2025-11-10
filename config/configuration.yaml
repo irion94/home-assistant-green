@@ -12,8 +12,14 @@ automation: !include automations.yaml
 # Example of exposing our custom integration (if it provides platforms)
 # enterprise_example:
 
+# Strava Coach Integration
+strava_coach:
+  client_id: !secret strava_client_id
+  client_secret: !secret strava_client_secret
+
 # Logger level (reduce noise in prod)
 logger:
   default: warning
   logs:
     custom_components.enterprise_example: debug
+    custom_components.strava_coach: debug
