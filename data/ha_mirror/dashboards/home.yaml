@@ -1,0 +1,627 @@
+---
+# Modern Home Assistant Dashboard
+# Showcases various card types and best practices
+
+title: Smart Home
+views:
+  # ========================================
+  # OVERVIEW - Main landing page
+  # ========================================
+  - title: Overview
+    path: overview
+    icon: mdi:home-assistant
+    badges: []
+    cards:
+      # Welcome header with person status
+      - type: vertical-stack
+        cards:
+          - type: markdown
+            content: |
+              # 👋 Witaj w Domu, {{ state_attr('person.igor', 'friendly_name') }}
+              {{ now().strftime('%A, %B %d') }} • {{ now().strftime('%H:%M') }}
+
+          # Quick stats row
+          - type: horizontal-stack
+            cards:
+              - type: entity
+                entity: weather.forecast_dom
+                name: Weather
+
+              - type: sensor
+                entity: sensor.aqara_temp_humidity_sensor_temperature
+                name: Indoor Temp
+                graph: line
+                hours_to_show: 24
+
+              - type: sensor
+                entity: sensor.aqara_temp_humidity_sensor_humidity
+                name: Humidity
+                graph: line
+                hours_to_show: 24
+
+      # Quick Actions - doesnt work - "configuration error"
+#      - type: custom:auto-entities
+#        card:
+#          type: grid
+#          title: Quick Actions
+#          columns: 4
+#          square: false
+#        filter:
+#          include:
+#            - domain: light
+#              attributes:
+#                device_class: null
+#              options:
+#                type: button
+#                tap_action:
+#                  action: toggle
+#          exclude:
+#            - entity_id: "*_identify_*"
+#        sort:
+#          method: name
+
+      # Motion & Occupancy
+      - type: entities
+        title: Motion Detection
+        state_color: true
+        show_header_toggle: false
+        entities:
+          - entity: binary_sensor.aqara_motion_sensor_occupancy
+            name: Motion Sensor (Original)
+            secondary_info: last-changed
+
+          - entity: binary_sensor.aqara_motion_sensor_p1_occupancy
+            name: Motion Sensor P1 #1
+            secondary_info: last-changed
+
+          - entity: binary_sensor.aqara_motion_sensor_p1_occupancy_2
+            name: Motion Sensor P1 #2
+            secondary_info: last-changed
+
+          - entity: binary_sensor.aqara_motion_sensor_p1_occupancy_3
+            name: Motion Sensor P1 #3
+            secondary_info: last-changed
+
+          - entity: binary_sensor.aqara_door_and_window_sensor_door
+            name: Door Sensor
+            secondary_info: last-changed
+
+      # System Health Overview - doesnt work - "encja nie jest numeryczna"
+#      - type: grid
+#        title: System Health
+#        columns: 2
+#        square: false
+#        cards:
+#          - type: gauge
+#            entity: update.home_assistant_core_update
+#            name: HA Core
+#            needle: true
+#            severity:
+#              green: 0
+#              yellow: 0
+#              red: 0
+#
+#          - type: gauge
+#            entity: update.home_assistant_operating_system_update
+#            name: HA OS
+#            needle: true
+
+  # ========================================
+  # LIGHTS - All lighting controls
+  # ========================================
+  - title: Lights
+    path: lights
+    icon: mdi:lightbulb-group
+    badges: []
+    cards:
+      # All Lights - Grid layout
+      - type: grid
+        columns: 4
+        square: false
+        cards:
+          - type: light
+            entity: light.aqara_single_switch_module_t1
+            name: Switch 1
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_2
+            name: Switch 2
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_3
+            name: Switch 3
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_4
+            name: Switch 4
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_5
+            name: Switch 5
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_6
+            name: Switch 6
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_7
+            name: Switch 7
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_8
+            name: Switch 8
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_9
+            name: Switch 9
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_10
+            name: Switch 10
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_11
+            name: Switch 11
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_12
+            name: Switch 12
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_13
+            name: Switch 13
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_14
+            name: Switch 14
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_15
+            name: Switch 15
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_16
+            name: Switch 16
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_17
+            name: Switch 17
+
+          - type: light
+            entity: light.aqara_single_switch_module_t1_18
+            name: Cyrkulacja
+
+      # LED Strips - Grouped
+      - type: entities
+        title: LED Strips
+        state_color: true
+        show_header_toggle: true
+        entities:
+          - entity: light.aqara_led_strip_t1
+            name: LED Strip 1
+
+          - entity: light.aqara_led_strip_t1_2
+            name: LED Strip 2
+
+          - entity: light.aqara_led_strip_t1_3
+            name: LED Strip 3
+
+          - entity: light.aqara_led_strip_t1_4
+            name: LED Strip 4
+
+          - entity: light.aqara_led_strip_t1_5
+            name: LED Strip 5
+
+          - entity: light.aqara_led_strip_t1_6
+            name: LED Strip 6
+
+          - entity: light.aqara_led_strip_t1_7
+            name: LED Strip 7
+
+          - entity: light.aqara_led_strip_t1_8
+            name: LED Strip 8
+
+      # Automation Controls
+      - type: entities
+        title: Lighting Automations
+        entities:
+          - entity: automation.aqara_motion_activated_lights
+            name: Motion Activated Lights
+            secondary_info: last-triggered
+
+  # ========================================
+  # CLIMATE - Temperature and environmental
+  # ========================================
+  - title: Climate
+    path: climate
+    icon: mdi:thermometer
+    badges: []
+    cards:
+      # Temperature & Humidity
+      - type: vertical-stack
+        cards:
+          - type: weather-forecast
+            entity: weather.forecast_dom
+            name: Weather Forecast
+            show_forecast: true
+
+          - type: sensor
+            entity: sensor.aqara_temp_humidity_sensor_temperature
+            name: Indoor Temperature
+            graph: line
+            detail: 2
+            hours_to_show: 48
+
+          - type: sensor
+            entity: sensor.aqara_temp_humidity_sensor_humidity
+            name: Indoor Humidity
+            graph: line
+            detail: 2
+            hours_to_show: 48
+
+      # Climate Controls (if available)
+      - type: entities
+        title: Climate Automations
+        entities:
+          - entity: automation.daikin_auto_cooling_on_hot_days
+            name: Auto Cooling
+            secondary_info: last-triggered
+
+          - entity: automation.daikin_eco_mode_at_night
+            name: Eco Mode (Night)
+            secondary_info: last-triggered
+
+          - entity: automation.tech_eco_mode_when_away
+            name: Eco Mode (Away)
+            secondary_info: last-triggered
+
+  # ========================================
+  # FITNESS - Strava Coach Training Metrics
+  # ========================================
+  - title: Fitness
+    path: fitness
+    icon: mdi:run
+    badges: []
+    cards:
+      # Manual Sync Button
+      - type: button
+        name: Sync Strava Now
+        icon: mdi:sync
+        tap_action:
+          action: call-service
+          service: strava_coach.sync_now
+          data: {}
+
+      # Readiness Gauge (Main Metric)
+      - type: gauge
+        entity: sensor.strava_coach_readiness
+        name: Training Readiness
+        min: 0
+        max: 100
+        needle: true
+        severity:
+          green: 70
+          yellow: 50
+          red: 0
+        unit: '%'
+
+      # Metric Cards Row
+      - type: horizontal-stack
+        cards:
+          - type: statistic
+            entity: sensor.strava_coach_fitness
+            name: Fitness (CTL)
+            icon: mdi:trending-up
+
+          - type: statistic
+            entity: sensor.strava_coach_fatigue
+            name: Fatigue (ATL)
+            icon: mdi:tire
+
+          - type: statistic
+            entity: sensor.strava_coach_form
+            name: Form (TSB)
+            icon: mdi:chart-line
+
+      # Detailed Metrics Table
+      - type: entities
+        title: Training Metrics
+        entities:
+          - entity: sensor.strava_coach_readiness
+            name: Readiness Score
+            icon: mdi:gauge
+
+          - entity: sensor.strava_coach_fitness
+            name: Fitness (CTL)
+            icon: mdi:trending-up
+
+          - entity: sensor.strava_coach_fatigue
+            name: Fatigue (ATL)
+            icon: mdi:tire
+
+          - entity: sensor.strava_coach_form
+            name: Form (TSB)
+            icon: mdi:chart-line
+
+          - type: attribute
+            entity: sensor.strava_coach_readiness
+            attribute: data_age_days
+            name: Data Age (days)
+            icon: mdi:calendar-clock
+
+          - type: attribute
+            entity: sensor.strava_coach_readiness
+            attribute: last_activity_date
+            name: Last Activity
+            icon: mdi:calendar
+
+      # History Graph (7 days)
+      - type: history-graph
+        title: Training Load History
+        hours_to_show: 168
+        entities:
+          - entity: sensor.strava_coach_fitness
+            name: Fitness (CTL)
+          - entity: sensor.strava_coach_fatigue
+            name: Fatigue (ATL)
+          - entity: sensor.strava_coach_form
+            name: Form (TSB)
+
+      # Today's Suggestion
+      - type: markdown
+        content: |
+          ## Today's Training Suggestion
+          {{ states('sensor.strava_coach_today_suggestion') }}
+        title: Daily Recommendation
+
+  # ========================================
+  # SYSTEM - Monitoring and maintenance
+  # ========================================
+  - title: System
+    path: system
+    icon: mdi:server
+    badges: []
+    cards:
+      # Home Assistant Updates
+      - type: entities
+        title: System Updates
+        state_color: true
+        entities:
+          - entity: update.home_assistant_core_update
+            name: Core
+            secondary_info: last-changed
+
+          - entity: update.home_assistant_supervisor_update
+            name: Supervisor
+            secondary_info: last-changed
+
+          - entity: update.home_assistant_operating_system_update
+            name: Operating System
+            secondary_info: last-changed
+
+      # Add-on Updates
+      - type: entities
+        title: Add-on Updates
+        state_color: true
+        entities:
+          - entity: update.studio_code_server_update
+            name: Studio Code Server
+
+          - entity: update.advanced_ssh_web_terminal_update
+            name: SSH & Terminal
+
+          - entity: update.tailscale_update
+            name: Tailscale
+
+          - entity: update.mosquitto_broker_update
+            name: Mosquitto
+
+          - entity: update.matter_server_update
+            name: Matter Server
+
+      # Backup Status
+      - type: entities
+        title: Backup System
+        state_color: true
+        entities:
+          - entity: sensor.backup_backup_manager_state
+            name: Manager State
+
+          - entity: sensor.backup_next_scheduled_automatic_backup
+            name: Next Backup
+            secondary_info: last-changed
+
+          - entity: sensor.backup_last_successful_automatic_backup
+            name: Last Success
+            secondary_info: last-changed
+
+          - type: divider
+
+          - entity: automation.backup_nightly_scheduled
+            name: Nightly Schedule
+
+          - entity: automation.backup_pre_deployment
+            name: Pre-Deployment
+
+          - entity: automation.backup_failure_notification
+            name: Failure Alerts
+
+      # Network Monitoring - doesnt work - entity removed
+#      - type: entities
+#        title: Network
+#        state_color: true
+#        entities:
+#          - entity: binary_sensor.gvc_rd_soho_router_wan_status
+#            name: WAN Status
+#
+#          - entity: sensor.gvc_rd_soho_router_external_ip
+#            name: External IP
+#
+#          - entity: sensor.gvc_rd_soho_router_download_speed
+#            name: Download Speed
+#
+#          - entity: sensor.gvc_rd_soho_router_upload_speed
+#            name: Upload Speed
+
+      # Battery Monitoring
+      - type: entities
+        title: Battery Levels
+        state_color: true
+        show_header_toggle: false
+        entities:
+          - entity: sensor.aqara_motion_sensor_battery
+            name: Motion Sensor
+
+          - entity: sensor.aqara_motion_sensor_p1_battery
+            name: Motion P1 #1
+
+          - entity: sensor.aqara_motion_sensor_p1_battery_2
+            name: Motion P1 #2
+
+          - entity: sensor.aqara_motion_sensor_p1_battery_3
+            name: Motion P1 #3
+
+          - entity: sensor.aqara_temp_humidity_sensor_battery
+            name: Temp/Humidity
+
+          - entity: sensor.aqara_wireless_mini_switch_battery
+            name: Mini Switch #1
+
+          - entity: sensor.aqara_wireless_mini_switch_battery_2
+            name: Mini Switch #2
+
+          - entity: sensor.aqara_door_and_window_sensor_battery
+            name: Door Sensor
+
+          - entity: sensor.aqara_wireless_remote_switch_battery
+            name: Remote Switch
+
+      # Automation Management
+      - type: entities
+        title: System Automations
+        entities:
+          - entity: automation.deploy_restart_after_git_pull
+            name: Deploy Restart
+            secondary_info: last-triggered
+
+          - entity: automation.discovery_scan_on_startup
+            name: Discovery Scan
+            secondary_info: last-triggered
+
+          - entity: automation.discovery_log_new_device
+            name: Log New Device
+            secondary_info: last-triggered
+
+          - entity: automation.discovery_log_new_integration
+            name: Log New Integration
+            secondary_info: last-triggered
+
+          - entity: automation.mqtt_device_offline_alert
+            name: MQTT Offline Alert
+            secondary_info: last-triggered
+
+  # ========================================
+  # MEDIA - Entertainment controls
+  # ========================================
+  - title: Media
+    path: media
+    icon: mdi:television
+    badges: []
+    cards:
+      # Media Players
+      - type: media-control
+        entity: media_player.smart_tv
+        name: Smart TV
+
+      # Radio Browser (if configured)
+      - type: markdown
+        content: |
+          ## Radio Browser
+          Radio Browser integration is available.
+          Configure radio stations in your media player.
+
+  # ========================================
+  # SETTINGS - Configuration & tools
+  # ========================================
+  - title: Settings
+    path: settings
+    icon: mdi:cog
+    badges: []
+    cards:
+      # Quick Tools
+      - type: entities
+        title: Quick Tools
+        entities:
+          - entity: script.trigger_network_scan
+            name: Network Discovery Scan
+            icon: mdi:network-outline
+
+          - entity: todo.lista_zakupow
+            name: Shopping List
+
+      # Person Tracking
+      - type: entities
+        title: People
+        entities:
+          - entity: person.igor
+            name: Igor
+            secondary_info: last-changed
+
+      # TTS Services
+      - type: entities
+        title: Text-to-Speech
+        entities:
+          - entity: tts.google_translate_en_com
+            name: Google Translate TTS
+
+  # ========================================
+  # FAQ - Tauron/eLicznik Tips
+  # ========================================
+  - title: FAQ
+    path: faq
+    icon: mdi:help-circle
+    badges: []
+    cards:
+      - type: markdown
+        content: |
+          # FAQ
+
+          ## How to display hourly data in Energy dashboard?
+          Use "tauron_importer" statistics instead of entities to show hourly data in the Energy dashboard.
+
+          ## Why are there missing days in statistics/Energy dashboard?
+          Gaps appear when there are missing values in hourly readings for a given day. Confirm on the eLicznik website for that date.
+
+          ## How to fix missing data in statistics/Energy dashboard?
+          Once the data appears on eLicznik, you can fill gaps using the `tauron_amiplus.download_statistics` service.
+
+          ## When does this integration update data?
+          The integration logs in and downloads data from eLicznik approximately every 8.5 hours. This timer restarts after HA restart, integration reload, or configuration change. A fresh download also occurs when diagnostics are retrieved.
+
+          ## How to get energy meter id?
+          Follow the integration documentation to find the `energy_meter_id` value (from your eLicznik/Tauron account details).
+
+          ## How to calculate available energy as a prosumer?
+          Add the following configuration. Replace `123` with your meter id and adjust `0.8` factor and initial bank as needed.
+
+          ```yaml
+          input_number:
+            initial_energy_bank:
+              min: 0
+              max: 100000000
+              step: 1
+              mode: box
+
+          template:
+            - sensor:
+                - name: Tauron energy bank
+                  state_class: total
+                  device_class: energy
+                  unique_id: tauron_energy_bank
+                  icon: mdi:home-battery-outline
+                  state: "{{ (states('input_number.initial_energy_bank') | float(0) + states('sensor.tauron_amiplus_123_yearly_energy_generation') | float(0) * 0.8 - states('sensor.tauron_amiplus_123_yearly_energy_consumption') | float(0)) | round(3) }}"
+                  unit_of_measurement: "kWh"
+                  availability: "{{ states('sensor.tauron_amiplus_123_yearly_energy_generation') | is_number and states('sensor.tauron_amiplus_123_yearly_energy_consumption') | is_number }}"
+          ```
+
+          Add this to your configuration (e.g., in a package or `configuration.yaml`).

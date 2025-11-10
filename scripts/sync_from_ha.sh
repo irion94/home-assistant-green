@@ -20,6 +20,11 @@ set -euo pipefail
 #     ./scripts/sync_from_ha.sh --into-config --delete   # mirror (dangerous)
 #
 
+# Load .env.local if present (to get HA_* values)
+if [[ -f ".env.local" ]]; then
+  set -a; source ./.env.local; set +a
+fi
+
 : "${HA_HOST:?Missing HA_HOST}"
 : "${HA_SSH_USER:?Missing HA_SSH_USER}"
 : "${HA_SSH_KEY:?Missing HA_SSH_KEY}"
@@ -99,4 +104,3 @@ else
 fi
 
 echo "[sync] Done."
-

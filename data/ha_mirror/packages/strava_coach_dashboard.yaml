@@ -1,0 +1,25 @@
+# ============================================================================
+# STRAVA COACH - Dashboard Cards & Manual Triggers
+# ============================================================================
+
+script:
+  strava_sync_manual:
+    alias: "Strava Coach: Manual Sync"
+    icon: mdi:sync
+    sequence:
+      - service: strava_coach.sync_now
+        data: {}
+      - service: persistent_notification.create
+        data:
+          title: "Strava Coach"
+          message: "Manual sync started. Check sensors in a few seconds."
+          notification_id: strava_sync
+
+button:
+  - platform: template
+    buttons:
+      strava_sync_button:
+        friendly_name: "Sync Strava Now"
+        icon_template: mdi:sync
+        press:
+          - service: script.strava_sync_manual

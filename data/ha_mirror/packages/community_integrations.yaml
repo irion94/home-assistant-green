@@ -1,0 +1,181 @@
+# ============================================================================
+# COMMUNITY INTEGRATIONS (Polish Energy & Smart Home)
+# ============================================================================
+# This file contains configuration stubs for community-developed integrations
+# that require manual installation via HACS (Home Assistant Community Store).
+#
+# Installation prerequisite:
+# 1. Install HACS: https://hacs.xyz/docs/setup/download
+# 2. Add HACS integration via UI
+# 3. Use HACS to search and install each integration below
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# MÓJ TAURON - Polish Energy Provider
+# ----------------------------------------------------------------------------
+# Repository: https://github.com/PiotrMachowski/Home-Assistant-custom-components-Tauron-AMIplus
+#
+# Installation:
+# 1. HACS → Integrations → Search "Tauron AMIplus"
+# 2. Download and install
+# 3. Restart Home Assistant
+# 4. Add integration via UI with credentials from secrets.yaml
+#
+# Features:
+# - Energy consumption monitoring
+# - Historical data (hourly, daily, monthly)
+# - Cost tracking
+# - Zone tariff support (G11, G12, G12w)
+# ----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+# ELICZNIK - Polish Smart Meter Integration
+# ----------------------------------------------------------------------------
+# Repository: https://github.com/biplab-t-coding/elicznik
+#
+# Installation:
+# 1. HACS → Integrations → Add custom repository
+# 2. URL: https://github.com/biplab-t-coding/elicznik
+# 3. Category: Integration
+# 4. Download and install
+# 5. Restart Home Assistant
+# 6. Add integration via UI with eLicznik credentials
+#
+# Features:
+# - Real-time energy consumption from smart meter
+# - Historical data export
+# - Tariff zone tracking
+# ----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+# BLUESECURE - Security System Integration
+# ----------------------------------------------------------------------------
+# Type: Community integration for Eura/BlueSecure security systems
+#
+# Installation:
+# 1. Search HACS for "BlueSecure" or check manufacturer documentation
+# 2. Alternative: Look for EURA integration if BlueSecure is rebranded
+# 3. Install via HACS
+# 4. Configure with system IP and credentials from secrets.yaml
+#
+# Features (typical):
+# - Arm/disarm security system
+# - Zone status monitoring
+# - Event logging
+# - Integration with HA alarm panel
+# ----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
+# EMODULE / TECH CONTROLLERS - Heating System
+# ----------------------------------------------------------------------------
+# Repository: https://github.com/mariusz-ostoja-swierczynski/tech-controllers
+#
+# Installation:
+# 1. HACS → Integrations → Add custom repository
+# 2. URL: https://github.com/mariusz-ostoja-swierczynski/tech-controllers
+# 3. Category: Integration
+# 4. Download and install
+# 5. Restart Home Assistant
+# 6. Add integration via UI with TECH credentials from secrets.yaml
+#
+# Features:
+# - Heating zone control
+# - Temperature monitoring
+# - Schedule management
+# - Fuel/energy consumption tracking
+# ----------------------------------------------------------------------------
+
+# ============================================================================
+# CONSOLIDATED AUTOMATIONS
+# ============================================================================
+# All automations for community integrations in one place
+automation:
+  # Tauron - High consumption alert
+  - id: tauron_high_consumption_alert
+    alias: "Tauron: High Consumption Alert"
+    description: "Alert when hourly consumption exceeds threshold"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.tauron_current_power  # Replace with actual entity
+        above: 3000  # 3 kW
+    action:
+      - service: persistent_notification.create
+        data:
+          title: "High Energy Consumption"
+          message: "Current usage: {{ states('sensor.tauron_current_power') }} W"
+
+  # BlueSecure - Arm at night
+  - id: bluesecure_arm_at_night
+    alias: "BlueSecure: Arm at Night"
+    description: "Automatically arm security system at night"
+    trigger:
+      - platform: time
+        at: "23:00:00"
+    condition:
+      - condition: state
+        entity_id: alarm_control_panel.bluesecure  # Replace with actual entity
+        state: disarmed
+    action:
+      - service: alarm_control_panel.alarm_arm_night
+        target:
+          entity_id: alarm_control_panel.bluesecure
+
+  # TECH - Eco mode when away
+  - id: tech_heating_eco_mode
+    alias: "TECH: Eco Mode When Away"
+    description: "Lower heating when nobody is home"
+    trigger:
+      - platform: state
+        entity_id: group.all_persons  # Requires person tracking
+        to: not_home
+        for:
+          hours: 1
+    action:
+      - service: climate.set_temperature
+        target:
+          entity_id: climate.tech_living_room  # Replace with actual entity
+        data:
+          temperature: 18
+
+# ============================================================================
+# CONSOLIDATED SENSORS
+# ============================================================================
+# All sensors for community integrations in one place
+sensor:
+  # eLicznik - Daily cost calculation
+  - platform: template
+    sensors:
+      elicznik_daily_cost:
+        friendly_name: "eLicznik Daily Cost"
+        value_template: >
+          {% set daily_kwh = states('sensor.elicznik_daily_consumption') | float(0) %}
+          {% set price_per_kwh = 0.75 %} {# PLN - adjust to your tariff #}
+          {{ (daily_kwh * price_per_kwh) | round(2) }}
+        unit_of_measurement: "PLN"
+
+  # TECH - Daily heating hours
+  - platform: template
+    sensors:
+      tech_daily_heating_hours:
+        friendly_name: "Daily Heating Hours"
+        value_template: >
+          {% set heating_on = states.climate
+             | selectattr('entity_id', 'search', 'tech')
+             | selectattr('attributes.hvac_action', 'equalto', 'heating')
+             | list | count %}
+          {{ heating_on }}
+        unit_of_measurement: "zones"
+
+# ----------------------------------------------------------------------------
+# INSTALLATION CHECKLIST
+# ----------------------------------------------------------------------------
+# [ ] HACS installed and configured
+# [ ] Tauron AMIplus installed and credentials added
+# [ ] eLicznik installed and credentials added
+# [ ] BlueSecure/EURA integration researched and installed (if applicable)
+# [ ] TECH Controllers installed and credentials added
+# [ ] All integrations configured via UI
+# [ ] Entity IDs updated in automations above
+# [ ] Secrets added to secrets.yaml
+# [ ] Configuration validated (Developer Tools → YAML)
+# ============================================================================

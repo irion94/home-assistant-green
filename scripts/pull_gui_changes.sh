@@ -13,6 +13,11 @@ set -euo pipefail
 #     ./scripts/pull_gui_changes.sh --extra dashboards/home.yaml --extra packages/
 #
 
+# Load .env.local if present (to get HA_* values)
+if [ -f ".env.local" ]; then
+  set -a; . ./.env.local; set +a
+fi
+
 : "${HA_HOST:?Missing HA_HOST}"
 : "${HA_SSH_USER:?Missing HA_SSH_USER}"
 : "${HA_SSH_KEY:?Missing HA_SSH_KEY}"
@@ -52,4 +57,3 @@ for p in "${PATHS[@]}"; do
 done
 
 echo "[pull-gui] Done. Review 'git status' and commit as needed."
-

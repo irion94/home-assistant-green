@@ -39,6 +39,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Load .env.local if present (to get HA_* values)
+if [[ -f ".env.local" ]]; then
+  set -a; source ./.env.local; set +a
+fi
+
 # Remaining args passed to git push
 PUSH_ARGS=("$@")
 
@@ -100,4 +105,3 @@ fi
 echo "[push-with-sync] Running: git push ${PUSH_ARGS[*]:-}" 
 git push "${PUSH_ARGS[@]:-}"
 echo "[push-with-sync] Done."
-
