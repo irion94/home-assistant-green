@@ -1,0 +1,12 @@
+# Frontend Configuration for Modern Dashboard
+# Enables custom themes and HACS card resources
+
+frontend:
+  # Load all theme files from themes/ directory
+  themes: !include_dir_named ../themes
+
+  # Extra JavaScript modules for custom cards
+  # Note: These files are served by HACS after installation
+  extra_module_url:
+    - /hacsfiles/lovelace-card-mod/card-mod.js
+    # Add other HACS resources here after installation
