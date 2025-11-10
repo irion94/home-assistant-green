@@ -21,6 +21,11 @@ strava_coach:
   client_id: !secret strava_client_id
   client_secret: !secret strava_client_secret
 
+  # Strava Coach Integration
+ha_strava:
+  client_id: !secret strava_client_id
+  client_secret: !secret strava_client_secret
+
 # Logger level (reduce noise in prod)
 logger:
   default: warning

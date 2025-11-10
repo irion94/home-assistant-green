@@ -6,6 +6,16 @@ homeassistant:
   currency: PLN
   time_zone: Europe/Warsaw
   packages: !include_dir_named packages
+  external_url: "https://ha.casksoft.pl"
+  internal_url: "http://homeassistant.local:8123"
+
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 172.30.32.0/24
+    - 172.30.33.0/24
+    - 127.0.0.1
+    - ::1
 
 # Enable default config
 default_config:
@@ -18,6 +28,11 @@ automation: !include automations.yaml
 
 # Strava Coach Integration
 strava_coach:
+  client_id: !secret strava_client_id
+  client_secret: !secret strava_client_secret
+
+  # Strava Coach Integration
+ha_strava:
   client_id: !secret strava_client_id
   client_secret: !secret strava_client_secret
 

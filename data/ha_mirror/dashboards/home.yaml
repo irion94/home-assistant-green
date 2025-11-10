@@ -12,470 +12,222 @@ views:
     icon: mdi:home-assistant
     badges: []
     cards:
-      # Modern welcome header with Mushroom title card
-      - type: custom:mushroom-title-card
-        title: 👋 Witaj w Domu, {{ state_attr('person.igor', 'friendly_name') }}
-        subtitle: "{{ now().strftime('%A, %d %B %Y') }} • {{ now().strftime('%H:%M') }}"
-
-      # Weather and environment chips
-      - type: custom:mushroom-chips-card
-        chips:
-          - type: weather
-            entity: weather.forecast_dom
-            show_conditions: true
-            show_temperature: true
-
-          - type: entity
-            entity: sensor.aqara_temp_humidity_sensor_temperature
-            icon: mdi:thermometer
-            content_info: state
-
-          - type: entity
-            entity: sensor.aqara_temp_humidity_sensor_humidity
-            icon: mdi:water-percent
-            content_info: state
-
-      # Quick temperature graphs
-      - type: horizontal-stack
+      # Welcome header with person status
+      - type: vertical-stack
         cards:
-          - type: custom:mini-graph-card
-            entities:
-              - sensor.aqara_temp_humidity_sensor_temperature
-            name: Temperatura wewnętrzna
-            hours_to_show: 24
-            line_width: 2
-            font_size: 75
-            animate: true
-            show:
-              labels: false
-              points: false
+          - type: markdown
+            content: |
+              # 👋 Witaj w Domu, {{ state_attr('person.igor', 'friendly_name') }}
+              {{ now().strftime('%A, %B %d') }} • {{ now().strftime('%H:%M') }}
 
-          - type: custom:mini-graph-card
-            entities:
-              - sensor.aqara_temp_humidity_sensor_humidity
-            name: Wilgotność
-            hours_to_show: 24
-            line_width: 2
-            font_size: 75
-            animate: true
-            show:
-              labels: false
-              points: false
+          # Quick stats row
+          - type: horizontal-stack
+            cards:
+              - type: entity
+                entity: weather.forecast_dom
+                name: Weather
 
-      # Quick Actions - Now working with auto-entities!
-      - type: custom:auto-entities
-        card:
-          type: grid
-          columns: 4
-          square: false
-        filter:
-          include:
-            - domain: light
-              entity_id: "light.aqara_*"
-              options:
-                type: custom:mushroom-light-card
-                use_light_color: true
-                show_brightness_control: false
-                show_color_temp_control: false
-                tap_action:
-                  action: toggle
-          exclude:
-            - entity_id: "*_identify_*"
-        sort:
-          method: name
-        card_param: cards
+              - type: sensor
+                entity: sensor.aqara_temp_humidity_sensor_temperature
+                name: Indoor Temp
+                graph: line
+                hours_to_show: 24
 
-      # Motion & Occupancy with Mushroom chips
-      - type: custom:mushroom-title-card
-        title: Detekcja ruchu i otwarcia
-        subtitle: Status czujników
+              - type: sensor
+                entity: sensor.aqara_temp_humidity_sensor_humidity
+                name: Humidity
+                graph: line
+                hours_to_show: 24
 
-      - type: custom:mushroom-chips-card
-        alignment: center
-        chips:
-          - type: entity
-            entity: binary_sensor.aqara_motion_sensor_occupancy
-            icon: mdi:motion-sensor
-            content_info: last-changed
-            tap_action:
-              action: more-info
+      # Quick Actions - doesnt work - "configuration error"
+#      - type: custom:auto-entities
+#        card:
+#          type: grid
+#          title: Quick Actions
+#          columns: 4
+#          square: false
+#        filter:
+#          include:
+#            - domain: light
+#              attributes:
+#                device_class: null
+#              options:
+#                type: button
+#                tap_action:
+#                  action: toggle
+#          exclude:
+#            - entity_id: "*_identify_*"
+#        sort:
+#          method: name
 
-          - type: entity
-            entity: binary_sensor.aqara_motion_sensor_p1_occupancy
-            icon: mdi:motion-sensor
-            content_info: last-changed
-            tap_action:
-              action: more-info
+      # Motion & Occupancy
+      - type: entities
+        title: Motion Detection
+        state_color: true
+        show_header_toggle: false
+        entities:
+          - entity: binary_sensor.aqara_motion_sensor_occupancy
+            name: Motion Sensor (Original)
+            secondary_info: last-changed
 
-          - type: entity
-            entity: binary_sensor.aqara_motion_sensor_p1_occupancy_2
-            icon: mdi:motion-sensor
-            content_info: last-changed
-            tap_action:
-              action: more-info
+          - entity: binary_sensor.aqara_motion_sensor_p1_occupancy
+            name: Motion Sensor P1 #1
+            secondary_info: last-changed
 
-          - type: entity
-            entity: binary_sensor.aqara_motion_sensor_p1_occupancy_3
-            icon: mdi:motion-sensor
-            content_info: last-changed
-            tap_action:
-              action: more-info
+          - entity: binary_sensor.aqara_motion_sensor_p1_occupancy_2
+            name: Motion Sensor P1 #2
+            secondary_info: last-changed
 
-          - type: entity
-            entity: binary_sensor.aqara_door_and_window_sensor_door
-            icon: mdi:door
-            content_info: last-changed
-            tap_action:
-              action: more-info
+          - entity: binary_sensor.aqara_motion_sensor_p1_occupancy_3
+            name: Motion Sensor P1 #3
+            secondary_info: last-changed
 
-      # System Health with Mushroom update cards
-      - type: custom:mushroom-title-card
-        title: Aktualizacje systemu
-        subtitle: Status Home Assistant
+          - entity: binary_sensor.aqara_door_and_window_sensor_door
+            name: Door Sensor
+            secondary_info: last-changed
 
-      - type: grid
-        columns: 3
-        square: false
-        cards:
-          - type: custom:mushroom-update-card
-            entity: update.home_assistant_core_update
-            name: HA Core
-            show_buttons_control: true
-
-          - type: custom:mushroom-update-card
-            entity: update.home_assistant_supervisor_update
-            name: Supervisor
-            show_buttons_control: true
-
-          - type: custom:mushroom-update-card
-            entity: update.home_assistant_operating_system_update
-            name: HA OS
-            show_buttons_control: true
+      # System Health Overview - doesnt work - "encja nie jest numeryczna"
+#      - type: grid
+#        title: System Health
+#        columns: 2
+#        square: false
+#        cards:
+#          - type: gauge
+#            entity: update.home_assistant_core_update
+#            name: HA Core
+#            needle: true
+#            severity:
+#              green: 0
+#              yellow: 0
+#              red: 0
+#
+#          - type: gauge
+#            entity: update.home_assistant_operating_system_update
+#            name: HA OS
+#            needle: true
 
   # ========================================
   # LIGHTS - All lighting controls
   # ========================================
-  - title: Oświetlenie
+  - title: Lights
     path: lights
     icon: mdi:lightbulb-group
     badges: []
     cards:
-      # Modern title header
-      - type: custom:mushroom-title-card
-        title: 💡 Sterowanie oświetleniem
-        subtitle: Przełączniki i taśmy LED
-
-      # Quick status chips
-      - type: custom:mushroom-chips-card
-        alignment: center
-        chips:
-          - type: template
-            icon: mdi:lightbulb-group
-            content: "{{ states.light | selectattr('state', 'eq', 'on') | list | count }} włączonych"
-            tap_action:
-              action: none
-
-      # Single Switches - Modern Mushroom grid
-      - type: custom:mushroom-title-card
-        title: Przełączniki
-        subtitle: 18 modułów sterowania
-
+      # All Lights - Grid layout
       - type: grid
         columns: 4
         square: false
         cards:
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1
             name: Switch 1
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_2
             name: Switch 2
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_3
             name: Switch 3
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_4
             name: Switch 4
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_5
             name: Switch 5
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_6
             name: Switch 6
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_7
             name: Switch 7
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_8
             name: Switch 8
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_9
             name: Switch 9
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_10
             name: Switch 10
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_11
             name: Switch 11
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_12
             name: Switch 12
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_13
             name: Switch 13
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_14
             name: Switch 14
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_15
             name: Switch 15
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_16
             name: Switch 16
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_17
             name: Switch 17
-            icon: mdi:lightbulb
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-          - type: custom:mushroom-light-card
+          - type: light
             entity: light.aqara_single_switch_module_t1_18
             name: Cyrkulacja
-            icon: mdi:water-pump
-            use_light_color: true
-            show_brightness_control: false
-            tap_action:
-              action: toggle
-            hold_action:
-              action: more-info
 
-      # LED Strips - Modern cards with RGB controls
-      - type: custom:mushroom-title-card
-        title: Taśmy LED
-        subtitle: 8 taśm z kontrolą RGB
-
-      - type: grid
-        columns: 4
-        square: false
-        cards:
-          - type: custom:mushroom-light-card
-            entity: light.aqara_led_strip_t1
+      # LED Strips - Grouped
+      - type: entities
+        title: LED Strips
+        state_color: true
+        show_header_toggle: true
+        entities:
+          - entity: light.aqara_led_strip_t1
             name: LED Strip 1
-            icon: mdi:led-strip-variant
-            use_light_color: true
-            show_brightness_control: true
-            show_color_temp_control: true
-            show_color_control: true
 
-          - type: custom:mushroom-light-card
-            entity: light.aqara_led_strip_t1_2
+          - entity: light.aqara_led_strip_t1_2
             name: LED Strip 2
-            icon: mdi:led-strip-variant
-            use_light_color: true
-            show_brightness_control: true
-            show_color_temp_control: true
-            show_color_control: true
 
-          - type: custom:mushroom-light-card
-            entity: light.aqara_led_strip_t1_3
+          - entity: light.aqara_led_strip_t1_3
             name: LED Strip 3
-            icon: mdi:led-strip-variant
-            use_light_color: true
-            show_brightness_control: true
-            show_color_temp_control: true
-            show_color_control: true
 
-          - type: custom:mushroom-light-card
-            entity: light.aqara_led_strip_t1_4
+          - entity: light.aqara_led_strip_t1_4
             name: LED Strip 4
-            icon: mdi:led-strip-variant
-            use_light_color: true
-            show_brightness_control: true
-            show_color_temp_control: true
-            show_color_control: true
 
-          - type: custom:mushroom-light-card
-            entity: light.aqara_led_strip_t1_5
+          - entity: light.aqara_led_strip_t1_5
             name: LED Strip 5
-            icon: mdi:led-strip-variant
-            use_light_color: true
-            show_brightness_control: true
-            show_color_temp_control: true
-            show_color_control: true
 
-          - type: custom:mushroom-light-card
-            entity: light.aqara_led_strip_t1_6
+          - entity: light.aqara_led_strip_t1_6
             name: LED Strip 6
-            icon: mdi:led-strip-variant
-            use_light_color: true
-            show_brightness_control: true
-            show_color_temp_control: true
-            show_color_control: true
 
-          - type: custom:mushroom-light-card
-            entity: light.aqara_led_strip_t1_7
+          - entity: light.aqara_led_strip_t1_7
             name: LED Strip 7
-            icon: mdi:led-strip-variant
-            use_light_color: true
-            show_brightness_control: true
-            show_color_temp_control: true
-            show_color_control: true
 
-          - type: custom:mushroom-light-card
-            entity: light.aqara_led_strip_t1_8
+          - entity: light.aqara_led_strip_t1_8
             name: LED Strip 8
-            icon: mdi:led-strip-variant
-            use_light_color: true
-            show_brightness_control: true
-            show_color_temp_control: true
-            show_color_control: true
 
-      # Automation Controls with Mushroom
-      - type: custom:mushroom-title-card
-        title: Automatyzacje
-        subtitle: Sterowanie automatyczne
-
-      - type: custom:mushroom-entity-card
-        entity: automation.aqara_motion_activated_lights
-        name: Światła aktywowane ruchem
-        icon: mdi:motion-sensor
-        tap_action:
-          action: toggle
-        hold_action:
-          action: more-info
+      # Automation Controls
+      - type: entities
+        title: Lighting Automations
+        entities:
+          - entity: automation.aqara_motion_activated_lights
+            name: Motion Activated Lights
+            secondary_info: last-triggered
 
   # ========================================
   # CLIMATE - Temperature and environmental
@@ -531,659 +283,475 @@ views:
     icon: mdi:air-conditioner
     badges: []
     cards:
-      # Modern header
-      - type: custom:mushroom-title-card
-        title: 🌡️ Klimatyzacja Daikin Onecta
-        subtitle: Sterowanie i monitoring systemów w Sypialni i Salonie
-
-      # Status Chips - Quick Overview
-      - type: custom:mushroom-chips-card
-        chips:
-          - type: entity
-            entity: sensor.daikin_daily_runtime
-            icon: mdi:clock-outline
-            content_info: state
-          - type: entity
-            entity: binary_sensor.daikin_sypialnia_climatecontrol_is_powerful_mode_active
-            icon: mdi:turbine
-            content_info: name
-          - type: entity
-            entity: binary_sensor.daikin_salon_climatecontrol_is_powerful_mode_active
-            icon: mdi:turbine
-            content_info: name
+      # Header with quick info
+      - type: markdown
+        content: |
+          # 🌡️ Klimatyzacja Daikin Onecta
+          Sterowanie i monitoring systemów klimatyzacji w Sypialni i Salonie.
 
       # =====================================
-      # HERO - Climate Control Cards
+      # HERO - Quick Climate Control
       # =====================================
-      - type: grid
-        columns: 2
-        square: false
+      - type: horizontal-stack
         cards:
           # Sypialnia (Bedroom)
-          - type: custom:mushroom-climate-card
+          - type: thermostat
             entity: climate.daikin_sypialnia_room_temperature
             name: Sypialnia
-            icon: mdi:bed
-            show_temperature_control: true
-            hvac_modes:
-              - heat_cool
-              - cool
-              - heat
-              - fan_only
-              - dry
-              - "off"
-            layout: horizontal
-            tap_action:
-              action: more-info
-            collapsible_controls: true
+            features:
+              - type: climate-hvac-modes
+              - type: climate-preset-modes
 
           # Salon (Living Room)
-          - type: custom:mushroom-climate-card
+          - type: thermostat
             entity: climate.daikin_salon_room_temperature
             name: Salon
-            icon: mdi:sofa
-            show_temperature_control: true
-            hvac_modes:
-              - heat_cool
-              - cool
-              - heat
-              - fan_only
-              - dry
-              - "off"
-            layout: horizontal
-            tap_action:
-              action: more-info
-            collapsible_controls: true
+            features:
+              - type: climate-hvac-modes
+              - type: climate-preset-modes
+
+      # Status Row - Quick Overview
+      - type: horizontal-stack
+        cards:
+          - type: entity
+            entity: sensor.daikin_daily_runtime
+            name: Łączny czas pracy
+            icon: mdi:clock-outline
+
+          - type: entity
+            entity: binary_sensor.daikin_sypialnia_climatecontrol_is_powerful_mode_active
+            name: Sypialnia Turbo
+            icon: mdi:turbine
+
+          - type: entity
+            entity: binary_sensor.daikin_salon_climatecontrol_is_powerful_mode_active
+            name: Salon Turbo
+            icon: mdi:turbine
 
       # =====================================
       # ENERGY - Power Consumption Tracking
       # =====================================
-      - type: custom:mushroom-title-card
-        title: ⚡ Zużycie energii
-        subtitle: Monitoring energii obu jednostek
-
-      # Today's Consumption - Compact chips
-      - type: grid
-        columns: 2
-        square: false
+      - type: vertical-stack
         cards:
-          # Sypialnia - Today
-          - type: vertical-stack
-            cards:
-              - type: custom:mushroom-title-card
-                title: Sypialnia - Dzisiaj
-                subtitle: " "
+          - type: markdown
+            content: |
+              ## ⚡ Zużycie energii
 
-              - type: horizontal-stack
+          # Today's Consumption - Both Units
+          - type: grid
+            columns: 2
+            square: false
+            cards:
+              # Sypialnia - Today
+              - type: vertical-stack
                 cards:
-                  - type: custom:mushroom-entity-card
-                    entity: sensor.daikin_sypialnia_climatecontrol_heating_daily_electrical_consumption
-                    name: Grzanie
-                    icon: mdi:radiator
-                    icon_color: orange
-                    layout: vertical
+                  - type: markdown
+                    content: "### Sypialnia - Dzisiaj"
 
-                  - type: custom:mushroom-entity-card
-                    entity: sensor.daikin_sypialnia_climatecontrol_cooling_daily_electrical_consumption
-                    name: Chłodzenie
-                    icon: mdi:snowflake
-                    icon_color: blue
-                    layout: vertical
+                  - type: horizontal-stack
+                    cards:
+                      - type: entity
+                        entity: sensor.daikin_sypialnia_climatecontrol_heating_daily_electrical_consumption
+                        name: Grzanie
+                        icon: mdi:radiator
 
-          # Salon - Today
-          - type: vertical-stack
-            cards:
-              - type: custom:mushroom-title-card
-                title: Salon - Dzisiaj
-                subtitle: " "
+                      - type: entity
+                        entity: sensor.daikin_sypialnia_climatecontrol_cooling_daily_electrical_consumption
+                        name: Chłodzenie
+                        icon: mdi:snowflake
 
-              - type: horizontal-stack
+              # Salon - Today
+              - type: vertical-stack
                 cards:
-                  - type: custom:mushroom-entity-card
-                    entity: sensor.daikin_salon_climatecontrol_heating_daily_electrical_consumption
-                    name: Grzanie
-                    icon: mdi:radiator
-                    icon_color: orange
-                    layout: vertical
+                  - type: markdown
+                    content: "### Salon - Dzisiaj"
 
-                  - type: custom:mushroom-entity-card
-                    entity: sensor.daikin_salon_climatecontrol_cooling_daily_electrical_consumption
-                    name: Chłodzenie
-                    icon: mdi:snowflake
-                    icon_color: blue
-                    layout: vertical
+                  - type: horizontal-stack
+                    cards:
+                      - type: entity
+                        entity: sensor.daikin_salon_climatecontrol_heating_daily_electrical_consumption
+                        name: Grzanie
+                        icon: mdi:radiator
 
-      # Weekly Consumption - Modern graphs
-      - type: custom:mushroom-title-card
-        title: Zużycie tygodniowe
-        subtitle: Trend zużycia w ostatnich 7 dniach
+                      - type: entity
+                        entity: sensor.daikin_salon_climatecontrol_cooling_daily_electrical_consumption
+                        name: Chłodzenie
+                        icon: mdi:snowflake
 
-      - type: grid
-        columns: 2
-        square: false
-        cards:
-          - type: custom:mini-graph-card
-            entities:
-              - entity: sensor.daikin_sypialnia_climatecontrol_heating_weekly_electrical_consumption
-                name: Sypialnia - Grzanie
-                color: "#ff6b6b"
-            name: Grzanie - Sypialnia
-            hours_to_show: 168
-            line_width: 3
-            points_per_hour: 0.25
-            show:
-              labels: true
-              icon: true
-              state: true
-
-          - type: custom:mini-graph-card
-            entities:
-              - entity: sensor.daikin_sypialnia_climatecontrol_cooling_weekly_electrical_consumption
-                name: Sypialnia - Chłodzenie
-                color: "#4ecdc4"
-            name: Chłodzenie - Sypialnia
-            hours_to_show: 168
-            line_width: 3
-            points_per_hour: 0.25
-            show:
-              labels: true
-              icon: true
-              state: true
-
-          - type: custom:mini-graph-card
-            entities:
-              - entity: sensor.daikin_salon_climatecontrol_heating_weekly_electrical_consumption
-                name: Salon - Grzanie
-                color: "#ff6b6b"
-            name: Grzanie - Salon
-            hours_to_show: 168
-            line_width: 3
-            points_per_hour: 0.25
-            show:
-              labels: true
-              icon: true
-              state: true
-
-          - type: custom:mini-graph-card
-            entities:
-              - entity: sensor.daikin_salon_climatecontrol_cooling_weekly_electrical_consumption
-                name: Salon - Chłodzenie
-                color: "#4ecdc4"
-            name: Chłodzenie - Salon
-            hours_to_show: 168
-            line_width: 3
-            points_per_hour: 0.25
-            show:
-              labels: true
-              icon: true
-              state: true
-
-      # Yearly Consumption - Compact display
-      - type: custom:mushroom-title-card
-        title: Zużycie roczne
-        subtitle: Łączne zużycie energii
-
-      - type: grid
-        columns: 2
-        square: false
-        cards:
-          # Sypialnia
-          - type: vertical-stack
+          # Weekly Consumption Comparison
+          - type: grid
+            title: Zużycie tygodniowe
+            columns: 2
+            square: false
             cards:
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_sypialnia_climatecontrol_heating_yearly_electrical_consumption
+              - type: sensor
+                entity: sensor.daikin_sypialnia_climatecontrol_heating_weekly_electrical_consumption
+                name: Sypialnia - Grzanie (tydzień)
+                graph: line
+                detail: 2
+
+              - type: sensor
+                entity: sensor.daikin_sypialnia_climatecontrol_cooling_weekly_electrical_consumption
+                name: Sypialnia - Chłodzenie (tydzień)
+                graph: line
+                detail: 2
+
+              - type: sensor
+                entity: sensor.daikin_salon_climatecontrol_heating_weekly_electrical_consumption
+                name: Salon - Grzanie (tydzień)
+                graph: line
+                detail: 2
+
+              - type: sensor
+                entity: sensor.daikin_salon_climatecontrol_cooling_weekly_electrical_consumption
+                name: Salon - Chłodzenie (tydzień)
+                graph: line
+                detail: 2
+
+          # Yearly Consumption
+          - type: entities
+            title: Zużycie roczne
+            state_color: true
+            entities:
+              - entity: sensor.daikin_sypialnia_climatecontrol_heating_yearly_electrical_consumption
                 name: Sypialnia - Grzanie (rok)
                 icon: mdi:radiator
-                icon_color: orange
                 secondary_info: last-changed
 
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_sypialnia_climatecontrol_cooling_yearly_electrical_consumption
+              - entity: sensor.daikin_sypialnia_climatecontrol_cooling_yearly_electrical_consumption
                 name: Sypialnia - Chłodzenie (rok)
                 icon: mdi:snowflake
-                icon_color: blue
                 secondary_info: last-changed
 
-          # Salon
-          - type: vertical-stack
-            cards:
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_salon_climatecontrol_heating_yearly_electrical_consumption
+              - type: divider
+
+              - entity: sensor.daikin_salon_climatecontrol_heating_yearly_electrical_consumption
                 name: Salon - Grzanie (rok)
                 icon: mdi:radiator
-                icon_color: orange
                 secondary_info: last-changed
 
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_salon_climatecontrol_cooling_yearly_electrical_consumption
+              - entity: sensor.daikin_salon_climatecontrol_cooling_yearly_electrical_consumption
                 name: Salon - Chłodzenie (rok)
                 icon: mdi:snowflake
-                icon_color: blue
                 secondary_info: last-changed
 
       # =====================================
       # TEMPERATURE - Environmental Monitoring
       # =====================================
-      - type: custom:mushroom-title-card
-        title: 🌡️ Temperatura i warunki
-        subtitle: Monitoring temperatury wewnątrz i na zewnątrz
-
-      # Current Temperature Cards
-      - type: grid
-        columns: 2
-        square: false
+      - type: vertical-stack
         cards:
-          # Sypialnia
-          - type: vertical-stack
+          - type: markdown
+            content: |
+              ## 🌡️ Temperatura i warunki
+
+          # Current Temperatures
+          - type: grid
+            columns: 2
+            square: false
             cards:
-              - type: custom:mushroom-title-card
-                title: Sypialnia
-                subtitle: " "
+              # Sypialnia
+              - type: vertical-stack
+                cards:
+                  - type: markdown
+                    content: "### Sypialnia"
 
-              - type: custom:mini-graph-card
-                entities:
-                  - entity: sensor.daikin_sypialnia_climatecontrol_room_temperature
-                    name: Wewnątrz
-                    color: "#00a8ff"
-                  - entity: sensor.daikin_sypialnia_climatecontrol_outdoor_temperature
-                    name: Na zewnątrz
-                    color: "#9ca5b0"
-                name: Temperatura (24h)
-                hours_to_show: 24
-                line_width: 3
-                points_per_hour: 4
-                show:
-                  labels: true
-                  icon: true
-                  state: true
-                  legend: true
+                  - type: sensor
+                    entity: sensor.daikin_sypialnia_climatecontrol_room_temperature
+                    name: Temperatura wewnątrz
+                    graph: line
+                    detail: 2
+                    hours_to_show: 24
 
-          # Salon
-          - type: vertical-stack
-            cards:
-              - type: custom:mushroom-title-card
-                title: Salon
-                subtitle: " "
+                  - type: sensor
+                    entity: sensor.daikin_sypialnia_climatecontrol_outdoor_temperature
+                    name: Temperatura zewnętrzna
+                    graph: line
+                    detail: 2
+                    hours_to_show: 24
 
-              - type: custom:mini-graph-card
-                entities:
-                  - entity: sensor.daikin_salon_climatecontrol_room_temperature
-                    name: Wewnątrz
-                    color: "#00a8ff"
-                  - entity: sensor.daikin_salon_climatecontrol_outdoor_temperature
-                    name: Na zewnątrz
-                    color: "#9ca5b0"
-                name: Temperatura (24h)
-                hours_to_show: 24
-                line_width: 3
-                points_per_hour: 4
-                show:
-                  labels: true
-                  icon: true
-                  state: true
-                  legend: true
+              # Salon
+              - type: vertical-stack
+                cards:
+                  - type: markdown
+                    content: "### Salon"
 
-      # Historical Temperature Comparison (7 days)
-      - type: custom:mushroom-title-card
-        title: Historia temperatury (7 dni)
-        subtitle: Porównanie wszystkich czujników
+                  - type: sensor
+                    entity: sensor.daikin_salon_climatecontrol_room_temperature
+                    name: Temperatura wewnątrz
+                    graph: line
+                    detail: 2
+                    hours_to_show: 24
 
-      - type: custom:mini-graph-card
-        entities:
-          - entity: sensor.daikin_sypialnia_climatecontrol_room_temperature
-            name: Sypialnia (wewnątrz)
-            color: "#00a8ff"
-          - entity: sensor.daikin_salon_climatecontrol_room_temperature
-            name: Salon (wewnątrz)
-            color: "#0abde3"
-          - entity: sensor.daikin_sypialnia_climatecontrol_outdoor_temperature
-            name: Temperatura zewnętrzna
-            color: "#9ca5b0"
-        hours_to_show: 168
-        line_width: 2
-        points_per_hour: 0.5
-        aggregate_func: avg
-        group_by: hour
-        show:
-          labels: true
-          icon: true
-          state: true
-          legend: true
-          fill: fade
+                  - type: sensor
+                    entity: sensor.daikin_salon_climatecontrol_outdoor_temperature
+                    name: Temperatura zewnętrzna
+                    graph: line
+                    detail: 2
+                    hours_to_show: 24
+
+          # Historical Temperature Comparison (7 days)
+          - type: history-graph
+            title: Historia temperatury (7 dni)
+            hours_to_show: 168
+            entities:
+              - entity: sensor.daikin_sypialnia_climatecontrol_room_temperature
+                name: Sypialnia (wewnątrz)
+              - entity: sensor.daikin_salon_climatecontrol_room_temperature
+                name: Salon (wewnątrz)
+              - entity: sensor.daikin_sypialnia_climatecontrol_outdoor_temperature
+                name: Temperatura zewnętrzna
 
       # =====================================
       # QUICK ACTIONS - Control Panel
       # =====================================
-      - type: custom:mushroom-title-card
-        title: ⚡ Szybkie akcje
-        subtitle: Odśwież dane i zarządzaj harmonogramem
-
-      # Refresh buttons
-      - type: horizontal-stack
+      - type: vertical-stack
         cards:
-          - type: custom:button-card
-            entity: button.daikin_sypialnia_refresh
-            name: Odśwież Sypialnia
-            icon: mdi:refresh
-            tap_action:
-              action: call-service
-              service: button.press
-              service_data:
-                entity_id: button.daikin_sypialnia_refresh
-            styles:
-              card:
-                - height: 60px
-              icon:
-                - color: "#00a8ff"
-              name:
-                - color: "#e4e8ed"
+          - type: markdown
+            content: |
+              ## ⚡ Szybkie akcje
 
-          - type: custom:button-card
-            entity: button.daikin_salon_refresh
-            name: Odśwież Salon
-            icon: mdi:refresh
-            tap_action:
-              action: call-service
-              service: button.press
-              service_data:
-                entity_id: button.daikin_salon_refresh
-            styles:
-              card:
-                - height: 60px
-              icon:
-                - color: "#00a8ff"
-              name:
-                - color: "#e4e8ed"
+          - type: horizontal-stack
+            cards:
+              # Refresh buttons
+              - type: button
+                name: Odśwież Sypialnia
+                icon: mdi:refresh
+                tap_action:
+                  action: call-service
+                  service: button.press
+                  target:
+                    entity_id: button.daikin_sypialnia_refresh
 
-      # Schedule Selection
-      - type: grid
-        columns: 2
-        square: false
-        cards:
-          - type: custom:mushroom-select-card
-            entity: select.daikin_sypialnia_climatecontrol_schedule
-            name: Harmonogram - Sypialnia
-            icon: mdi:calendar-clock
-            secondary_info: state
+              - type: button
+                name: Odśwież Salon
+                icon: mdi:refresh
+                tap_action:
+                  action: call-service
+                  service: button.press
+                  target:
+                    entity_id: button.daikin_salon_refresh
 
-          - type: custom:mushroom-select-card
-            entity: select.daikin_salon_climatecontrol_schedule
-            name: Harmonogram - Salon
-            icon: mdi:calendar-clock
-            secondary_info: state
+          # Schedule Selection
+          - type: entities
+            title: Harmonogram
+            entities:
+              - entity: select.daikin_sypialnia_climatecontrol_schedule
+                name: Sypialnia
+                icon: mdi:calendar-clock
+
+              - entity: select.daikin_salon_climatecontrol_schedule
+                name: Salon
+                icon: mdi:calendar-clock
 
       # =====================================
       # DIAGNOSTICS - System Health
       # ================================================
-      - type: custom:mushroom-title-card
-        title: 🔧 Diagnostyka i status
-        subtitle: Monitoring stanu urządzeń i błędów
-
-      # Health Status Chips - Quick Overview
-      - type: custom:mushroom-chips-card
-        chips:
-          - type: entity
-            entity: binary_sensor.daikin_sypialnia_climatecontrol_is_in_error_state
-            icon: mdi:alert-circle
-            content_info: name
-          - type: entity
-            entity: binary_sensor.daikin_salon_climatecontrol_is_in_error_state
-            icon: mdi:alert-circle
-            content_info: name
-          - type: entity
-            entity: binary_sensor.daikin_sypialnia_climatecontrol_is_powerful_mode_active
-            icon: mdi:turbine
-            content_info: name
-          - type: entity
-            entity: binary_sensor.daikin_salon_climatecontrol_is_powerful_mode_active
-            icon: mdi:turbine
-            content_info: name
-
-      # Health Status - By Unit
-      - type: grid
-        columns: 2
-        square: false
+      - type: vertical-stack
         cards:
-          # Sypialnia Status
-          - type: vertical-stack
-            cards:
-              - type: custom:mushroom-title-card
-                title: Sypialnia
-                subtitle: Status urządzenia
+          - type: markdown
+            content: |
+              ## 🔧 Diagnostyka i status
 
-              - type: custom:mushroom-entity-card
-                entity: binary_sensor.daikin_sypialnia_climatecontrol_is_in_error_state
-                name: Błąd - Wewnętrzna
+          # Health Status - Critical Indicators
+          - type: entities
+            title: Stan urządzeń
+            state_color: true
+            show_header_toggle: false
+            entities:
+              # Sypialnia Climate Control
+              - type: section
+                label: Sypialnia - Jednostka wewnętrzna
+
+              - entity: binary_sensor.daikin_sypialnia_climatecontrol_is_in_error_state
+                name: Błąd
                 icon: mdi:alert-circle
-                icon_color: red
 
-              - type: custom:mushroom-entity-card
-                entity: binary_sensor.daikin_sypialnia_climatecontrol_is_in_warning_state
-                name: Ostrzeżenie - Wewnętrzna
+              - entity: binary_sensor.daikin_sypialnia_climatecontrol_is_in_warning_state
+                name: Ostrzeżenie
                 icon: mdi:alert
-                icon_color: orange
 
-              - type: custom:mushroom-entity-card
-                entity: binary_sensor.daikin_sypialnia_climatecontrol_is_holiday_mode_active
+              - entity: binary_sensor.daikin_sypialnia_climatecontrol_is_in_caution_state
+                name: Uwaga
+                icon: mdi:information
+
+              - entity: binary_sensor.daikin_sypialnia_climatecontrol_is_holiday_mode_active
                 name: Tryb wakacyjny
                 icon: mdi:palm-tree
-                icon_color: green
 
-              - type: custom:mushroom-entity-card
-                entity: binary_sensor.daikin_sypialnia_outdoorunit_is_in_error_state
-                name: Błąd - Zewnętrzna
+              - entity: binary_sensor.daikin_sypialnia_climatecontrol_is_powerful_mode_active
+                name: Tryb Turbo
+                icon: mdi:turbine
+
+              # Sypialnia Outdoor Unit
+              - type: section
+                label: Sypialnia - Jednostka zewnętrzna
+
+              - entity: binary_sensor.daikin_sypialnia_outdoorunit_is_in_error_state
+                name: Błąd
                 icon: mdi:alert-circle
-                icon_color: red
 
-              - type: custom:mushroom-entity-card
-                entity: binary_sensor.daikin_sypialnia_outdoorunit_is_in_warning_state
-                name: Ostrzeżenie - Zewnętrzna
+              - entity: binary_sensor.daikin_sypialnia_outdoorunit_is_in_warning_state
+                name: Ostrzeżenie
                 icon: mdi:alert
-                icon_color: orange
 
-          # Salon Status
-          - type: vertical-stack
-            cards:
-              - type: custom:mushroom-title-card
-                title: Salon
-                subtitle: Status urządzenia
+              - entity: binary_sensor.daikin_sypialnia_outdoorunit_is_in_caution_state
+                name: Uwaga
+                icon: mdi:information
 
-              - type: custom:mushroom-entity-card
-                entity: binary_sensor.daikin_salon_climatecontrol_is_in_error_state
-                name: Błąd - Wewnętrzna
+              - type: divider
+
+              # Salon Climate Control
+              - type: section
+                label: Salon - Jednostka wewnętrzna
+
+              - entity: binary_sensor.daikin_salon_climatecontrol_is_in_error_state
+                name: Błąd
                 icon: mdi:alert-circle
-                icon_color: red
 
-              - type: custom:mushroom-entity-card
-                entity: binary_sensor.daikin_salon_climatecontrol_is_in_warning_state
-                name: Ostrzeżenie - Wewnętrzna
+              - entity: binary_sensor.daikin_salon_climatecontrol_is_in_warning_state
+                name: Ostrzeżenie
                 icon: mdi:alert
-                icon_color: orange
 
-              - type: custom:mushroom-entity-card
-                entity: binary_sensor.daikin_salon_climatecontrol_is_holiday_mode_active
+              - entity: binary_sensor.daikin_salon_climatecontrol_is_in_caution_state
+                name: Uwaga
+                icon: mdi:information
+
+              - entity: binary_sensor.daikin_salon_climatecontrol_is_holiday_mode_active
                 name: Tryb wakacyjny
                 icon: mdi:palm-tree
-                icon_color: green
 
-              - type: custom:mushroom-entity-card
-                entity: binary_sensor.daikin_salon_outdoorunit_is_in_error_state
-                name: Błąd - Zewnętrzna
+              - entity: binary_sensor.daikin_salon_climatecontrol_is_powerful_mode_active
+                name: Tryb Turbo
+                icon: mdi:turbine
+
+              # Salon Outdoor Unit
+              - type: section
+                label: Salon - Jednostka zewnętrzna
+
+              - entity: binary_sensor.daikin_salon_outdoorunit_is_in_error_state
+                name: Błąd
                 icon: mdi:alert-circle
-                icon_color: red
 
-              - type: custom:mushroom-entity-card
-                entity: binary_sensor.daikin_salon_outdoorunit_is_in_warning_state
-                name: Ostrzeżenie - Zewnętrzna
+              - entity: binary_sensor.daikin_salon_outdoorunit_is_in_warning_state
+                name: Ostrzeżenie
                 icon: mdi:alert
-                icon_color: orange
 
-      # Error Codes
-      - type: custom:mushroom-title-card
-        title: Kody błędów
-        subtitle: Diagnostyka systemowa
+              - entity: binary_sensor.daikin_salon_outdoorunit_is_in_caution_state
+                name: Uwaga
+                icon: mdi:information
 
-      - type: grid
-        columns: 2
-        square: false
-        cards:
-          - type: custom:mushroom-entity-card
-            entity: sensor.daikin_sypialnia_climatecontrol_error_code
-            name: Sypialnia - Climate Control
-            icon: mdi:code-braces
-            icon_color: red
+          # Error Codes
+          - type: entities
+            title: Kody błędów
+            entities:
+              - entity: sensor.daikin_sypialnia_climatecontrol_error_code
+                name: Sypialnia - Climate Control
+                icon: mdi:code-braces
 
-          - type: custom:mushroom-entity-card
-            entity: sensor.daikin_sypialnia_outdoorunit_error_code
-            name: Sypialnia - Outdoor Unit
-            icon: mdi:code-braces
-            icon_color: red
+              - entity: sensor.daikin_sypialnia_outdoorunit_error_code
+                name: Sypialnia - Outdoor Unit
+                icon: mdi:code-braces
 
-          - type: custom:mushroom-entity-card
-            entity: sensor.daikin_salon_climatecontrol_error_code
-            name: Salon - Climate Control
-            icon: mdi:code-braces
-            icon_color: red
+              - entity: sensor.daikin_salon_climatecontrol_error_code
+                name: Salon - Climate Control
+                icon: mdi:code-braces
 
-          - type: custom:mushroom-entity-card
-            entity: sensor.daikin_salon_outdoorunit_error_code
-            name: Salon - Outdoor Unit
-            icon: mdi:code-braces
-            icon_color: red
+              - entity: sensor.daikin_salon_outdoorunit_error_code
+                name: Salon - Outdoor Unit
+                icon: mdi:code-braces
 
-      # Gateway Network Status
-      - type: custom:mushroom-title-card
-        title: 🌐 Status sieci
-        subtitle: Informacje o połączeniu gateway
-
-      - type: grid
-        columns: 2
-        square: false
-        cards:
-          # Sypialnia Gateway
-          - type: vertical-stack
-            cards:
-              - type: custom:mushroom-title-card
-                title: Sypialnia Gateway
-                subtitle: " "
-
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_sypialnia_gateway_ssid
+          # Gateway Network Status
+          - type: entities
+            title: Sieć - Sypialnia Gateway
+            entities:
+              - entity: sensor.daikin_sypialnia_gateway_ssid
                 name: SSID Wi-Fi
                 icon: mdi:wifi
-                icon_color: blue
 
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_sypialnia_gateway_ip_address
+              - entity: sensor.daikin_sypialnia_gateway_ip_address
                 name: Adres IP
                 icon: mdi:ip-network
-                icon_color: blue
 
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_sypialnia_gateway_firmware_version
-                name: Firmware
+              - entity: sensor.daikin_sypialnia_gateway_mac_address
+                name: Adres MAC
+                icon: mdi:network
+
+              - entity: sensor.daikin_sypialnia_gateway_firmware_version
+                name: Wersja firmware
                 icon: mdi:chip
-                icon_color: purple
 
-              - type: custom:mushroom-entity-card
-                entity: binary_sensor.daikin_sypialnia_gateway_is_firmware_update_supported
+              - entity: binary_sensor.daikin_sypialnia_gateway_is_in_error_state
+                name: Błąd gateway
+                icon: mdi:alert-circle
+
+              - entity: binary_sensor.daikin_sypialnia_gateway_is_firmware_update_supported
                 name: Update dostępny
                 icon: mdi:update
-                icon_color: green
 
-          # Salon Gateway
-          - type: vertical-stack
-            cards:
-              - type: custom:mushroom-title-card
-                title: Salon Gateway
-                subtitle: " "
-
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_salon_gateway_ssid
+          - type: entities
+            title: Sieć - Salon Gateway
+            entities:
+              - entity: sensor.daikin_salon_gateway_ssid
                 name: SSID Wi-Fi
                 icon: mdi:wifi
-                icon_color: blue
 
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_salon_gateway_ip_address
+              - entity: sensor.daikin_salon_gateway_ip_address
                 name: Adres IP
                 icon: mdi:ip-network
-                icon_color: blue
 
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_salon_gateway_firmware_version
-                name: Firmware
+              - entity: sensor.daikin_salon_gateway_mac_address
+                name: Adres MAC
+                icon: mdi:network
+
+              - entity: sensor.daikin_salon_gateway_firmware_version
+                name: Wersja firmware
                 icon: mdi:chip
-                icon_color: purple
 
-              - type: custom:mushroom-entity-card
-                entity: binary_sensor.daikin_salon_gateway_is_firmware_update_supported
+              - entity: binary_sensor.daikin_salon_gateway_is_in_error_state
+                name: Błąd gateway
+                icon: mdi:alert-circle
+
+              - entity: binary_sensor.daikin_salon_gateway_is_firmware_update_supported
                 name: Update dostępny
                 icon: mdi:update
-                icon_color: green
 
-      # System Information
-      - type: custom:mushroom-title-card
-        title: 📋 Informacje systemowe
-        subtitle: Modele i oprogramowanie
-
-      - type: grid
-        columns: 2
-        square: false
-        cards:
-          # Sypialnia
-          - type: vertical-stack
-            cards:
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_sypialnia_climatecontrol_name
-                name: Nazwa
+          # System Information
+          - type: entities
+            title: Informacje systemowe
+            entities:
+              - entity: sensor.daikin_sypialnia_climatecontrol_name
+                name: Nazwa - Sypialnia
                 icon: mdi:label
-                icon_color: blue
 
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_sypialnia_gateway_model_info
-                name: Model
+              - entity: sensor.daikin_sypialnia_gateway_model_info
+                name: Model - Sypialnia
                 icon: mdi:information
-                icon_color: blue
 
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_sypialnia_gateway_serial_number
-                name: Numer seryjny
+              - entity: sensor.daikin_sypialnia_gateway_serial_number
+                name: S/N - Sypialnia
                 icon: mdi:barcode
-                icon_color: grey
 
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_sypialnia_indoorunit_software_version
-                name: Wersja oprogramowania
+              - entity: sensor.daikin_sypialnia_indoorunit_software_version
+                name: Oprogramowanie - Sypialnia
                 icon: mdi:package-variant
-                icon_color: purple
 
-          # Salon
-          - type: vertical-stack
-            cards:
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_salon_climatecontrol_name
-                name: Nazwa
+              - type: divider
+
+              - entity: sensor.daikin_salon_climatecontrol_name
+                name: Nazwa - Salon
                 icon: mdi:label
-                icon_color: blue
 
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_salon_gateway_model_info
-                name: Model
+              - entity: sensor.daikin_salon_gateway_model_info
+                name: Model - Salon
                 icon: mdi:information
-                icon_color: blue
 
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_salon_gateway_serial_number
-                name: Numer seryjny
+              - entity: sensor.daikin_salon_gateway_serial_number
+                name: S/N - Salon
                 icon: mdi:barcode
-                icon_color: grey
 
-              - type: custom:mushroom-entity-card
-                entity: sensor.daikin_salon_indoorunit_software_version
-                name: Wersja oprogramowania
+              - entity: sensor.daikin_salon_indoorunit_software_version
+                name: Oprogramowanie - Salon
                 icon: mdi:package-variant
-                icon_color: purple
 
           # API Rate Limits
           - type: entities
