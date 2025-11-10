@@ -50,6 +50,7 @@ addons/local/*
 
 # HACS (safe to version config but not internal storage)
 www/community/*
+config/custom_components/hacs/
 
 # Node / JS temp (if used anywhere)
 node_modules/

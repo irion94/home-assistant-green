@@ -573,3 +573,55 @@ views:
         entities:
           - entity: tts.google_translate_en_com
             name: Google Translate TTS
+
+  # ========================================
+  # FAQ - Tauron/eLicznik Tips
+  # ========================================
+  - title: FAQ
+    path: faq
+    icon: mdi:help-circle
+    badges: []
+    cards:
+      - type: markdown
+        content: |
+          # FAQ
+
+          ## How to display hourly data in Energy dashboard?
+          Use "tauron_importer" statistics instead of entities to show hourly data in the Energy dashboard.
+
+          ## Why are there missing days in statistics/Energy dashboard?
+          Gaps appear when there are missing values in hourly readings for a given day. Confirm on the eLicznik website for that date.
+
+          ## How to fix missing data in statistics/Energy dashboard?
+          Once the data appears on eLicznik, you can fill gaps using the `tauron_amiplus.download_statistics` service.
+
+          ## When does this integration update data?
+          The integration logs in and downloads data from eLicznik approximately every 8.5 hours. This timer restarts after HA restart, integration reload, or configuration change. A fresh download also occurs when diagnostics are retrieved.
+
+          ## How to get energy meter id?
+          Follow the integration documentation to find the `energy_meter_id` value (from your eLicznik/Tauron account details).
+
+          ## How to calculate available energy as a prosumer?
+          Add the following configuration. Replace `123` with your meter id and adjust `0.8` factor and initial bank as needed.
+
+          ```yaml
+          input_number:
+            initial_energy_bank:
+              min: 0
+              max: 100000000
+              step: 1
+              mode: box
+
+          template:
+            - sensor:
+                - name: Tauron energy bank
+                  state_class: total
+                  device_class: energy
+                  unique_id: tauron_energy_bank
+                  icon: mdi:home-battery-outline
+                  state: "{{ (states('input_number.initial_energy_bank') | float(0) + states('sensor.tauron_amiplus_123_yearly_energy_generation') | float(0) * 0.8 - states('sensor.tauron_amiplus_123_yearly_energy_consumption') | float(0)) | round(3) }}"
+                  unit_of_measurement: "kWh"
+                  availability: "{{ states('sensor.tauron_amiplus_123_yearly_energy_generation') | is_number and states('sensor.tauron_amiplus_123_yearly_energy_consumption') | is_number }}"
+          ```
+
+          Add this to your configuration (e.g., in a package or `configuration.yaml`).

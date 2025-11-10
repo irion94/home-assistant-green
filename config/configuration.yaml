@@ -1,6 +1,10 @@
 # Main configuration for Home Assistant (project-driven)
 homeassistant:
   name: Enterprise Home
+  unit_system: metric
+  country: PL
+  currency: PLN
+  time_zone: Europe/Warsaw
   packages: !include_dir_named packages
 
 # Enable default config

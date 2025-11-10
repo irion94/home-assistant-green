@@ -14,15 +14,26 @@ if [[ -n "${STRAVA_CLIENT_ID:-}" ]] || [[ -n "${TUYA_CLIENT_ID:-}" ]] || [[ -n "
     ./scripts/deploy_secrets.sh
 fi
 
-echo "[deploy] rsync -> ${HA_SSH_USER}@${HA_HOST}:/config"
+echo "[deploy] rsync base config -> ${HA_SSH_USER}@${HA_HOST}:/config"
 rsync -avz --delete \
   -e "ssh -i ${HA_SSH_KEY} -p ${HA_SSH_PORT} -o StrictHostKeyChecking=no" \
   --exclude '.storage' \
+  --exclude 'custom_components/**' \
+  --exclude 'www/community/**' \
   --exclude 'home-assistant_v2.db*' \
   --exclude '*.db' \
   --exclude '*.db-shm' \
   --exclude '*.db-wal' \
   "./${CONFIG_DIR}/" "${HA_SSH_USER}@${HA_HOST}:/config/"
+
+# Sync the custom integration(s) we manage in this repo without touching other HACS components
+if [[ -d "./${CONFIG_DIR}/custom_components/strava_coach" ]]; then
+  echo "[deploy] rsync custom_components/strava_coach (preserving other custom components)"
+  rsync -avz --delete \
+    -e "ssh -i ${HA_SSH_KEY} -p ${HA_SSH_PORT} -o StrictHostKeyChecking=no" \
+    "./${CONFIG_DIR}/custom_components/strava_coach/" \
+    "${HA_SSH_USER}@${HA_HOST}:/config/custom_components/strava_coach/"
+fi
 
 echo "[deploy] validate config (docker exec check_config)"
 ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=no \
