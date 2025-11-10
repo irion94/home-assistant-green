@@ -64,6 +64,7 @@ EXCLUDES=(
   "--exclude=home-assistant_v2.db*"
   "--exclude=*.db" "--exclude=*.db-shm" "--exclude=*.db-wal"
   "--exclude=deps/" "--exclude=tts/" "--exclude=.cloud/" "--exclude=backups/"
+  "--exclude=.HA_VERSION" "--exclude=.ha_run.lock"
   "--exclude=.git/" "--exclude=.DS_Store"
 )
 
