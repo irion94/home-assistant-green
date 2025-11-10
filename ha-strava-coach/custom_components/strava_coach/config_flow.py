@@ -86,6 +86,9 @@ class StravaCoachFlowHandler(
 
     async def async_oauth_create_entry(self, data: dict[str, Any]) -> FlowResult:
         """Create an entry for Strava Coach after OAuth."""
+        # Persist OAuth data from the OAuth step for later entry creation
+        # so the config entry retains the implementation and token info.
+        self.data = {**data}
         # After successful OAuth, ask for additional preferences
         return await self.async_step_preferences()
 

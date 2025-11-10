@@ -149,7 +149,7 @@ sensor:
         friendly_name: "eLicznik Daily Cost"
         value_template: >
           {% set daily_kwh = states('sensor.elicznik_daily_consumption') | float(0) %}
-          {% set price_per_kwh = 0.75 %}  # PLN - adjust to your tariff
+          {% set price_per_kwh = 0.75 %} {# PLN - adjust to your tariff #}
           {{ (daily_kwh * price_per_kwh) | round(2) }}
         unit_of_measurement: "PLN"
 

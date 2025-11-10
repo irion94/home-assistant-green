@@ -71,6 +71,6 @@ sensor:
         friendly_name: "Daily Solar Savings"
         value_template: >
           {% set daily_production = states('sensor.solarman_daily_energy') | float(0) %}
-          {% set price_per_kwh = 0.75 %}  # PLN per kWh
+          {% set price_per_kwh = 0.75 %} {# PLN per kWh #}
           {{ (daily_production * price_per_kwh) | round(2) }}
         unit_of_measurement: "PLN"

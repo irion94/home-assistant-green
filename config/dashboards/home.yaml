@@ -17,7 +17,7 @@ views:
         cards:
           - type: markdown
             content: |
-              # 👋 Welcome Home, {{ states('person.igor') | title }}
+              # 👋 Witaj w Domu, {{ state_attr('person.igor', 'friendly_name') }}
               {{ now().strftime('%A, %B %d') }} • {{ now().strftime('%H:%M') }}
 
           # Quick stats row
@@ -39,26 +39,26 @@ views:
                 graph: line
                 hours_to_show: 24
 
-      # Quick Actions
-      - type: custom:auto-entities
-        card:
-          type: grid
-          title: Quick Actions
-          columns: 4
-          square: false
-        filter:
-          include:
-            - domain: light
-              attributes:
-                device_class: null
-              options:
-                type: button
-                tap_action:
-                  action: toggle
-          exclude:
-            - entity_id: "*_identify_*"
-        sort:
-          method: name
+      # Quick Actions - doesnt work - "configuration error"
+#      - type: custom:auto-entities
+#        card:
+#          type: grid
+#          title: Quick Actions
+#          columns: 4
+#          square: false
+#        filter:
+#          include:
+#            - domain: light
+#              attributes:
+#                device_class: null
+#              options:
+#                type: button
+#                tap_action:
+#                  action: toggle
+#          exclude:
+#            - entity_id: "*_identify_*"
+#        sort:
+#          method: name
 
       # Motion & Occupancy
       - type: entities
@@ -86,25 +86,25 @@ views:
             name: Door Sensor
             secondary_info: last-changed
 
-      # System Health Overview
-      - type: grid
-        title: System Health
-        columns: 2
-        square: false
-        cards:
-          - type: gauge
-            entity: update.home_assistant_core_update
-            name: HA Core
-            needle: true
-            severity:
-              green: 0
-              yellow: 0
-              red: 0
-
-          - type: gauge
-            entity: update.home_assistant_operating_system_update
-            name: HA OS
-            needle: true
+      # System Health Overview - doesnt work - "encja nie jest numeryczna"
+#      - type: grid
+#        title: System Health
+#        columns: 2
+#        square: false
+#        cards:
+#          - type: gauge
+#            entity: update.home_assistant_core_update
+#            name: HA Core
+#            needle: true
+#            severity:
+#              green: 0
+#              yellow: 0
+#              red: 0
+#
+#          - type: gauge
+#            entity: update.home_assistant_operating_system_update
+#            name: HA OS
+#            needle: true
 
   # ========================================
   # LIGHTS - All lighting controls
@@ -116,8 +116,7 @@ views:
     cards:
       # All Lights - Grid layout
       - type: grid
-        title: All Lights
-        columns: 3
+        columns: 4
         square: false
         cards:
           - type: light
@@ -447,22 +446,22 @@ views:
           - entity: automation.backup_failure_notification
             name: Failure Alerts
 
-      # Network Monitoring
-      - type: entities
-        title: Network
-        state_color: true
-        entities:
-          - entity: binary_sensor.gvc_rd_soho_router_wan_status
-            name: WAN Status
-
-          - entity: sensor.gvc_rd_soho_router_external_ip
-            name: External IP
-
-          - entity: sensor.gvc_rd_soho_router_download_speed
-            name: Download Speed
-
-          - entity: sensor.gvc_rd_soho_router_upload_speed
-            name: Upload Speed
+      # Network Monitoring - doesnt work - entity removed
+#      - type: entities
+#        title: Network
+#        state_color: true
+#        entities:
+#          - entity: binary_sensor.gvc_rd_soho_router_wan_status
+#            name: WAN Status
+#
+#          - entity: sensor.gvc_rd_soho_router_external_ip
+#            name: External IP
+#
+#          - entity: sensor.gvc_rd_soho_router_download_speed
+#            name: Download Speed
+#
+#          - entity: sensor.gvc_rd_soho_router_upload_speed
+#            name: Upload Speed
 
       # Battery Monitoring
       - type: entities

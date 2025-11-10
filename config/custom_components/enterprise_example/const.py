@@ -1,1 +1,0 @@
-DOMAIN = 'enterprise_example'

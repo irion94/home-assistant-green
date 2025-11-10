@@ -36,18 +36,21 @@
 
 # Example MQTT sensors for custom devices
 sensor:
-  - platform: mqtt
-    name: "MQTT Example Temperature"
-    state_topic: "home/sensor/temperature"
-    unit_of_measurement: "°C"
-    device_class: temperature
-    # Example topic: home/sensor/temperature with payload: 22.5
+  # NOTE: MQTT entities must be set up via the UI (MQTT integration) or via MQTT Discovery.
+  # The legacy YAML configuration using `platform: mqtt` is deprecated and flagged by HA.
+  # Example sensors below are commented out to satisfy config validation.
+  # - platform: mqtt
+  #   name: "MQTT Example Temperature"
+  #   state_topic: "home/sensor/temperature"
+  #   unit_of_measurement: "°C"
+  #   device_class: temperature
+  #   # Example topic: home/sensor/temperature with payload: 22.5
 
-  - platform: mqtt
-    name: "MQTT Example Humidity"
-    state_topic: "home/sensor/humidity"
-    unit_of_measurement: "%"
-    device_class: humidity
+  # - platform: mqtt
+  #   name: "MQTT Example Humidity"
+  #   state_topic: "home/sensor/humidity"
+  #   unit_of_measurement: "%"
+  #   device_class: humidity
 
   # MQTT monitoring sensor
   - platform: template
@@ -61,25 +64,27 @@ sensor:
         unit_of_measurement: "devices"
 
 # Example MQTT binary sensor
-binary_sensor:
-  - platform: mqtt
-    name: "MQTT Example Motion"
-    state_topic: "home/sensor/motion"
-    payload_on: "ON"
-    payload_off: "OFF"
-    device_class: motion
+# Example MQTT binary sensor (deprecated YAML) — use MQTT Discovery or UI instead
+# binary_sensor:
+#   - platform: mqtt
+#     name: "MQTT Example Motion"
+#     state_topic: "home/sensor/motion"
+#     payload_on: "ON"
+#     payload_off: "OFF"
+#     device_class: motion
 
 # Example MQTT light
-light:
-  - platform: mqtt
-    name: "MQTT Example Light"
-    command_topic: "home/light/set"
-    state_topic: "home/light/state"
-    payload_on: "ON"
-    payload_off: "OFF"
-    brightness_command_topic: "home/light/brightness/set"
-    brightness_state_topic: "home/light/brightness/state"
-    brightness_scale: 255
+# Example MQTT light (deprecated YAML) — use MQTT Discovery or UI instead
+# light:
+#   - platform: mqtt
+#     name: "MQTT Example Light"
+#     command_topic: "home/light/set"
+#     state_topic: "home/light/state"
+#     payload_on: "ON"
+#     payload_off: "OFF"
+#     brightness_command_topic: "home/light/brightness/set"
+#     brightness_state_topic: "home/light/brightness/state"
+#     brightness_scale: 255
 
 # Example automation for MQTT device
 automation:
