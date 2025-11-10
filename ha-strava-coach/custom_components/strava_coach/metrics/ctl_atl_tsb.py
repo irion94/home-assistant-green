@@ -71,8 +71,10 @@ def calculate_atl_ctl_tsb(
 
     # Initialize with first day
     first_date, first_load = sorted_loads[0]
+    # For ATL (short horizon), seed with first load to reflect recent work
     atl = first_load
-    ctl = first_load
+    # For CTL (long horizon), seed from 0 to allow gradual convergence
+    ctl = 0.0
     tsb = ctl - atl
 
     result[first_date] = FitnessMetrics(

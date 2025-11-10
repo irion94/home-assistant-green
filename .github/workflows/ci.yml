@@ -88,7 +88,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install test deps
+        working-directory: ha-strava-coach
         run: |
           pip install -e .[test]
       - name: Run tests
+        working-directory: ha-strava-coach
         run: pytest -q

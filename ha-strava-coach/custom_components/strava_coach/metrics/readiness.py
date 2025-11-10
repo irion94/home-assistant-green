@@ -52,9 +52,9 @@ def calculate_readiness(
     if atl is not None and ctl is not None and ctl > 0:
         load_score = _calculate_load_ratio_component(atl, ctl)
 
-    # Weighted combination
+    # Weighted combination (heavier penalty on TSB)
     readiness = (
-        0.40 * tsb_score + 0.20 * monotony_score + 0.20 * rest_score + 0.20 * load_score
+        0.50 * tsb_score + 0.15 * monotony_score + 0.15 * rest_score + 0.20 * load_score
     )
 
     # Clamp to 0-100
@@ -112,14 +112,14 @@ def _calculate_monotony_component(monotony: float) -> float:
         # Good variety
         score = 100.0
     elif monotony < 5:
-        # Moderate variety
-        score = 80.0 - ((monotony - 3) * 10.0)
+        # Moderate variety — penalize more strongly
+        score = 80.0 - ((monotony - 3) * 20.0)  # 4.0 -> 60, 5.0 -> 40
     elif monotony < 8:
-        # High monotony
-        score = 60.0 - ((monotony - 5) * 10.0)
+        # High monotony — stronger penalty
+        score = max(10.0, 40.0 - ((monotony - 5) * 10.0))  # 8.0 -> 10
     else:
         # Very high monotony
-        score = max(20.0, 30.0 - ((monotony - 8) * 5.0))
+        score = 10.0
 
     return max(0.0, min(100.0, score))
 
@@ -137,8 +137,8 @@ def _calculate_rest_component(rest_days: int) -> float:
         # Good: 2 rest days
         return 90.0
     elif rest_days == 0:
-        # No rest: moderate readiness (depends on context)
-        return 70.0
+        # No rest: penalize more to reflect fatigue risk
+        return 50.0
     elif rest_days == 3:
         # Too much rest
         return 60.0
@@ -171,14 +171,14 @@ def _calculate_load_ratio_component(atl: float, ctl: float) -> float:
         # Slightly undertrained
         score = 80.0 + ((ratio - 0.8) * 200.0)
     elif 1.2 < ratio <= 1.5:
-        # Ramping up
-        score = 90.0 - ((ratio - 1.2) * 30.0)
+        # Ramping up — stronger penalty for aggressive ramp
+        score = max(40.0, 70.0 - ((ratio - 1.2) * 80.0))  # 1.5 -> ~46
     elif ratio < 0.8:
         # Significant detraining
         score = max(40.0, 80.0 - ((0.8 - ratio) * 100.0))
     else:
         # High overreaching risk (ratio > 1.5)
-        score = max(20.0, 60.0 - ((ratio - 1.5) * 50.0))
+        score = max(10.0, 50.0 - ((ratio - 1.5) * 80.0))
 
     return max(0.0, min(100.0, score))
 

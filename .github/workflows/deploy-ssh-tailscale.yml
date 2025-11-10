@@ -51,5 +51,7 @@ jobs:
           HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
           HA_SSH_PORT: ${{ secrets.HA_SSH_PORT }}
           HA_SSH_KEY: ${{ github.workspace }}/id_ha
+          STRAVA_CLIENT_ID: ${{ secrets.STRAVA_CLIENT_ID }}
+          STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
         run: |
           ./scripts/deploy_via_ssh.sh
