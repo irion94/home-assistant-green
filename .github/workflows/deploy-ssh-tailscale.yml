@@ -45,6 +45,23 @@ jobs:
           echo "${{ secrets.HA_SSH_KEY }}" > id_ha
           chmod 600 id_ha
 
+      - name: Sync-check GUI changes on HA (abort on drift)
+        env:
+          HA_HOST: ${{ secrets.HA_HOST }}
+          HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
+          HA_SSH_PORT: ${{ secrets.HA_SSH_PORT }}
+          HA_SSH_KEY: ${{ github.workspace }}/id_ha
+        run: |
+          echo "[deploy] Checking for GUI-managed changes on HA..."
+          bash scripts/pull_gui_changes.sh || true
+          if ! git diff --quiet; then
+            echo "::error::Detected GUI-managed changes on HA not present in repo."
+            echo "Please run './scripts/pull_gui_changes.sh' locally, commit, and push."
+            echo "Changed files:"
+            git --no-pager diff --name-only
+            exit 1
+          fi
+
       - name: Deploy via SSH
         env:
           HA_HOST: ${{ secrets.HA_HOST }}
