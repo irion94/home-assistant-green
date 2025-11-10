@@ -94,3 +94,6 @@ data/inventory/raw/
 # Ephemeral HA runtime/version files
 config/.HA_VERSION
 config/.ha_run.lock
+
+#entities
+entities.csv
