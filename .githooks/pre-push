@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pre-push hook that syncs HA -> repo BEFORE allowing push.
+# If sync yields changes, it auto-commits and aborts the push (exit 1)
+# so you can review and re-run push. This guarantees HA has priority.
+#
+# Enable with: `./scripts/install_git_hooks.sh`
+# Requires env: HA_HOST, HA_SSH_USER, HA_SSH_KEY (optional HA_SSH_PORT)
+# Optional env: HA_PREPUSH_MODE = gui|components|full (default: gui)
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+MODE="${HA_PREPUSH_MODE:-gui}"
+
+require_env() {
+  : "${HA_HOST:?Missing HA_HOST}"
+  : "${HA_SSH_USER:?Missing HA_SSH_USER}"
+  : "${HA_SSH_KEY:?Missing HA_SSH_KEY}"
+}
+
+run_sync() {
+  case "$MODE" in
+    gui)
+      "$ROOT_DIR/scripts/pull_gui_changes.sh" ;;
+    components)
+      "$ROOT_DIR/scripts/sync_from_ha.sh" --components-only --into-config ;;
+    full)
+      "$ROOT_DIR/scripts/sync_from_ha.sh" --into-config ;;
+    *)
+      echo "[pre-push] Unknown HA_PREPUSH_MODE: $MODE" >&2; exit 2 ;;
+  esac
+}
+
+has_changes() {
+  test -n "$(git status --porcelain)"
+}
+
+auto_commit() {
+  git add -A
+  if git diff --cached --quiet; then
+    return 0
+  fi
+  TS=$(date +%Y-%m-%dT%H:%M:%S)
+  git commit -m "chore(sync): import HA changes (${TS})" || true
+}
+
+# Only run if HA env is configured, otherwise allow push
+if [[ -n "${HA_HOST:-}" && -n "${HA_SSH_USER:-}" && -n "${HA_SSH_KEY:-}" ]]; then
+  require_env
+  echo "[pre-push] Sync mode: ${MODE} (HA has priority)"
+  run_sync
+  if has_changes; then
+    echo "[pre-push] Changes detected after sync. Creating sync commit and aborting push."
+    auto_commit
+    echo "[pre-push] Review commit, then re-run 'git push'."
+    exit 1
+  fi
+fi
+
+exit 0
