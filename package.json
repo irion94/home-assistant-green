@@ -1,0 +1,13 @@
+{
+  "name": "ha-enterprise-starter",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Home Assistant enterprise starter – tooling & hooks",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.0.0"
+  }
+}
+

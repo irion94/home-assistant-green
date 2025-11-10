@@ -44,10 +44,18 @@ auto_commit() {
   git commit -m "chore(sync): import HA changes (${TS})" || true
 }
 
-# Only run if HA env is configured, otherwise allow push
+# Try to load .env.local from repo root for HA_* values
+if [[ -f "$ROOT_DIR/.env.local" ]]; then
+  # shellcheck disable=SC1090
+  set -a; source "$ROOT_DIR/.env.local"; set +a
+fi
+
+echo "[pre-push] HA sync hook active (mode=${MODE})"
+
+# Only run sync if HA env is configured, otherwise allow push
 if [[ -n "${HA_HOST:-}" && -n "${HA_SSH_USER:-}" && -n "${HA_SSH_KEY:-}" ]]; then
   require_env
-  echo "[pre-push] Sync mode: ${MODE} (HA has priority)"
+  echo "[pre-push] Syncing (HA has priority)"
   run_sync
   if has_changes; then
     echo "[pre-push] Changes detected after sync. Creating sync commit and aborting push."
@@ -55,6 +63,8 @@ if [[ -n "${HA_HOST:-}" && -n "${HA_SSH_USER:-}" && -n "${HA_SSH_KEY:-}" ]]; the
     echo "[pre-push] Review commit, then re-run 'git push'."
     exit 1
   fi
+else
+  echo "[pre-push] Skipping sync (HA env not configured)."
 fi
 
 exit 0
