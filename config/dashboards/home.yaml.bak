@@ -166,19 +166,7 @@ views:
                 subtitle: Najnowsza aktywność biegowa
               - type: markdown
                 content: |
-                  <ha-icon icon="mdi:calendar"></ha-icon> **Data:** {{ as_timestamp(states('sensor.strava_igor_wojcik_run_date')) | timestamp_custom('%Y-%m-%d %H:%M') }}
-
-                  <ha-icon icon="mdi:map-marker-distance"></ha-icon> **Dystans:** {{ states('sensor.strava_igor_wojcik_run_distance') | float | round(1) }} km
-
-                  <ha-icon icon="mdi:timer"></ha-icon> **Czas:** {% set seconds = states('sensor.strava_igor_wojcik_run_moving_time') | int %}{{ (seconds // 3600) }}:{{ '%02d' | format((seconds % 3600) // 60) }}:{{ '%02d' | format(seconds % 60) }}
-
-                  <ha-icon icon="mdi:speedometer"></ha-icon> **Tempo:** {{ states('sensor.strava_igor_wojcik_run_pace') }}
-
-                  <ha-icon icon="mdi:heart-pulse"></ha-icon> **Śr. HR:** {{ states('sensor.strava_igor_wojcik_run_average_heartrate') | float | round(1) }} bpm
-
-                  <ha-icon icon="mdi:fire"></ha-icon> **Kalorie:** {{ states('sensor.strava_igor_wojcik_run_calories') | float | round(0) }} kcal
-
-                  <ha-icon icon="mdi:thumb-up"></ha-icon> **Kudos:** {{ states('sensor.strava_igor_wojcik_run_kudos') }}
+                  ... (dane biegu)
               - type: custom:mushroom-title-card
                 title: 📈 Historia biegów (7 dni)
                 subtitle: Dystans i tempo
@@ -215,19 +203,7 @@ views:
                 subtitle: Najnowsza aktywność rowerowa
               - type: markdown
                 content: |
-                  <ha-icon icon="mdi:calendar"></ha-icon> **Data:** {{ as_timestamp(states('sensor.strava_igor_wojcik_ride_date')) | timestamp_custom('%Y-%m-%d %H:%M') }}
-
-                  <ha-icon icon="mdi:map-marker-distance"></ha-icon> **Dystans:** {{ states('sensor.strava_igor_wojcik_ride_distance') | float | round(1) }} km
-
-                  <ha-icon icon="mdi:timer"></ha-icon> **Czas:** {% set seconds = states('sensor.strava_igor_wojcik_ride_moving_time') | int %}{{ (seconds // 3600) }}:{{ '%02d' | format((seconds % 3600) // 60) }}:{{ '%02d' | format(seconds % 60) }}
-
-                  <ha-icon icon="mdi:speedometer"></ha-icon> **Prędkość:** {{ states('sensor.strava_igor_wojcik_ride_speed') | float | round(1) }} km/h
-
-                  <ha-icon icon="mdi:elevation-rise"></ha-icon> **Przewyższenie:** {{ states('sensor.strava_igor_wojcik_ride_elevation_gain') | float | round(1) }} m
-
-                  <ha-icon icon="mdi:timer-outline"></ha-icon> **Tempo:** {{ states('sensor.strava_igor_wojcik_ride_pace') }}
-
-                  <ha-icon icon="mdi:thumb-up"></ha-icon> **Kudos:** {{ states('sensor.strava_igor_wojcik_ride_kudos') }}
+                  ... (dane jazdy)
               - type: custom:mushroom-title-card
                 title: 📈 Historia jazd (7 dni)
                 subtitle: Dystans i prędkość
@@ -255,6 +231,136 @@ views:
                   labels: true
                   icon: true
                   state: true
+          - type: vertical-stack
+            view_layout:
+              grid-area: a1
+            cards:
+              - type: custom:mushroom-title-card
+                title: Cześć, Igor! 👋
+                subtitle: Twoje treningi i postępy na Strava
+
+              - type: custom:mushroom-title-card
+                title: 🏆 Podsumowanie
+                subtitle: Osiągnięcia i statystyki
+          - type: vertical-stack
+            view_layout:
+              grid-area: b1
+            cards:
+              - type: custom:mushroom-title-card
+                title: 🏃 Ostatni Bieg
+                subtitle: Najnowsza aktywność biegowa
+
+              - type: markdown
+                content: |
+                  <ha-icon icon="mdi:calendar"></ha-icon> **Data:** {{ as_timestamp(states('sensor.strava_igor_wojcik_run_date')) | timestamp_custom('%Y-%m-%d %H:%M') }}
+                  
+                  <ha-icon icon="mdi:map-marker-distance"></ha-icon> **Dystans:** {{ states('sensor.strava_igor_wojcik_run_distance') | float | round(1) }} km
+                  
+                  <ha-icon icon="mdi:timer"></ha-icon> **Czas:** {% set seconds = states('sensor.strava_igor_wojcik_run_moving_time') | int %}{{ (seconds // 3600) }}:{{ '%02d' | format((seconds % 3600) // 60) }}:{{ '%02d' | format(seconds % 60) }}
+                  
+                  <ha-icon icon="mdi:speedometer"></ha-icon> **Tempo:** {{ states('sensor.strava_igor_wojcik_run_pace') }}
+                  
+                  <ha-icon icon="mdi:heart-pulse"></ha-icon> **Śr. HR:** {{ states('sensor.strava_igor_wojcik_run_average_heartrate') | float | round(1) }} bpm
+                  
+                  <ha-icon icon="mdi:fire"></ha-icon> **Kalorie:** {{ states('sensor.strava_igor_wojcik_run_calories') | float | round(0) }} kcal
+                  
+                  <ha-icon icon="mdi:thumb-up"></ha-icon> **Kudos:** {{ states('sensor.strava_igor_wojcik_run_kudos') }}
+
+          - type: vertical-stack
+            view_layout:
+              grid-area: b2
+            cards:
+              - type: custom:mushroom-title-card
+                title: 📈 Historia biegów (7 dni)
+                subtitle: Dystans i tętno
+
+              - type: custom:mini-graph-card
+                entities:
+                  - entity: sensor.strava_igor_wojcik_run_distance
+                    name: Dystans
+                    color: "#51cf66"
+                hours_to_show: 168
+                line_width: 3
+                points_per_hour: 0.5
+                name: Dystans (km)
+                show:
+                  labels: true
+                  icon: true
+                  state: true
+
+              - type: custom:mini-graph-card
+                entities:
+                  - entity: sensor.strava_igor_wojcik_run_average_heartrate
+                    name: Śr. HR
+                    color: "#ff6b6b"
+                hours_to_show: 168
+                line_width: 3
+                points_per_hour: 0.5
+                name: Tętno średnie
+                show:
+                  labels: true
+                  icon: true
+                  state: true
+          - type: vertical-stack
+            view_layout:
+              grid-area: c1
+            cards:
+              - type: custom:mushroom-title-card
+                title: 🚴 Ostatnia Jazda
+                subtitle: Najnowsza aktywność rowerowa
+
+              - type: markdown
+                content: |
+                  <ha-icon icon="mdi:calendar"></ha-icon> **Data:** {{ as_timestamp(states('sensor.strava_igor_wojcik_ride_date')) | timestamp_custom('%Y-%m-%d %H:%M') }}
+                  
+                  <ha-icon icon="mdi:map-marker-distance"></ha-icon> **Dystans:** {{ states('sensor.strava_igor_wojcik_ride_distance') | float | round(1) }} km
+                  
+                  <ha-icon icon="mdi:timer"></ha-icon> **Czas:** {% set seconds = states('sensor.strava_igor_wojcik_ride_moving_time') | int %}{{ (seconds // 3600) }}:{{ '%02d' | format((seconds % 3600) // 60) }}:{{ '%02d' | format(seconds % 60) }}
+                  
+                  <ha-icon icon="mdi:speedometer"></ha-icon> **Prędkość:** {{ states('sensor.strava_igor_wojcik_ride_speed') | float | round(1) }} km/h
+                  
+                  <ha-icon icon="mdi:elevation-rise"></ha-icon> **Przewyższenie:** {{ states('sensor.strava_igor_wojcik_ride_elevation_gain') | float | round(1) }} m
+                  
+                  <ha-icon icon="mdi:timer-outline"></ha-icon> **Tempo:** {{ states('sensor.strava_igor_wojcik_ride_pace') }}
+                  
+                  <ha-icon icon="mdi:thumb-up"></ha-icon> **Kudos:** {{ states('sensor.strava_igor_wojcik_ride_kudos') }}
+
+          - type: vertical-stack
+            view_layout:
+              grid-area: c2
+            cards:
+              - type: custom:mushroom-title-card
+                title: 📈 Historia jazd (7 dni)
+                subtitle: Dystans i prędkość
+
+              - type: custom:mini-graph-card
+                entities:
+                  - entity: sensor.strava_igor_wojcik_ride_distance
+                    name: Dystans
+                    color: "#00a8ff"
+                hours_to_show: 168
+                line_width: 3
+                points_per_hour: 0.5
+                name: Dystans (km)
+                show:
+                  labels: true
+                  icon: true
+                  state: true
+
+              - type: custom:mini-graph-card
+                entities:
+                  - entity: sensor.strava_igor_wojcik_ride_speed
+                    name: Prędkość
+                    color: "#4ecdc4"
+                hours_to_show: 168
+                line_width: 3
+                points_per_hour: 0.5
+                name: Prędkość śr. (km/h)
+                show:
+                  labels: true
+                  icon: true
+                  state: true
+
 
   # ========================================
   # LIGHTS - All lighting controls
