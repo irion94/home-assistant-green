@@ -1,99 +1,197 @@
 title: Overview
 path: overview
 icon: mdi:home-assistant
+panel: true
 badges: []
 cards:
-  # Welcome header with person status
-  - type: vertical-stack
+  - type: custom:layout-card
+    layout_type: custom:grid-layout
+    layout:
+      grid-template-columns: 1fr
+      grid-auto-rows: auto
+      gap: 8px
     cards:
-      - type: markdown
-        content: |
-          # 👋 Witaj w Domu, {{ state_attr('person.igor', 'friendly_name') }}
-          {{ now().strftime('%A, %B %d') }} • {{ now().strftime('%H:%M') }}
+      # ========================================
+      # WEATHER - Full Width
+      # ========================================
+      - type: weather-forecast
+        entity: weather.forecast_dom
+        show_forecast: true
+        name: Pogoda
 
-      # Quick stats row
-      - type: horizontal-stack
+      # ========================================
+      # ROW 2: Cameras | Lights | System
+      # ========================================
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout:
+          grid-template-columns: repeat(3, 1fr)
+          grid-auto-rows: auto
+          gap: 8px
         cards:
-          - type: entity
-            entity: weather.forecast_dom
-            name: Weather
+          # Column 1: Camera Thumbnails
+          - type: vertical-stack
+            cards:
+              - type: custom:mushroom-title-card
+                title: 📹 Kamery
+                subtitle: Podgląd na żywo
 
-          - type: sensor
-            entity: sensor.aqara_temp_humidity_sensor_temperature
-            name: Indoor Temp
-            graph: line
-            hours_to_show: 24
+              - type: grid
+                columns: 2
+                square: true
+                cards:
+                  - type: picture-entity
+                    entity: camera.kamera_brama_mediaprofile_channel1_substream1
+                    camera_image: camera.kamera_brama_mediaprofile_channel1_substream1
+                    show_name: true
+                    show_state: false
+                    name: Brama
 
-          - type: sensor
-            entity: sensor.aqara_temp_humidity_sensor_humidity
-            name: Humidity
-            graph: line
-            hours_to_show: 24
+                  - type: picture-entity
+                    entity: camera.kamera_na_garaz_mediaprofile_channel1_substream1
+                    camera_image: camera.kamera_na_garaz_mediaprofile_channel1_substream1
+                    show_name: true
+                    show_state: false
+                    name: Garaż
 
-  # Quick Actions - doesnt work - "configuration error"
-#      - type: custom:auto-entities
-#        card:
-#          type: grid
-#          title: Quick Actions
-#          columns: 4
-#          square: false
-#        filter:
-#          include:
-#            - domain: light
-#              attributes:
-#                device_class: null
-#              options:
-#                type: button
-#                tap_action:
-#                  action: toggle
-#          exclude:
-#            - entity_id: "*_identify_*"
-#        sort:
-#          method: name
+                  - type: picture-entity
+                    entity: camera.kamera_za_garazem_mediaprofile_channel1_substream1
+                    camera_image: camera.kamera_za_garazem_mediaprofile_channel1_substream1
+                    show_name: true
+                    show_state: false
+                    name: Za garażem
 
-  # Motion & Occupancy
-  - type: entities
-    title: Motion Detection
-    state_color: true
-    show_header_toggle: false
-    entities:
-      - entity: binary_sensor.aqara_motion_sensor_occupancy
-        name: Motion Sensor (Original)
-        secondary_info: last-changed
+                  - type: picture-entity
+                    entity: camera.kamera_altana_mediaprofile_channel1_substream1
+                    camera_image: camera.kamera_altana_mediaprofile_channel1_substream1
+                    show_name: true
+                    show_state: false
+                    name: Altana
 
-      - entity: binary_sensor.aqara_motion_sensor_p1_occupancy
-        name: Motion Sensor P1 #1
-        secondary_info: last-changed
+          # Column 2: Lights Controls
+          - type: vertical-stack
+            cards:
+              - type: custom:mushroom-title-card
+                title: 💡 Światła
+                subtitle: Sterowanie oświetleniem
 
-      - entity: binary_sensor.aqara_motion_sensor_p1_occupancy_2
-        name: Motion Sensor P1 #2
-        secondary_info: last-changed
+              - type: custom:mushroom-light-card
+                entity: light.aqara_single_switch_module_t1
+                name: Sypialnia
+                icon: mdi:bed
+                use_light_color: true
+                show_brightness_control: false
+                show_color_control: false
 
-      - entity: binary_sensor.aqara_motion_sensor_p1_occupancy_3
-        name: Motion Sensor P1 #3
-        secondary_info: last-changed
+              - type: custom:mushroom-light-card
+                entity: light.aqara_single_switch_module_t1_4
+                name: Salon
+                icon: mdi:sofa
+                use_light_color: true
+                show_brightness_control: false
+                show_color_control: false
+                tap_action:
+                  action: call-service
+                  service: light.toggle
+                  service_data:
+                    entity_id:
+                      - light.aqara_single_switch_module_t1_4
+                      - light.aqara_single_switch_module_t1_8
+                      - light.aqara_single_switch_module_t1_9
+                      - light.aqara_single_switch_module_t1_15
 
-      - entity: binary_sensor.aqara_door_and_window_sensor_door
-        name: Door Sensor
-        secondary_info: last-changed
+              - type: custom:mushroom-light-card
+                entity: light.aqara_single_switch_module_t1_3
+                name: Kuchnia
+                icon: mdi:silverware-fork-knife
+                use_light_color: true
+                show_brightness_control: false
+                show_color_control: false
 
-  # System Health Overview - doesnt work - "encja nie jest numeryczna"
-#      - type: grid
-#        title: System Health
-#        columns: 2
-#        square: false
-#        cards:
-#          - type: gauge
-#            entity: update.home_assistant_core_update
-#            name: HA Core
-#            needle: true
-#            severity:
-#              green: 0
-#              yellow: 0
-#              red: 0
-#
-#          - type: gauge
-#            entity: update.home_assistant_operating_system_update
-#            name: HA OS
-#            needle: true
+          # Column 3: System Health
+          - type: vertical-stack
+            cards:
+              - type: custom:mushroom-title-card
+                title: ⚙️ System
+                subtitle: Status i aktualizacje
 
+              - type: custom:mushroom-entity-card
+                entity: update.home_assistant_core_update
+                name: Home Assistant Core
+                icon: mdi:home-assistant
+                icon_color: blue
+                tap_action:
+                  action: more-info
+
+              - type: custom:mushroom-entity-card
+                entity: sensor.backup_next
+                name: Następny backup
+                icon: mdi:backup-restore
+                icon_color: green
+                tap_action:
+                  action: navigate
+                  navigation_path: /lovelace/system
+
+      # ========================================
+      # ROW 3: Climate - Temperature Sensors
+      # ========================================
+      - type: vertical-stack
+        cards:
+          - type: custom:mushroom-title-card
+            title: 🌡️ Temperatury
+            subtitle: Pompa ciepła i monitoring
+
+          - type: horizontal-stack
+            cards:
+              - type: sensor
+                entity: sensor.pompa_ciepla_climatecontrol_leaving_water_temperature
+                name: Woda wyjściowa (układ)
+                graph: line
+                detail: 2
+                hours_to_show: 24
+
+              - type: sensor
+                entity: sensor.pompa_ciepla_domestichotwatertank_tank_temperature
+                name: Zbiornik CWU
+                graph: line
+                detail: 2
+                hours_to_show: 24
+
+          - type: horizontal-stack
+            cards:
+              - type: sensor
+                entity: sensor.pompa_ciepla_climatecontrol_room_temperature
+                name: Temperatura pomieszczenia
+                graph: line
+                detail: 2
+                hours_to_show: 24
+
+              - type: sensor
+                entity: sensor.pompa_ciepla_climatecontrol_outdoor_temperature
+                name: Temperatura zewnętrzna
+                graph: line
+                detail: 2
+                hours_to_show: 24
+
+          - type: horizontal-stack
+            cards:
+              - type: sensor
+                entity: sensor.pompa_ciepla_climatecontrol_heating_daily_electrical_consumption
+                name: Obieg - Grzanie
+                graph: line
+                detail: 2
+                hours_to_show: 24
+
+              - type: sensor
+                entity: sensor.pompa_ciepla_domestichotwatertank_heating_daily_electrical_consumption
+                name: CWU - Podgrzewanie
+                graph: line
+                detail: 2
+                hours_to_show: 24
+
+          - type: custom:mushroom-climate-card
+            entity: climate.pompa_ciepla_room_temperature
+            name: Temperatura pokojowa
+            icon: mdi:home-thermometer
+            show_temperature_control: true
+            collapsible_controls: false
