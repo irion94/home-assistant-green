@@ -16,3 +16,4 @@ views:
   - !include views/10_media.yaml
   - !include views/11_settings.yaml
   - !include views/12_faq.yaml
+  - !include views/13_solar.yaml

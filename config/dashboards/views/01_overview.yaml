@@ -20,7 +20,62 @@ cards:
         name: Pogoda
 
       # ========================================
-      # ROW 2: Cameras | Lights | System
+      # ROW 2: Solar - Fotowoltaika i magazyn energii
+      # ========================================
+      - type: vertical-stack
+        cards:
+          - type: custom:mushroom-title-card
+            title: ☀️ Fotowoltaika i magazyn energii
+            subtitle: System solarny
+
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.inverter_pv_power
+                name: Produkcja PV
+                icon: mdi:solar-power
+                icon_color: amber
+                primary_info: state
+                secondary_info: name
+                tap_action:
+                  action: navigate
+                  navigation_path: /lovelace/solar
+
+              - type: custom:mushroom-entity-card
+                entity: sensor.inverter_battery
+                name: Bateria
+                icon: mdi:battery-80
+                icon_color: green
+                primary_info: state
+                secondary_info: name
+                tap_action:
+                  action: navigate
+                  navigation_path: /lovelace/solar
+
+              - type: custom:mushroom-entity-card
+                entity: sensor.inverter_load_power
+                name: Obciążenie
+                icon: mdi:home-lightning-bolt
+                icon_color: blue
+                primary_info: state
+                secondary_info: name
+                tap_action:
+                  action: navigate
+                  navigation_path: /lovelace/solar
+
+              - type: custom:mushroom-entity-card
+                entity: sensor.inverter_grid_power
+                name: Sieć
+                icon: mdi:transmission-tower
+                icon_color: orange
+                primary_info: state
+                secondary_info: name
+                tap_action:
+                  action: navigate
+                  navigation_path: /lovelace/solar
+
+      # ========================================
+      # ROW 3: Cameras | Lights | System
       # ========================================
       - type: custom:layout-card
         layout_type: custom:grid-layout
