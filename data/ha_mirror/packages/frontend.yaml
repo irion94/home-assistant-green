@@ -9,4 +9,9 @@ frontend:
   # Note: These files are served by HACS after installation
   extra_module_url:
     - /hacsfiles/lovelace-card-mod/card-mod.js
-    # Add other HACS resources here after installation
+    - /hacsfiles/lovelace-mushroom/mushroom.js
+    - /hacsfiles/button-card/button-card.js
+    - /hacsfiles/mini-graph-card/mini-graph-card-bundle.js
+    - /hacsfiles/lovelace-layout-card/layout-card.js
+    - /hacsfiles/swipe-card/swipe-card.js
+    - /hacsfiles/lovelace-auto-entities/auto-entities.js

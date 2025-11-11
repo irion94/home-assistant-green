@@ -1,0 +1,411 @@
+title: Pompa ciepła
+path: heat-pump
+icon: mdi:heat-pump
+badges: []
+cards:
+  # Modern header
+  - type: custom:mushroom-title-card
+    title: ♨️ Pompa ciepła
+    subtitle: System hydroniczy - ogrzewanie i ciepła woda użytkowa
+
+  # =====================================
+  # HERO - Climate & DHW Control
+  # =====================================
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      # Water Heater (DHW Tank)
+      - type: thermostat
+        entity: water_heater.pompa_ciepla
+        name: Ciepła woda użytkowa
+
+      # Climate Control - Room Temperature
+      - type: custom:mushroom-climate-card
+        entity: climate.pompa_ciepla_room_temperature
+        name: Temperatura pokojowa
+        icon: mdi:home-thermometer
+        show_temperature_control: true
+        layout: horizontal
+        collapsible_controls: true
+
+  # Additional Climate Controls
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      - type: custom:mushroom-climate-card
+        entity: climate.pompa_ciepla_leaving_water_temperature
+        name: Temp. wody wyjściowej
+        icon: mdi:thermometer-water
+        show_temperature_control: true
+        layout: horizontal
+        collapsible_controls: true
+
+      - type: custom:mushroom-climate-card
+        entity: climate.pompa_ciepla_leaving_water_offset
+        name: Offset temp. wody
+        icon: mdi:thermometer-lines
+        show_temperature_control: true
+        layout: horizontal
+        collapsible_controls: true
+
+  # =====================================
+  # TEMPERATURES - Water Circuit
+  # =====================================
+  - type: vertical-stack
+    cards:
+      - type: markdown
+        content: |
+          ## 🌡️ Temperatury układu wodnego
+
+      - type: horizontal-stack
+        cards:
+          - type: sensor
+            entity: sensor.pompa_ciepla_climatecontrol_leaving_water_temperature
+            name: Woda wyjściowa (układ)
+            graph: line
+            detail: 2
+            hours_to_show: 24
+
+          - type: sensor
+            entity: sensor.pompa_ciepla_domestichotwatertank_tank_temperature
+            name: Zbiornik CWU
+            graph: line
+            detail: 2
+            hours_to_show: 24
+
+      - type: horizontal-stack
+        cards:
+          - type: sensor
+            entity: sensor.pompa_ciepla_climatecontrol_room_temperature
+            name: Temperatura pomieszczenia
+            graph: line
+            detail: 2
+            hours_to_show: 24
+
+          - type: sensor
+            entity: sensor.pompa_ciepla_climatecontrol_outdoor_temperature
+            name: Temperatura zewnętrzna
+            graph: line
+            detail: 2
+            hours_to_show: 24
+
+      # Historical Temperature Comparison (7 days)
+      - type: history-graph
+        title: Historia temperatury (7 dni)
+        hours_to_show: 168
+        entities:
+          - entity: sensor.pompa_ciepla_climatecontrol_leaving_water_temperature
+            name: Woda wyjściowa
+          - entity: sensor.pompa_ciepla_domestichotwatertank_tank_temperature
+            name: Zbiornik CWU
+          - entity: sensor.pompa_ciepla_climatecontrol_room_temperature
+            name: Pomieszczenie
+          - entity: sensor.pompa_ciepla_climatecontrol_outdoor_temperature
+            name: Zewnętrzna
+
+  # =====================================
+  # ENERGY - DHW & Heating Consumption
+  # =====================================
+  - type: vertical-stack
+    cards:
+      - type: markdown
+        content: |
+          ## ⚡ Zużycie energii
+
+      # Today's Consumption
+      - type: grid
+        title: Zużycie dzisiejsze
+        columns: 2
+        square: false
+        cards:
+          # Heating Circuit
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: "### Obieg grzewczy"
+
+              - type: horizontal-stack
+                cards:
+                  - type: entity
+                    entity: sensor.pompa_ciepla_climatecontrol_heating_daily_electrical_consumption
+                    name: Grzanie
+                    icon: mdi:radiator
+
+                  - type: entity
+                    entity: sensor.pompa_ciepla_climatecontrol_cooling_daily_electrical_consumption
+                    name: Chłodzenie
+                    icon: mdi:snowflake
+
+          # DHW Tank
+          - type: vertical-stack
+            cards:
+              - type: markdown
+                content: "### Ciepła woda użytkowa"
+
+              - type: entity
+                entity: sensor.pompa_ciepla_domestichotwatertank_heating_daily_electrical_consumption
+                name: Podgrzewanie CWU
+                icon: mdi:water-boiler
+
+      # Weekly Consumption
+      - type: grid
+        title: Zużycie tygodniowe
+        columns: 2
+        square: false
+        cards:
+          - type: sensor
+            entity: sensor.pompa_ciepla_climatecontrol_heating_weekly_electrical_consumption
+            name: Obieg - Grzanie
+            graph: line
+            detail: 2
+
+          - type: sensor
+            entity: sensor.pompa_ciepla_climatecontrol_cooling_weekly_electrical_consumption
+            name: Obieg - Chłodzenie
+            graph: line
+            detail: 2
+
+          - type: sensor
+            entity: sensor.pompa_ciepla_domestichotwatertank_heating_weekly_electrical_consumption
+            name: CWU - Podgrzewanie
+            graph: line
+            detail: 2
+
+      # Yearly Consumption
+      - type: entities
+        title: Zużycie roczne
+        state_color: true
+        entities:
+          - type: section
+            label: Obieg grzewczy
+
+          - entity: sensor.pompa_ciepla_climatecontrol_heating_yearly_electrical_consumption
+            name: Grzanie (rok)
+            icon: mdi:radiator
+
+          - entity: sensor.pompa_ciepla_climatecontrol_cooling_yearly_electrical_consumption
+            name: Chłodzenie (rok)
+            icon: mdi:snowflake
+
+          - type: divider
+
+          - type: section
+            label: Ciepła woda użytkowa
+
+          - entity: sensor.pompa_ciepla_domestichotwatertank_heating_yearly_electrical_consumption
+            name: Podgrzewanie CWU (rok)
+            icon: mdi:water-boiler
+
+  # =====================================
+  # QUICK ACTIONS - Controls & Schedules
+  # =====================================
+  - type: vertical-stack
+    cards:
+      - type: markdown
+        content: |
+          ## ⚡ Szybkie akcje
+
+      - type: button
+        name: Odśwież dane
+        icon: mdi:refresh
+        tap_action:
+          action: call-service
+          service: button.press
+          target:
+            entity_id: button.pompa_ciepla_refresh
+
+      # Schedules & Modes
+      - type: entities
+        title: Harmonogramy i tryby
+        entities:
+          - entity: select.pompa_ciepla_climatecontrol_schedule
+            name: Harmonogram - Obieg grzewczy
+            icon: mdi:calendar-clock
+
+          - entity: select.pompa_ciepla_domestichotwatertank_schedule
+            name: Harmonogram - CWU
+            icon: mdi:calendar-clock
+
+          - type: divider
+
+          - entity: sensor.pompa_ciepla_climatecontrol_control_mode
+            name: Tryb sterowania
+            icon: mdi:cog
+
+          - entity: sensor.pompa_ciepla_climatecontrol_setpoint_mode
+            name: Tryb zadany (obieg)
+            icon: mdi:thermometer-lines
+
+          - entity: sensor.pompa_ciepla_domestichotwatertank_setpoint_mode
+            name: Tryb zadany (CWU)
+            icon: mdi:water-thermometer
+
+          - entity: sensor.pompa_ciepla_domestichotwatertank_heatup_mode
+            name: Tryb podgrzewania
+            icon: mdi:fire
+
+  # =====================================
+  # DIAGNOSTICS - System Health
+  # =====================================
+  - type: vertical-stack
+    cards:
+      - type: markdown
+        content: |
+          ## 🔧 Diagnostyka i status
+
+      # Health Status
+      - type: entities
+        title: Stan urządzeń
+        state_color: true
+        show_header_toggle: false
+        entities:
+          # Climate Control Status
+          - type: section
+            label: Obieg grzewczy
+
+          - entity: binary_sensor.pompa_ciepla_climatecontrol_is_in_error_state
+            name: Błąd
+            icon: mdi:alert-circle
+
+          - entity: binary_sensor.pompa_ciepla_climatecontrol_is_in_warning_state
+            name: Ostrzeżenie
+            icon: mdi:alert
+
+          - entity: binary_sensor.pompa_ciepla_climatecontrol_is_in_emergency_state
+            name: Stan awaryjny
+            icon: mdi:alert-octagon
+
+          - entity: binary_sensor.pompa_ciepla_climatecontrol_is_in_installer_state
+            name: Tryb instalatora
+            icon: mdi:account-hard-hat
+
+          - entity: binary_sensor.pompa_ciepla_climatecontrol_is_holiday_mode_active
+            name: Tryb wakacyjny
+            icon: mdi:palm-tree
+
+          - type: divider
+
+          # DHW Tank Status
+          - type: section
+            label: Zbiornik CWU
+
+          - entity: binary_sensor.pompa_ciepla_domestichotwatertank_is_in_error_state
+            name: Błąd
+            icon: mdi:alert-circle
+
+          - entity: binary_sensor.pompa_ciepla_domestichotwatertank_is_in_warning_state
+            name: Ostrzeżenie
+            icon: mdi:alert
+
+          - entity: binary_sensor.pompa_ciepla_domestichotwatertank_is_in_emergency_state
+            name: Stan awaryjny
+            icon: mdi:alert-octagon
+
+          - entity: binary_sensor.pompa_ciepla_domestichotwatertank_is_in_installer_state
+            name: Tryb instalatora
+            icon: mdi:account-hard-hat
+
+          - entity: binary_sensor.pompa_ciepla_domestichotwatertank_is_holiday_mode_active
+            name: Tryb wakacyjny
+            icon: mdi:palm-tree
+
+          - entity: binary_sensor.pompa_ciepla_domestichotwatertank_is_powerful_mode_active
+            name: Tryb Turbo
+            icon: mdi:turbine
+
+      # Error Codes
+      - type: entities
+        title: Kody błędów
+        entities:
+          - entity: sensor.pompa_ciepla_climatecontrol_error_code
+            name: Obieg grzewczy
+            icon: mdi:code-braces
+
+          - entity: sensor.pompa_ciepla_domestichotwatertank_error_code
+            name: Zbiornik CWU
+            icon: mdi:code-braces
+
+      # Network & Gateway
+      - type: entities
+        title: Sieć i gateway
+        entities:
+          - entity: sensor.pompa_ciepla_gateway_ip_address
+            name: Adres IP
+            icon: mdi:ip-network
+
+          - entity: sensor.pompa_ciepla_gateway_mac_address
+            name: Adres MAC
+            icon: mdi:network
+
+          - entity: sensor.pompa_ciepla_gateway_firmware_version
+            name: Wersja firmware
+            icon: mdi:chip
+
+          - entity: binary_sensor.pompa_ciepla_gateway_is_firmware_update_supported
+            name: Update dostępny
+            icon: mdi:update
+
+      # System Information
+      - type: entities
+        title: Informacje systemowe
+        entities:
+          - entity: sensor.pompa_ciepla_climatecontrol_name
+            name: Nazwa - Obieg grzewczy
+            icon: mdi:label
+
+          - entity: sensor.pompa_ciepla_domestichotwatertank_name
+            name: Nazwa - Zbiornik CWU
+            icon: mdi:label
+
+          - type: divider
+
+          - entity: sensor.pompa_ciepla_gateway_model_info
+            name: Model gateway
+            icon: mdi:information
+
+          - entity: sensor.pompa_ciepla_gateway_serial_number
+            name: S/N gateway
+            icon: mdi:barcode
+
+          - type: divider
+
+          - entity: sensor.pompa_ciepla_indoorunithydro_model_info
+            name: Model - Jednostka wewnętrzna
+            icon: mdi:information
+
+          - entity: sensor.pompa_ciepla_indoorunithydro_software_version
+            name: Oprogramowanie - Jednostka wewnętrzna
+            icon: mdi:package-variant
+
+          - entity: sensor.pompa_ciepla_outdoorunit_software_version
+            name: Oprogramowanie - Jednostka zewnętrzna
+            icon: mdi:package-variant
+
+          - entity: sensor.pompa_ciepla_userinterface_model_info
+            name: Model - Panel sterowania
+            icon: mdi:monitor-dashboard
+
+          - entity: sensor.pompa_ciepla_userinterface_software_version
+            name: Oprogramowanie - Panel sterowania
+            icon: mdi:package-variant
+
+      # API Rate Limits
+      - type: entities
+        title: Limity API
+        entities:
+          - entity: sensor.pompa_ciepla_ratelimit_remaining_minutes
+            name: Pozostało (minuty)
+            icon: mdi:timer-sand
+
+          - entity: sensor.pompa_ciepla_ratelimit_remaining_day
+            name: Pozostało (dzień)
+            icon: mdi:calendar-clock
+
+          - entity: sensor.pompa_ciepla_ratelimit_retry_after
+            name: Ponów po
+            icon: mdi:clock-alert
+
+  # ========================================
+  # FITNESS - Strava Coach Training Metrics

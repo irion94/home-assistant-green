@@ -1,0 +1,252 @@
+title: Overview
+path: overview
+icon: mdi:home-assistant
+panel: true
+badges: []
+cards:
+  - type: custom:layout-card
+    layout_type: custom:grid-layout
+    layout:
+      grid-template-columns: 1fr
+      grid-auto-rows: auto
+      gap: 8px
+    cards:
+      # ========================================
+      # WEATHER - Full Width
+      # ========================================
+      - type: weather-forecast
+        entity: weather.forecast_dom
+        show_forecast: true
+        name: Pogoda
+
+      # ========================================
+      # ROW 2: Solar - Fotowoltaika i magazyn energii
+      # ========================================
+      - type: vertical-stack
+        cards:
+          - type: custom:mushroom-title-card
+            title: ☀️ Fotowoltaika i magazyn energii
+            subtitle: System solarny
+
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.inverter_pv_power
+                name: Produkcja PV
+                icon: mdi:solar-power
+                icon_color: amber
+                primary_info: state
+                secondary_info: name
+                tap_action:
+                  action: navigate
+                  navigation_path: /lovelace/solar
+
+              - type: custom:mushroom-entity-card
+                entity: sensor.inverter_battery
+                name: Bateria
+                icon: mdi:battery-80
+                icon_color: green
+                primary_info: state
+                secondary_info: name
+                tap_action:
+                  action: navigate
+                  navigation_path: /lovelace/solar
+
+              - type: custom:mushroom-entity-card
+                entity: sensor.inverter_load_power
+                name: Obciążenie
+                icon: mdi:home-lightning-bolt
+                icon_color: blue
+                primary_info: state
+                secondary_info: name
+                tap_action:
+                  action: navigate
+                  navigation_path: /lovelace/solar
+
+              - type: custom:mushroom-entity-card
+                entity: sensor.inverter_grid_power
+                name: Sieć
+                icon: mdi:transmission-tower
+                icon_color: orange
+                primary_info: state
+                secondary_info: name
+                tap_action:
+                  action: navigate
+                  navigation_path: /lovelace/solar
+
+      # ========================================
+      # ROW 3: Cameras | Lights | System
+      # ========================================
+      - type: custom:layout-card
+        layout_type: custom:grid-layout
+        layout:
+          grid-template-columns: repeat(3, 1fr)
+          grid-auto-rows: auto
+          gap: 8px
+        cards:
+          # Column 1: Camera Thumbnails
+          - type: vertical-stack
+            cards:
+              - type: custom:mushroom-title-card
+                title: 📹 Kamery
+                subtitle: Podgląd na żywo
+
+              - type: grid
+                columns: 2
+                square: true
+                cards:
+                  - type: picture-entity
+                    entity: camera.kamera_brama_mediaprofile_channel1_substream1
+                    camera_image: camera.kamera_brama_mediaprofile_channel1_substream1
+                    show_name: true
+                    show_state: false
+                    name: Brama
+
+                  - type: picture-entity
+                    entity: camera.kamera_na_garaz_mediaprofile_channel1_substream1
+                    camera_image: camera.kamera_na_garaz_mediaprofile_channel1_substream1
+                    show_name: true
+                    show_state: false
+                    name: Garaż
+
+                  - type: picture-entity
+                    entity: camera.kamera_za_garazem_mediaprofile_channel1_substream1
+                    camera_image: camera.kamera_za_garazem_mediaprofile_channel1_substream1
+                    show_name: true
+                    show_state: false
+                    name: Za garażem
+
+                  - type: picture-entity
+                    entity: camera.kamera_altana_mediaprofile_channel1_substream1
+                    camera_image: camera.kamera_altana_mediaprofile_channel1_substream1
+                    show_name: true
+                    show_state: false
+                    name: Altana
+
+          # Column 2: Lights Controls
+          - type: vertical-stack
+            cards:
+              - type: custom:mushroom-title-card
+                title: 💡 Światła
+                subtitle: Sterowanie oświetleniem
+
+              - type: custom:mushroom-light-card
+                entity: light.aqara_single_switch_module_t1
+                name: Sypialnia
+                icon: mdi:bed
+                use_light_color: true
+                show_brightness_control: false
+                show_color_control: false
+
+              - type: custom:mushroom-light-card
+                entity: light.aqara_single_switch_module_t1_4
+                name: Salon
+                icon: mdi:sofa
+                use_light_color: true
+                show_brightness_control: false
+                show_color_control: false
+                tap_action:
+                  action: call-service
+                  service: light.toggle
+                  service_data:
+                    entity_id:
+                      - light.aqara_single_switch_module_t1_4
+                      - light.aqara_single_switch_module_t1_8
+                      - light.aqara_single_switch_module_t1_9
+                      - light.aqara_single_switch_module_t1_15
+
+              - type: custom:mushroom-light-card
+                entity: light.aqara_single_switch_module_t1_3
+                name: Kuchnia
+                icon: mdi:silverware-fork-knife
+                use_light_color: true
+                show_brightness_control: false
+                show_color_control: false
+
+          # Column 3: System Health
+          - type: vertical-stack
+            cards:
+              - type: custom:mushroom-title-card
+                title: ⚙️ System
+                subtitle: Status i aktualizacje
+
+              - type: custom:mushroom-entity-card
+                entity: update.home_assistant_core_update
+                name: Home Assistant Core
+                icon: mdi:home-assistant
+                icon_color: blue
+                tap_action:
+                  action: more-info
+
+              - type: custom:mushroom-entity-card
+                entity: sensor.backup_next
+                name: Następny backup
+                icon: mdi:backup-restore
+                icon_color: green
+                tap_action:
+                  action: navigate
+                  navigation_path: /lovelace/system
+
+      # ========================================
+      # ROW 3: Climate - Temperature Sensors
+      # ========================================
+      - type: vertical-stack
+        cards:
+          - type: custom:mushroom-title-card
+            title: 🌡️ Temperatury
+            subtitle: Pompa ciepła i monitoring
+
+          - type: horizontal-stack
+            cards:
+              - type: sensor
+                entity: sensor.pompa_ciepla_climatecontrol_leaving_water_temperature
+                name: Woda wyjściowa (układ)
+                graph: line
+                detail: 2
+                hours_to_show: 24
+
+              - type: sensor
+                entity: sensor.pompa_ciepla_domestichotwatertank_tank_temperature
+                name: Zbiornik CWU
+                graph: line
+                detail: 2
+                hours_to_show: 24
+
+          - type: horizontal-stack
+            cards:
+              - type: sensor
+                entity: sensor.pompa_ciepla_climatecontrol_room_temperature
+                name: Temperatura pomieszczenia
+                graph: line
+                detail: 2
+                hours_to_show: 24
+
+              - type: sensor
+                entity: sensor.pompa_ciepla_climatecontrol_outdoor_temperature
+                name: Temperatura zewnętrzna
+                graph: line
+                detail: 2
+                hours_to_show: 24
+
+          - type: horizontal-stack
+            cards:
+              - type: sensor
+                entity: sensor.pompa_ciepla_climatecontrol_heating_daily_electrical_consumption
+                name: Obieg - Grzanie
+                graph: line
+                detail: 2
+                hours_to_show: 24
+
+              - type: sensor
+                entity: sensor.pompa_ciepla_domestichotwatertank_heating_daily_electrical_consumption
+                name: CWU - Podgrzewanie
+                graph: line
+                detail: 2
+                hours_to_show: 24
+
+          - type: custom:mushroom-climate-card
+            entity: climate.pompa_ciepla_room_temperature
+            name: Temperatura pokojowa
+            icon: mdi:home-thermometer
+            show_temperature_control: true
+            collapsible_controls: false

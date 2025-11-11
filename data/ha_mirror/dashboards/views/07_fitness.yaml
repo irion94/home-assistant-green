@@ -1,0 +1,104 @@
+title: Fitness
+path: fitness
+icon: mdi:run
+badges: []
+cards:
+  # Modern header
+  - type: custom:mushroom-title-card
+    title: 🏃 Fitness & Trening
+    subtitle: Metryki Strava Coach i gotowość treningowa
+
+  # Sync button
+  - type: custom:button-card
+    name: Synchronizuj Strava
+    icon: mdi:sync
+    tap_action:
+      action: call-service
+      service: strava_coach.sync_now
+      data: {}
+    styles:
+      card:
+        - height: 60px
+      icon:
+        - color: "#fc4c02"
+      name:
+        - color: "#e4e8ed"
+
+  # Readiness Gauge
+  - type: gauge
+    entity: sensor.strava_coach_readiness
+    name: Gotowość treningowa
+    min: 0
+    max: 100
+    needle: true
+    severity:
+      green: 70
+      yellow: 50
+      red: 0
+    unit: '%'
+
+  # Main Metrics
+  - type: custom:mushroom-title-card
+    title: Główne metryki
+    subtitle: Fitness, Fatigue i Form (TSB)
+
+  - type: grid
+    columns: 3
+    square: false
+    cards:
+      - type: custom:mushroom-entity-card
+        entity: sensor.strava_coach_fitness
+        name: Fitness (CTL)
+        icon: mdi:trending-up
+        icon_color: green
+
+      - type: custom:mushroom-entity-card
+        entity: sensor.strava_coach_fatigue
+        name: Fatigue (ATL)
+        icon: mdi:tire
+        icon_color: orange
+
+      - type: custom:mushroom-entity-card
+        entity: sensor.strava_coach_form
+        name: Form (TSB)
+        icon: mdi:chart-line
+        icon_color: blue
+
+  # Training Load History
+  - type: custom:mushroom-title-card
+    title: Historia obciążenia (7 dni)
+    subtitle: Trendy fitness, zmęczenia i formy
+
+  - type: custom:mini-graph-card
+    entities:
+      - entity: sensor.strava_coach_fitness
+        name: Fitness (CTL)
+        color: "#51cf66"
+      - entity: sensor.strava_coach_fatigue
+        name: Fatigue (ATL)
+        color: "#ffc933"
+      - entity: sensor.strava_coach_form
+        name: Form (TSB)
+        color: "#00a8ff"
+    hours_to_show: 168
+    line_width: 2
+    points_per_hour: 0.5
+    show:
+      labels: true
+      icon: true
+      state: true
+      legend: true
+
+  # Today's Suggestion
+  - type: custom:mushroom-title-card
+    title: Dzisiejsza rekomendacja
+    subtitle: Rekomendacja treningowa na dziś
+
+  - type: custom:mushroom-entity-card
+    entity: sensor.strava_coach_today_suggestion
+    name: Sugestia treningowa
+    icon: mdi:calendar-today
+    icon_color: blue
+
+  # ========================================
+  # SYSTEM - Monitoring and maintenance
