@@ -1,0 +1,99 @@
+title: Overview
+path: overview
+icon: mdi:home-assistant
+badges: []
+cards:
+  # Welcome header with person status
+  - type: vertical-stack
+    cards:
+      - type: markdown
+        content: |
+          # 👋 Witaj w Domu, {{ state_attr('person.igor', 'friendly_name') }}
+          {{ now().strftime('%A, %B %d') }} • {{ now().strftime('%H:%M') }}
+
+      # Quick stats row
+      - type: horizontal-stack
+        cards:
+          - type: entity
+            entity: weather.forecast_dom
+            name: Weather
+
+          - type: sensor
+            entity: sensor.aqara_temp_humidity_sensor_temperature
+            name: Indoor Temp
+            graph: line
+            hours_to_show: 24
+
+          - type: sensor
+            entity: sensor.aqara_temp_humidity_sensor_humidity
+            name: Humidity
+            graph: line
+            hours_to_show: 24
+
+  # Quick Actions - doesnt work - "configuration error"
+#      - type: custom:auto-entities
+#        card:
+#          type: grid
+#          title: Quick Actions
+#          columns: 4
+#          square: false
+#        filter:
+#          include:
+#            - domain: light
+#              attributes:
+#                device_class: null
+#              options:
+#                type: button
+#                tap_action:
+#                  action: toggle
+#          exclude:
+#            - entity_id: "*_identify_*"
+#        sort:
+#          method: name
+
+  # Motion & Occupancy
+  - type: entities
+    title: Motion Detection
+    state_color: true
+    show_header_toggle: false
+    entities:
+      - entity: binary_sensor.aqara_motion_sensor_occupancy
+        name: Motion Sensor (Original)
+        secondary_info: last-changed
+
+      - entity: binary_sensor.aqara_motion_sensor_p1_occupancy
+        name: Motion Sensor P1 #1
+        secondary_info: last-changed
+
+      - entity: binary_sensor.aqara_motion_sensor_p1_occupancy_2
+        name: Motion Sensor P1 #2
+        secondary_info: last-changed
+
+      - entity: binary_sensor.aqara_motion_sensor_p1_occupancy_3
+        name: Motion Sensor P1 #3
+        secondary_info: last-changed
+
+      - entity: binary_sensor.aqara_door_and_window_sensor_door
+        name: Door Sensor
+        secondary_info: last-changed
+
+  # System Health Overview - doesnt work - "encja nie jest numeryczna"
+#      - type: grid
+#        title: System Health
+#        columns: 2
+#        square: false
+#        cards:
+#          - type: gauge
+#            entity: update.home_assistant_core_update
+#            name: HA Core
+#            needle: true
+#            severity:
+#              green: 0
+#              yellow: 0
+#              red: 0
+#
+#          - type: gauge
+#            entity: update.home_assistant_operating_system_update
+#            name: HA OS
+#            needle: true
+

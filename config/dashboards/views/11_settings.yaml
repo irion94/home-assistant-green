@@ -1,0 +1,60 @@
+title: Settings
+path: settings
+icon: mdi:cog
+badges: []
+cards:
+  # Modern header
+  - type: custom:mushroom-title-card
+    title: ⚙️ Ustawienia
+    subtitle: Konfiguracja systemu i narzędzia
+
+  # Quick Tools
+  - type: custom:mushroom-title-card
+    title: Szybkie narzędzia
+    subtitle: Skany i listy
+
+  - type: custom:button-card
+    name: Network Discovery Scan
+    icon: mdi:network-outline
+    entity: script.trigger_network_scan
+    tap_action:
+      action: toggle
+    styles:
+      card:
+        - height: 60px
+      icon:
+        - color: "#00a8ff"
+      name:
+        - color: "#e4e8ed"
+
+  - type: custom:mushroom-entity-card
+    entity: todo.lista_zakupow
+    name: Shopping List
+    icon: mdi:cart
+    icon_color: green
+
+  # Person Tracking
+  - type: custom:mushroom-title-card
+    title: 👤 Osoby
+    subtitle: Śledzenie lokalizacji
+
+  - type: custom:mushroom-entity-card
+    entity: person.igor
+    name: Igor
+    icon: mdi:account
+    secondary_info: last-changed
+    icon_color: blue
+
+  # TTS Services
+  - type: custom:mushroom-title-card
+    title: 🔊 Text-to-Speech
+    subtitle: Usługi syntezy mowy
+
+  - type: custom:mushroom-entity-card
+    entity: tts.google_translate_en_com
+    name: Google Translate TTS
+    icon: mdi:microphone-message
+    icon_color: orange
+
+  # ========================================
+  # FAQ - Tauron/eLicznik Tips

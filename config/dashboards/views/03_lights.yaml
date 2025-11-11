@@ -1,0 +1,122 @@
+title: Lights
+path: lights
+icon: mdi:lightbulb-group
+badges: []
+cards:
+  # All Lights - Grid layout
+  - type: grid
+    columns: 4
+    square: false
+    cards:
+      - type: light
+        entity: light.aqara_single_switch_module_t1
+        name: Switch 1
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_2
+        name: Switch 2
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_3
+        name: Switch 3
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_4
+        name: Switch 4
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_5
+        name: Switch 5
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_6
+        name: Switch 6
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_7
+        name: Switch 7
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_8
+        name: Switch 8
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_9
+        name: Switch 9
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_10
+        name: Switch 10
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_11
+        name: Switch 11
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_12
+        name: Switch 12
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_13
+        name: Switch 13
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_14
+        name: Switch 14
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_15
+        name: Switch 15
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_16
+        name: Switch 16
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_17
+        name: Switch 17
+
+      - type: light
+        entity: light.aqara_single_switch_module_t1_18
+        name: Cyrkulacja
+
+  # LED Strips - Grouped
+  - type: entities
+    title: LED Strips
+    state_color: true
+    show_header_toggle: true
+    entities:
+      - entity: light.aqara_led_strip_t1
+        name: LED Strip 1
+
+      - entity: light.aqara_led_strip_t1_2
+        name: LED Strip 2
+
+      - entity: light.aqara_led_strip_t1_3
+        name: LED Strip 3
+
+      - entity: light.aqara_led_strip_t1_4
+        name: LED Strip 4
+
+      - entity: light.aqara_led_strip_t1_5
+        name: LED Strip 5
+
+      - entity: light.aqara_led_strip_t1_6
+        name: LED Strip 6
+
+      - entity: light.aqara_led_strip_t1_7
+        name: LED Strip 7
+
+      - entity: light.aqara_led_strip_t1_8
+        name: LED Strip 8
+
+  # Automation Controls
+  - type: entities
+    title: Lighting Automations
+    entities:
+      - entity: automation.aqara_motion_activated_lights
+        name: Motion Activated Lights
+        secondary_info: last-triggered
+
+  # ========================================
+  # CLIMATE - Temperature and environmental

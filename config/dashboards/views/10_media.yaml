@@ -1,0 +1,22 @@
+title: Media
+path: media
+icon: mdi:television
+badges: []
+cards:
+  # Modern header
+  - type: custom:mushroom-title-card
+    title: 📺 Media & Rozrywka
+    subtitle: Odtwarzacze mediów i radio
+
+  # Media Players
+  - type: media-control
+    entity: media_player.smart_tv
+    name: Smart TV
+
+  # Radio Browser
+  - type: custom:mushroom-title-card
+    title: 📻 Radio Browser
+    subtitle: Radio Browser integration is available. Configure radio stations in your media player.
+
+  # ========================================
+  # SETTINGS - Configuration & tools
