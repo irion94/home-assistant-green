@@ -17,3 +17,4 @@ views:
   - !include views/11_settings.yaml
   - !include views/12_faq.yaml
   - !include views/13_solar.yaml
+  - !include views/14_wanas.yaml
