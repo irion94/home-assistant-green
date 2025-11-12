@@ -9,7 +9,21 @@ shopping_list,Shopping list,onboarding,,01K9M3ZG3YWPSXE3GHP4WSABBB
 google_translate,Google Translate text-to-speech,onboarding,,01K9M3ZG5D3B77MDNCVYP7Q3CY
 radio_browser,Radio Browser,onboarding,,01K9M3ZGW1NXQV2C9413ZNP1E6
 met,Home,onboarding,,01K9M3ZGX4ZRKPKQTCSGG2DFEZ
-upnp,GVC-Rd.Soho Router,ssdp,,01K9MKXYGTDG4MCK6JRRGEE5AY
 mqtt,Mosquitto Mqtt Broker,user,,01K9MM06NYP11XB3SRQRKXREB1
 homekit,HASS Bridge:21064,user,,01K9MRF6G2JTZKZ3HRDJ8ZTM7E
 matter,Matter,zeroconf,,01K9MSHK7HK7RX2M88GECYBSN9
+androidtv_remote,Smart TV,zeroconf,,01K9PH08R7156E2K40AH4A5JA4
+strava_coach,Strava Coach,user,,01K9PKPQ5AFMD831J60AV1S5AJ
+hacs,,user,,01K9PZR0W74HK7HFD7MB7KVCFA
+daikin_onecta,Daikin,user,,01K9Q46K6FM09QEG5KVNWTBYSN
+onvif,Rejestrator - 38:c4:e8:11:42:4d,user,,01K9QAXDAQGW4RMTRRMYG4NZN2
+onvif,Kamera_Brama - c4:aa:c4:41:df:43,user,,01K9QBHXTZ1NW4V8MPNM12DGQP
+onvif,Kamera_Na_Garaż - c4:aa:c4:41:dd:7e,user,,01K9QBN3GE7QZVMGSAPDGG5KZK
+onvif,Kamera_Za_Garażem - c4:aa:c4:41:db:43,user,,01K9QBQH3CMTQZ8JA9Q0TVGX4J
+onvif,Kamera_Altana - c4:aa:c4:41:db:45,user,,01K9QBSF412ND2Y6QYK5R5F141
+onvif,Kamera_Garaż - 38:c4:e8:07:dc:f9,user,,01K9QBWKTXCCHNEWVEMMF621SD
+cloudflare,casksoft.pl,user,,01K9QXAYVE6V5V4Y3TE7QV1DB7
+ha_strava,Strava: Igor Wójcik,user,,01K9QZ3VM8AVCJ88JKPN1X43RX
+solarman,Inverter,user,,01K9S9C8FXZVF6APET9Y8JT487
+tech,Wanas 415 hitech,user,,01K9SAJRAXF91VHDQCNAV6NF71
+tuya,igorwojcik1d@gmail.com,user,,01K9SB945AYG44TKE1KSWSKX84
