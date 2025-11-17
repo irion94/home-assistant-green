@@ -15,6 +15,7 @@ set -euo pipefail
 
 # Load .env.local if present (to get HA_* values)
 if [ -f ".env.local" ]; then
+  # shellcheck source=/dev/null
   set -a; . ./.env.local; set +a
 fi
 
