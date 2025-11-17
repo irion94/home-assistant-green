@@ -15,8 +15,10 @@ set -euo pipefail
 
 # Load .env.local if present (to get HA_* values)
 if [ -f ".env.local" ]; then
+  set -a
   # shellcheck source=/dev/null
-  set -a; . ./.env.local; set +a
+  . ./.env.local
+  set +a
 fi
 
 : "${HA_HOST:?Missing HA_HOST}"
