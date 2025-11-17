@@ -65,6 +65,29 @@ jobs:
         run: |
           python scripts/validate_secrets.py --verbose
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker images
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.docker-cache
+          key: ${{ runner.os }}-ha-docker-2024.11.3
+          restore-keys: |
+            ${{ runner.os }}-ha-docker-
+
+      - name: Pull Home Assistant Docker image
+        run: |
+          # Pin to specific version for reproducibility
+          HA_VERSION="2024.11.3"
+          echo "Using Home Assistant version: ${HA_VERSION}"
+
+          docker pull ghcr.io/home-assistant/home-assistant:${HA_VERSION}
+
+          # Also tag as 'stable' for local reference
+          docker tag ghcr.io/home-assistant/home-assistant:${HA_VERSION} \
+            ghcr.io/home-assistant/home-assistant:stable
+
       - name: Validate Home Assistant configuration
         run: |
           docker run --rm \

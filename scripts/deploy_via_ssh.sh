@@ -41,8 +41,48 @@ ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
   "docker exec homeassistant python -m homeassistant --script check_config --config /config"
 
 echo "[deploy] restart core"
+RESTART_START=$(date +%s)
 ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
   "${HA_SSH_USER}@${HA_HOST}" \
   "ha core restart"
 
-echo "[deploy] done"
+# Health check: wait for HA to come back online
+echo "[deploy] waiting for Home Assistant to come back online..."
+MAX_WAIT=300  # 5 minutes
+WAIT_INTERVAL=5
+ELAPSED=0
+
+while [ $ELAPSED -lt $MAX_WAIT ]; do
+  sleep $WAIT_INTERVAL
+  ELAPSED=$((ELAPSED + WAIT_INTERVAL))
+
+  # Check if HA is running
+  if ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
+    "${HA_SSH_USER}@${HA_HOST}" \
+    "ha core info 2>/dev/null | grep -q 'state: running'" 2>/dev/null; then
+
+    RESTART_END=$(date +%s)
+    RESTART_DURATION=$((RESTART_END - RESTART_START))
+    echo "[deploy] ✓ Home Assistant is healthy (took ${RESTART_DURATION}s)"
+
+    # Additional health check: verify API is responding
+    echo "[deploy] verifying API health..."
+    if ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
+      "${HA_SSH_USER}@${HA_HOST}" \
+      "curl -s -f http://localhost:8123/api/ -H 'Content-Type: application/json' >/dev/null 2>&1"; then
+      echo "[deploy] ✓ API is responding"
+    else
+      echo "[deploy] ⚠ Warning: HA is running but API may not be ready yet"
+    fi
+
+    echo "[deploy] ✓ deployment successful"
+    exit 0
+  fi
+
+  echo "[deploy] still waiting... (${ELAPSED}s elapsed)"
+done
+
+# Timeout reached
+echo "[deploy] ✗ ERROR: Home Assistant did not come back online within ${MAX_WAIT}s" >&2
+echo "[deploy] ✗ Deployment may have failed. Manual intervention required." >&2
+exit 1
