@@ -1,0 +1,76 @@
+# Pre-commit hooks for Home Assistant Enterprise Starter
+# Documentation: https://pre-commit.com/
+#
+# Installation:
+#   pip install pre-commit
+#   pre-commit install
+#
+# Run manually:
+#   pre-commit run --all-files
+
+repos:
+  # Standard pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(.*\.md|.*\.txt)$
+      - id: end-of-file-fixer
+        exclude: ^(.*\.txt|data/inventory/)
+      - id: check-yaml
+        args: ['--unsafe']  # Allow custom YAML tags (!secret, !include, etc.)
+        exclude: ^(config/packages/|config/blueprints/)  # HA YAML can have complex structures
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: check-json
+      - id: check-toml
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  # Python linting and formatting with Ruff
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^(tests/|scripts/.*\.py$|config/custom_components/)
+      - id: ruff-format
+        files: ^(tests/|scripts/.*\.py$|config/custom_components/)
+
+  # Python type checking with MyPy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.7.1
+    hooks:
+      - id: mypy
+        files: ^(tests/|config/custom_components/)
+        exclude: ^ha-strava-coach/
+        additional_dependencies:
+          - homeassistant>=2024.7.0
+          - pytest>=7.4.0
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.9.0.6
+    hooks:
+      - id: shellcheck
+        files: ^scripts/.*\.sh$
+        args: ['-x']  # Follow sourced files
+
+  # YAML linting
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.33.0
+    hooks:
+      - id: yamllint
+        files: ^config/.*\.yaml$
+        args: ['-c', 'config/.yamllint']
+
+  # Secrets detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: ^(config/secrets\.yaml\.example|.*\.ipynb)$
