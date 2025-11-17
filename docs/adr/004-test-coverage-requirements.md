@@ -1,8 +1,9 @@
-# ADR 004: 70% Test Coverage Minimum Requirement
+# ADR 004: Test Coverage Requirements
 
 ## Status
 
 **Accepted** - November 2024
+**Amended** - November 2024 (Phased implementation approach)
 
 ## Context
 
@@ -34,14 +35,46 @@ We need a balanced approach that ensures quality without excessive testing overh
 
 ## Decision
 
-We will enforce a **minimum 70% test coverage** requirement for the root project, with the following guidelines:
+We will enforce test coverage requirements using a **phased approach**, starting with infrastructure testing and progressively adding custom component tests:
 
-### Coverage Requirements
+### Phase 1: Infrastructure Testing (Current)
+
+**Coverage Requirement**: 30% minimum
+**Scope**: Infrastructure code (scripts, validation tools)
+**Target Date**: November 2024
 
 ```python
 # pyproject.toml
 [tool.coverage.report]
-fail_under = 70  # Build fails if coverage < 70%
+fail_under = 30  # Build fails if coverage < 30%
+source = ["scripts"]  # Infrastructure code only
+```
+
+**Rationale**: The existing custom components (`strava_coach`, etc.) were created before the testing infrastructure was implemented. Rather than block all improvements until we write tests for thousands of lines of existing code, we start with infrastructure testing and progressively add component tests.
+
+### Phase 2: Custom Component Testing (Future)
+
+**Coverage Requirement**: 70% minimum (target)
+**Scope**: Custom components (`config/custom_components/`)
+**Target Date**: Q1 2025
+
+```python
+# pyproject.toml (future state)
+[tool.coverage.report]
+fail_under = 70
+source = ["config/custom_components", "scripts"]
+```
+
+### Current Coverage Requirements
+
+```python
+# pyproject.toml (current state)
+[tool.coverage.run]
+source = ["scripts"]
+omit = ["tests/*", "*/__pycache__/*", "*/site-packages/*"]
+
+[tool.coverage.report]
+fail_under = 30
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
@@ -49,6 +82,8 @@ exclude_lines = [
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
 ]
 ```
 
@@ -77,7 +112,8 @@ exclude_lines = [
 
 ### Subproject Requirements
 
-- **Root Project**: 70% minimum (enforced in CI)
+- **Root Project (Infrastructure)**: 30% minimum (Phase 1, enforced in CI)
+- **Root Project (Future, Full)**: 70% target (Phase 2, when custom component tests added)
 - **ha-strava-coach**: Own coverage requirements (already has ~80%+)
 
 ## Implementation

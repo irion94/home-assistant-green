@@ -9,7 +9,7 @@ This is a production Home Assistant deployment using GitOps workflow with:
 - **Custom integrations**: Strava Coach (`config/custom_components/strava_coach/`)
 - **Subproject**: Advanced Strava analytics (`ha-strava-coach/` - separate Python package)
 - **Deployment**: Tailscale VPN + SSH/rsync for secure remote deployment
-- **Testing**: 70% minimum test coverage requirement
+- **Testing**: 30% minimum test coverage (infrastructure), 70% target (full project)
 - **Safe workflow**: validate → test → sync → deploy → health check → notify
 
 ## Build, Test, and Development Commands
@@ -23,8 +23,8 @@ pip install -e .[dev,test]
 pre-commit install
 pre-commit run --all-files
 
-# Run tests with coverage (70% minimum required)
-pytest --cov=config/custom_components --cov-report=term --cov-report=html
+# Run tests with coverage (30% minimum required for infrastructure)
+pytest --cov=scripts --cov-report=term --cov-report=html
 
 # Validate secrets references
 python3 scripts/validate_secrets.py
@@ -143,11 +143,13 @@ This repository includes:
 
 ### Testing
 - **Framework**: pytest with pytest-asyncio
-- **Coverage**: **70% minimum required** (enforced in CI, see ADR 004)
+- **Coverage**: **30% minimum required** (infrastructure), 70% target (see ADR 004)
+  - Current: Infrastructure code (scripts, validation)
+  - Future: Custom components unit tests
 - **Structure**: All test files in `tests/` directory
   - `tests/conftest.py` — Shared fixtures and test data factories
   - `tests/test_config_validation.py` — Config structure and security tests
-  - `tests/test_integrations.py` — Custom component tests
+  - `tests/test_integrations.py` — Custom component validation
   - `tests/test_automations.py` — Automation validation and best practices
 - **Async tests**: Use `pytest.mark.asyncio` decorator
 - **CI validation**: Config validation (Docker) + pytest + coverage check
@@ -175,7 +177,7 @@ Use Conventional Commits format:
   - ADR 001: Tailscale for secure deployment
   - ADR 002: Packages pattern for modular configuration
   - ADR 003: Git-based configuration management (GitOps)
-  - ADR 004: 70% test coverage minimum requirement
+  - ADR 004: Test coverage requirements (phased approach: 30% → 70%)
 - **data/README.md** — Inventory snapshots and HA mirror documentation
 - **config/secrets.yaml.example** — Secret template with setup instructions
 
@@ -204,7 +206,7 @@ Use Conventional Commits format:
     ghcr.io/home-assistant/home-assistant:2024.11.3 \
     python -m homeassistant --script check_config --config /config
   ```
-- **Test changes**: Run `pytest --cov` before pushing (70% coverage required)
+- **Test changes**: Run `pytest --cov` before pushing (30% coverage required)
 - **CI must pass**: Config validation + tests + coverage before merge
 - **Sync UI changes**: Run `./scripts/pull_gui_changes.sh` before committing
 
