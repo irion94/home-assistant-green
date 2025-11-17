@@ -25,7 +25,7 @@ REGISTRY_FILES=(
 )
 
 # Pull each file using SSH + cat (more reliable than scp)
-SSH_CMD="ssh -i ${HA_SSH_KEY} -p ${HA_SSH_PORT} -o StrictHostKeyChecking=no ${HA_SSH_USER}@${HA_HOST}"
+SSH_CMD="ssh -i ${HA_SSH_KEY} -p ${HA_SSH_PORT} -o StrictHostKeyChecking=accept-new ${HA_SSH_USER}@${HA_HOST}"
 
 for file in "${REGISTRY_FILES[@]}"; do
   echo "[inventory] Fetching ${file}..."

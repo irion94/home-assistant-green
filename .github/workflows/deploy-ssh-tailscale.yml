@@ -6,7 +6,7 @@ name: Deploy (SSH) - via Tailscale
 # securely without port forwarding.
 #
 # Setup completed:
-# ✅ Tailscale installed on HA (100.116.140.76)
+# ✅ Tailscale installed on HA
 # ✅ OAuth credentials configured
 # ✅ GitHub Secrets updated
 #
@@ -72,3 +72,8 @@ jobs:
           STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
         run: |
           ./scripts/deploy_via_ssh.sh
+
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f id_ha

@@ -23,7 +23,7 @@ fi
 : "${HA_SSH_KEY:?Missing HA_SSH_KEY}"
 HA_SSH_PORT="${HA_SSH_PORT:-22}"
 
-SSH_OPTS=("-i" "${HA_SSH_KEY}" "-p" "${HA_SSH_PORT}" "-o" "StrictHostKeyChecking=no")
+SSH_OPTS=("-i" "${HA_SSH_KEY}" "-p" "${HA_SSH_PORT}" "-o" "StrictHostKeyChecking=accept-new")
 RSYNC_BASE=(rsync -avz -e "ssh ${SSH_OPTS[*]}")
 REMOTE_PREFIX="${HA_SSH_USER}@${HA_HOST}:/config/"
 

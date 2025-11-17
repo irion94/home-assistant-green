@@ -16,7 +16,7 @@ fi
 
 echo "[deploy] rsync base config -> ${HA_SSH_USER}@${HA_HOST}:/config"
 rsync -avz --delete \
-  -e "ssh -i ${HA_SSH_KEY} -p ${HA_SSH_PORT} -o StrictHostKeyChecking=no" \
+  -e "ssh -i ${HA_SSH_KEY} -p ${HA_SSH_PORT} -o StrictHostKeyChecking=accept-new" \
   --exclude '.storage' \
   --exclude 'custom_components/**' \
   --exclude 'www/community/**' \
@@ -30,18 +30,18 @@ rsync -avz --delete \
 if [[ -d "./${CONFIG_DIR}/custom_components/strava_coach" ]]; then
   echo "[deploy] rsync custom_components/strava_coach (preserving other custom components)"
   rsync -avz --delete \
-    -e "ssh -i ${HA_SSH_KEY} -p ${HA_SSH_PORT} -o StrictHostKeyChecking=no" \
+    -e "ssh -i ${HA_SSH_KEY} -p ${HA_SSH_PORT} -o StrictHostKeyChecking=accept-new" \
     "./${CONFIG_DIR}/custom_components/strava_coach/" \
     "${HA_SSH_USER}@${HA_HOST}:/config/custom_components/strava_coach/"
 fi
 
 echo "[deploy] validate config (docker exec check_config)"
-ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=no \
+ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
   "${HA_SSH_USER}@${HA_HOST}" \
   "docker exec homeassistant python -m homeassistant --script check_config --config /config"
 
 echo "[deploy] restart core"
-ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=no \
+ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
   "${HA_SSH_USER}@${HA_HOST}" \
   "ha core restart"
 
