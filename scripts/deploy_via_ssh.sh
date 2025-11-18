@@ -40,11 +40,19 @@ ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
   "${HA_SSH_USER}@${HA_HOST}" \
   "docker exec homeassistant python -m homeassistant --script check_config --config /config"
 
-echo "[deploy] restart core"
+echo "[deploy] restart core via Docker (more reliable than 'ha core restart')"
 RESTART_START=$(date +%s)
+
 ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
   "${HA_SSH_USER}@${HA_HOST}" \
-  "ha core restart"
+  "docker restart homeassistant"
+
+if [ $? -ne 0 ]; then
+  echo "[deploy] ✗ ERROR: Docker restart failed" >&2
+  exit 1
+fi
+
+echo "[deploy] ✓ Restart command sent successfully"
 
 # Health check: wait for HA to come back online
 echo "[deploy] waiting for Home Assistant to come back online..."
@@ -56,23 +64,31 @@ while [ $ELAPSED -lt $MAX_WAIT ]; do
   sleep $WAIT_INTERVAL
   ELAPSED=$((ELAPSED + WAIT_INTERVAL))
 
-  # Check if HA is running
-  if ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
+  # Check if HA API is responding (using 127.0.0.1 instead of localhost for reliability)
+  API_RESPONSE=$(ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
     "${HA_SSH_USER}@${HA_HOST}" \
-    "ha core info 2>/dev/null | grep -q 'state: running'" 2>/dev/null; then
+    "curl -s -w '\nHTTP_CODE:%{http_code}' http://127.0.0.1:8123/api/ 2>&1" || echo "CURL_FAILED")
 
+  # Debug output every 30 seconds
+  if [ $((ELAPSED % 30)) -eq 0 ]; then
+    echo "[deploy] debug: API response = ${API_RESPONSE:0:100}"
+  fi
+
+  # Check if we got HTTP 200 or 401 (both indicate HA is running)
+  # 200 = OK, 401 = Unauthorized (but HA is up and responding)
+  if echo "$API_RESPONSE" | grep -qE "HTTP_CODE:(200|401)"; then
     RESTART_END=$(date +%s)
     RESTART_DURATION=$((RESTART_END - RESTART_START))
-    echo "[deploy] ✓ Home Assistant is healthy (took ${RESTART_DURATION}s)"
+    echo "[deploy] ✓ Home Assistant API is responding (took ${RESTART_DURATION}s)"
 
-    # Additional health check: verify API is responding
-    echo "[deploy] verifying API health..."
+    # Additional verification: check core info
+    echo "[deploy] verifying core status..."
     if ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
       "${HA_SSH_USER}@${HA_HOST}" \
-      "curl -s -f http://localhost:8123/api/ -H 'Content-Type: application/json' >/dev/null 2>&1"; then
-      echo "[deploy] ✓ API is responding"
+      "ha core info >/dev/null 2>&1"; then
+      echo "[deploy] ✓ Core info accessible"
     else
-      echo "[deploy] ⚠ Warning: HA is running but API may not be ready yet"
+      echo "[deploy] ⚠ Warning: Core info check failed, but API is responding"
     fi
 
     echo "[deploy] ✓ deployment successful"
