@@ -19,3 +19,4 @@ views:
   - !include views/13_solar.yaml
   - !include views/14_wanas.yaml
   - !include views/15_tuya.yaml
+  - !include views/16_analytics.yaml

@@ -23,14 +23,6 @@ default_config:
 # Automations
 automation: !include automations.yaml
 
-# Custom HTML Dashboards
-panel_iframe:
-  analytics:
-    title: "Analytics"
-    icon: mdi:chart-line
-    url: "/local/analytics-dashboard.html"
-    require_admin: false
-
 # Example of exposing our custom integration (if it provides platforms)
 # enterprise_example:
 
