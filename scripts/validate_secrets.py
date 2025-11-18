@@ -203,7 +203,7 @@ def main() -> int:
         help="Path to secrets.yaml file (default: auto-detect)",
     )
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Print detailed information"
+        "-v", "--verbose", action="store_true", help="Print detailed information (including missing secret names)"
     )
     parser.add_argument(
         "--fail-on-missing",
@@ -229,25 +229,28 @@ def main() -> int:
         # pylint: disable=logging-sensitive-data
         # nosec B608  # noqa: S608
         # Intentionally logging secret names (keys), not values
-        for ref in sorted(
-            missing_references, key=lambda r: (r.secret_name, str(r.file_path))
-        ):
-            # Note: Logging secret names (keys) is intentional for validation reporting
-            # This does not log secret values (credentials)
-            print(f"  {ref}", file=sys.stderr)  # pylint: disable=logging-sensitive-data
+        # Only print missing secret references in verbose mode to avoid leaking secret names
+        if args.verbose:
+            for ref in sorted(
+                missing_references, key=lambda r: (r.secret_name, str(r.file_path))
+            ):
+                # Note: Logging secret names (keys) is intentional for validation reporting
+                # This does not log secret values (credentials)
+                print(f"  {ref}", file=sys.stderr)  # pylint: disable=logging-sensitive-data
 
         print(f"\n{len(missing_references)} missing secret(s)", file=sys.stderr)
 
-        # Get unique secret names (keys, not values - safe to log for validation)
-        # pylint: disable=logging-sensitive-data
-        # nosec B608  # noqa: S608
         missing_secret_names = sorted(
             {ref.secret_name for ref in missing_references}
         )
-        print(
-            f"\nMissing secret names: {', '.join(missing_secret_names)}",
-            file=sys.stderr,
-        )  # pylint: disable=logging-sensitive-data
+        # Print missing secret names only in verbose mode; otherwise, redact/omit
+        if args.verbose:
+            print(
+                f"\nMissing secret names: {', '.join(missing_secret_names)}",
+                file=sys.stderr,
+            )  # pylint: disable=logging-sensitive-data
+        else:
+            print(f"\n(Missing secret names hidden; run with --verbose to show)", file=sys.stderr)
 
         if args.fail_on_missing:
             return 1

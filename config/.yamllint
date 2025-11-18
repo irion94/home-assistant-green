@@ -3,7 +3,7 @@ extends: default
 rules:
   truthy: disable
   line-length:
-    max: 120  # More lenient for Home Assistant configs with long entity IDs
+    max: 120
 yaml-files:
   - '*.yaml'
 custom-tags:
