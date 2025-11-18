@@ -1,7 +1,7 @@
 id,name,manufacturer,model,sw_version,area,via_device,disabled_by
 fafc3a6854b4cb5b797624cd938a6453,Sun,,,,,,
 ee33cd2a3459d02723374eba26fcc4d6,Home Assistant Core,Home Assistant,Home Assistant Core,2025.11.1,,,
-1d3384cfdbf81faff72138875d6f2081,Home Assistant Supervisor,Home Assistant,Home Assistant Supervisor,2025.11.1,,,
+1d3384cfdbf81faff72138875d6f2081,Home Assistant Supervisor,Home Assistant,Home Assistant Supervisor,2025.11.3,,,
 76e6d9463ae13e4db38c57b7253bea8d,Home Assistant Host,Home Assistant,Home Assistant Host,,,,
 c19d77a7726fb0e2ec232dd583e62e53,Home Assistant Operating System,Home Assistant,Home Assistant Operating System,16.3,,,
 1ea1d4d44f02fc4ed5d98a08e52e2bb8,Backup,Home Assistant,Home Assistant Backup,2025.11.1,,,
