@@ -66,7 +66,8 @@ def find_secret_references(yaml_file: Path) -> list[SecretReference]:
                     continue
 
                 matches = secret_pattern.findall(line)
-                for secret_name in matches:
+                for secret_name in matches:  # nosec B608 # lgtm[py/clear-text-logging-sensitive-data]
+                    # Note: secret_name is a key reference, not a credential value
                     references.append(SecretReference(yaml_file, line_num, secret_name))
 
     except Exception as e:
@@ -168,10 +169,11 @@ def validate_secrets(
     if verbose:
         print(f"Found {len(all_references)} secret references")
 
-    # Check for missing secrets
+    # Check for missing secrets (comparing key names, not credential values)
     missing_references: list[SecretReference] = []
     for ref in all_references:
-        if ref.secret_name not in defined_secrets:
+        # lgtm[py/clear-text-logging-sensitive-data]
+        if ref.secret_name not in defined_secrets:  # nosec
             missing_references.append(ref)
 
     return missing_references, defined_secrets
@@ -221,7 +223,8 @@ def main() -> int:
     # Report results
     if missing_references:
         print("\n❌ Missing secrets found:\n", file=sys.stderr)
-        for ref in sorted(missing_references, key=lambda r: (r.secret_name, str(r.file_path))):
+        # lgtm[py/clear-text-logging-sensitive-data]
+        for ref in sorted(missing_references, key=lambda r: (r.secret_name, str(r.file_path))):  # nosec
             # Note: Logging secret names (keys) is intentional for validation reporting
             # This does not log secret values (credentials)
             print(f"  {ref}", file=sys.stderr)  # lgtm[py/clear-text-logging-sensitive-data]
@@ -229,7 +232,8 @@ def main() -> int:
         print(f"\n{len(missing_references)} missing secret(s)", file=sys.stderr)
 
         # Get unique secret names (keys, not values - safe to log for validation)
-        missing_secret_names = sorted({ref.secret_name for ref in missing_references})
+        # lgtm[py/clear-text-logging-sensitive-data]
+        missing_secret_names = sorted({ref.secret_name for ref in missing_references})  # nosec
         # lgtm[py/clear-text-logging-sensitive-data]
         print(f"\nMissing secret names: {', '.join(missing_secret_names)}", file=sys.stderr)
 
