@@ -26,12 +26,15 @@ automation: !include automations.yaml
 # Example of exposing our custom integration (if it provides platforms)
 # enterprise_example:
 
-# Strava Coach Integration
+# ============================================================================
+# STRAVA INTEGRATIONS (Two separate integrations, both use same API creds)
+# ============================================================================
+# 1. Strava Coach (custom) - Advanced coaching metrics (ATL/CTL/TSB, LLM insights)
 strava_coach:
   client_id: !secret strava_client_id
   client_secret: !secret strava_client_secret
 
-  # Strava Coach Integration
+# 2. HA Strava (community) - Basic Strava sensors (activities, stats, athlete data)
 ha_strava:
   client_id: !secret strava_client_id
   client_secret: !secret strava_client_secret

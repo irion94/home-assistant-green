@@ -25,6 +25,7 @@ export HA_SSH_PORT="${HA_SSH_PORT:-22}"
 if [ -f ".env.local" ]; then
     echo "[deploy_local] Loading credentials from .env.local"
     set -a
+    # shellcheck source=/dev/null
     source .env.local
     set +a
 fi

@@ -29,21 +29,21 @@ cards:
           - type: markdown
             content: |
               ### 📊 Twoje aktywności Strava
-              
+
               **Ostatni bieg:** {{ states('sensor.strava_igor_wojcik_run') }}
               - 📅 {{ as_timestamp(states('sensor.strava_igor_wojcik_run_date')) | timestamp_custom('%Y-%m-%d %H:%M') }}
               - 🏃 {{ states('sensor.strava_igor_wojcik_run_distance') | float | round(1) }} km
               - ⏱️ {% set seconds = states('sensor.strava_igor_wojcik_run_moving_time') | int %}{{ (seconds // 3600) }}:{{ '%02d' | format((seconds % 3600) // 60) }}:{{ '%02d' | format(seconds % 60) }}
               - ❤️ {{ states('sensor.strava_igor_wojcik_run_average_heartrate') | float | round(1) }} bpm
               - 👍 {{ states('sensor.strava_igor_wojcik_run_kudos') }} kudos
-              
+
               **Ostatnia jazda:** {{ states('sensor.strava_igor_wojcik_ride') }}
               - 📅 {{ as_timestamp(states('sensor.strava_igor_wojcik_ride_date')) | timestamp_custom('%Y-%m-%d %H:%M') }}
               - 🚴 {{ states('sensor.strava_igor_wojcik_ride_distance') | float | round(1) }} km
               - ⏱️ {% set seconds = states('sensor.strava_igor_wojcik_ride_moving_time') | int %}{{ (seconds // 3600) }}:{{ '%02d' | format((seconds % 3600) // 60) }}:{{ '%02d' | format(seconds % 60) }}
               - ⬆️ {{ states('sensor.strava_igor_wojcik_ride_elevation_gain') | float | round(1) }} m
               - 👍 {{ states('sensor.strava_igor_wojcik_ride_kudos') }} kudos
-              
+
               ---
               _💡 Dane synchronizują się automatycznie ze Strava_
 

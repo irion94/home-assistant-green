@@ -7,7 +7,7 @@ set -euo pipefail
 : "${HA_SSH_KEY:?Missing HA_SSH_KEY}"
 HA_SSH_PORT="${HA_SSH_PORT:-22}"
 
-SSH_CMD="ssh -i ${HA_SSH_KEY} -p ${HA_SSH_PORT} -o StrictHostKeyChecking=no ${HA_SSH_USER}@${HA_HOST}"
+SSH_CMD="ssh -i ${HA_SSH_KEY} -p ${HA_SSH_PORT} -o StrictHostKeyChecking=accept-new ${HA_SSH_USER}@${HA_HOST}"
 
 echo "[diagnose] Testing SSH connection to ${HA_SSH_USER}@${HA_HOST}:${HA_SSH_PORT}"
 echo ""

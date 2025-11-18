@@ -22,7 +22,10 @@ set -euo pipefail
 
 # Load .env.local if present (to get HA_* values)
 if [[ -f ".env.local" ]]; then
-  set -a; source ./.env.local; set +a
+  set -a
+  # shellcheck source=/dev/null
+  source ./.env.local
+  set +a
 fi
 
 : "${HA_HOST:?Missing HA_HOST}"
@@ -55,7 +58,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 REMOTE_PREFIX="${HA_SSH_USER}@${HA_HOST}:/config/"
-SSH_OPTS=("-i" "${HA_SSH_KEY}" "-p" "${HA_SSH_PORT}" "-o" "StrictHostKeyChecking=no")
+SSH_OPTS=("-i" "${HA_SSH_KEY}" "-p" "${HA_SSH_PORT}" "-o" "StrictHostKeyChecking=accept-new")
 RSYNC_BASE=(rsync -avz -e "ssh ${SSH_OPTS[*]}")
 
 # Build excludes

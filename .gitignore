@@ -80,9 +80,13 @@ cache/
 
 # CI files (if generated locally)
 coverage/
+htmlcov/
+coverage.xml
+.coverage
 pytest_cache/
 .mypy_cache/
 .tox/
+.ruff_cache/
 
 ##############################
 # INVENTORY DATA

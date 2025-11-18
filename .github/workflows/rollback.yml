@@ -1,0 +1,206 @@
+name: Rollback Deployment
+
+# Manual workflow to rollback to a previous configuration
+# Uses config snapshots from CI artifacts to restore previous state
+
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot_run_id:
+        description: 'GitHub Run ID of the snapshot to restore (from CI workflow artifacts)'
+        required: true
+        type: string
+      confirm_rollback:
+        description: 'Type "ROLLBACK" to confirm this operation'
+        required: true
+        type: string
+      skip_backup:
+        description: 'Skip creating backup before rollback (NOT recommended)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  validate-input:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate confirmation
+        run: |
+          if [ "${{ inputs.confirm_rollback }}" != "ROLLBACK" ]; then
+            echo "::error::Rollback not confirmed. You must type 'ROLLBACK' to proceed."
+            exit 1
+          fi
+          echo "✓ Rollback confirmed"
+
+      - name: Display rollback information
+        run: |
+          echo "### Rollback Information" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Snapshot Run ID**: ${{ inputs.snapshot_run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Skip Backup**: ${{ inputs.skip_backup }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered By**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  rollback:
+    needs: validate-input
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v4
+
+      - name: Download snapshot artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: config-snapshot-${{ inputs.snapshot_run_id }}
+          path: rollback-config/
+          run-id: ${{ inputs.snapshot_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify snapshot contents
+        run: |
+          echo "[rollback] Verifying snapshot contents..."
+          if [ ! -f "rollback-config/configuration.yaml" ]; then
+            echo "::error::Invalid snapshot: configuration.yaml not found"
+            exit 1
+          fi
+          echo "✓ Snapshot appears valid"
+
+          echo "[rollback] Snapshot contents:"
+          find rollback-config -type f -name "*.yaml" | head -20
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Write SSH key
+        run: |
+          echo "${{ secrets.HA_SSH_KEY }}" > id_ha
+          chmod 600 id_ha
+
+      - name: Create backup before rollback
+        if: ${{ !inputs.skip_backup }}
+        env:
+          HA_HOST: ${{ secrets.HA_HOST }}
+          HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
+          HA_SSH_PORT: ${{ secrets.HA_SSH_PORT }}
+          HA_SSH_KEY: ${{ github.workspace }}/id_ha
+        run: |
+          echo "[rollback] Creating pre-rollback backup..."
+
+          # Create backup via HA CLI
+          ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
+            "${HA_SSH_USER}@${HA_HOST}" \
+            "ha backups new --name 'pre-rollback-$(date +%Y%m%d-%H%M%S)'"
+
+          echo "✓ Pre-rollback backup created"
+
+      - name: Sync rollback configuration
+        env:
+          HA_HOST: ${{ secrets.HA_HOST }}
+          HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
+          HA_SSH_PORT: ${{ secrets.HA_SSH_PORT }}
+          HA_SSH_KEY: ${{ github.workspace }}/id_ha
+        run: |
+          echo "[rollback] Syncing rollback configuration to Home Assistant..."
+
+          # Sync configuration from snapshot
+          rsync -avz --delete \
+            -e "ssh -i ${HA_SSH_KEY} -p ${HA_SSH_PORT} -o StrictHostKeyChecking=accept-new" \
+            --exclude '.storage' \
+            --exclude 'custom_components/**' \
+            --exclude 'www/community/**' \
+            --exclude 'home-assistant_v2.db*' \
+            --exclude '*.db' \
+            --exclude '*.db-shm' \
+            --exclude '*.db-wal' \
+            rollback-config/ "${HA_SSH_USER}@${HA_HOST}:/config/"
+
+          echo "✓ Configuration synced"
+
+      - name: Validate rolled-back configuration
+        env:
+          HA_HOST: ${{ secrets.HA_HOST }}
+          HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
+          HA_SSH_PORT: ${{ secrets.HA_SSH_PORT }}
+          HA_SSH_KEY: ${{ github.workspace }}/id_ha
+        run: |
+          echo "[rollback] Validating configuration..."
+
+          ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
+            "${HA_SSH_USER}@${HA_HOST}" \
+            "docker exec homeassistant python -m homeassistant --script check_config --config /config"
+
+          echo "✓ Configuration valid"
+
+      - name: Restart Home Assistant
+        env:
+          HA_HOST: ${{ secrets.HA_HOST }}
+          HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
+          HA_SSH_PORT: ${{ secrets.HA_SSH_PORT }}
+          HA_SSH_KEY: ${{ github.workspace }}/id_ha
+        run: |
+          echo "[rollback] Restarting Home Assistant..."
+          RESTART_START=$(date +%s)
+
+          ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
+            "${HA_SSH_USER}@${HA_HOST}" \
+            "ha core restart"
+
+          # Health check
+          echo "[rollback] Waiting for Home Assistant to come back online..."
+          MAX_WAIT=300
+          WAIT_INTERVAL=5
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            sleep $WAIT_INTERVAL
+            ELAPSED=$((ELAPSED + WAIT_INTERVAL))
+
+            if ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
+              "${HA_SSH_USER}@${HA_HOST}" \
+              "ha core info 2>/dev/null | grep -q 'state: running'" 2>/dev/null; then
+
+              RESTART_END=$(date +%s)
+              RESTART_DURATION=$((RESTART_END - RESTART_START))
+              echo "✓ Home Assistant is healthy (took ${RESTART_DURATION}s)"
+              exit 0
+            fi
+
+            echo "[rollback] Still waiting... (${ELAPSED}s elapsed)"
+          done
+
+          echo "::error::Home Assistant did not come back online within ${MAX_WAIT}s"
+          exit 1
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f id_ha
+
+      - name: Report rollback success
+        if: success()
+        run: |
+          echo "### ✅ Rollback Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Home Assistant has been rolled back to snapshot from run ${{ inputs.snapshot_run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next Steps**:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Verify Home Assistant is functioning correctly" >> $GITHUB_STEP_SUMMARY
+          echo "2. Check automations and integrations" >> $GITHUB_STEP_SUMMARY
+          echo "3. Review what caused the need for rollback" >> $GITHUB_STEP_SUMMARY
+          echo "4. Fix issues before deploying again" >> $GITHUB_STEP_SUMMARY
+
+      - name: Report rollback failure
+        if: failure()
+        run: |
+          echo "### ❌ Rollback Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The rollback operation failed. Manual intervention may be required." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Troubleshooting**:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Check the workflow logs for specific errors" >> $GITHUB_STEP_SUMMARY
+          echo "2. Verify SSH connectivity to Home Assistant" >> $GITHUB_STEP_SUMMARY
+          echo "3. Check that the snapshot artifact exists and is valid" >> $GITHUB_STEP_SUMMARY
+          echo "4. Consider manual configuration restore from backup" >> $GITHUB_STEP_SUMMARY

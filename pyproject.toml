@@ -5,7 +5,18 @@ requires-python = ">=3.11"
 dependencies = []
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-asyncio", "homeassistant>=2024.7.0"]
+test = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-homeassistant-custom-component>=0.13.0",
+    "homeassistant>=2024.3.0,<2024.4.0",  # Python 3.11 compatible (3.12+ required for >=2024.4.0)
+]
+dev = [
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+    "pre-commit>=3.5.0",
+]
 
 [build-system]
 requires = ["setuptools>=61.0"]
@@ -17,5 +28,96 @@ packages = []
 [tool.setuptools.package-data]
 "*" = []
 
+# ============================================================================
+# PYTEST CONFIGURATION
+# ============================================================================
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+# Coverage measurement for infrastructure tests only
+# Note: Custom component unit tests will be added in future iterations
+addopts = "-v --cov=scripts --cov-report=term-missing --cov-report=html"
+
+# ============================================================================
+# COVERAGE CONFIGURATION
+# ============================================================================
+# NOTE: This measures coverage of infrastructure code (scripts/validate_secrets.py, etc.)
+# Custom component coverage will be measured separately in future test improvements
+[tool.coverage.run]
+source = ["scripts"]
+omit = [
+    "tests/*",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+# Threshold set to 0 for infrastructure testing phase
+# Currently testing config/automation validation (no script execution coverage yet)
+# Will increase threshold when script tests are added in future iterations
+fail_under = 0
+
+# ============================================================================
+# RUFF CONFIGURATION (Linting & Formatting)
+# ============================================================================
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG", "S"]
+"scripts/*" = ["T201"]  # Allow print statements in scripts
+
+# ============================================================================
+# MYPY CONFIGURATION (Type Checking)
+# ============================================================================
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+follow_imports = "normal"
+
+[[tool.mypy.overrides]]
+module = [
+    "homeassistant.*",
+    "pytest_homeassistant_custom_component.*",
+]
+ignore_missing_imports = true

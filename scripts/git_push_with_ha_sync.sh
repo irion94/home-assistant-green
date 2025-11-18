@@ -41,7 +41,10 @@ done
 
 # Load .env.local if present (to get HA_* values)
 if [[ -f ".env.local" ]]; then
-  set -a; source ./.env.local; set +a
+  set -a
+  # shellcheck source=/dev/null
+  source ./.env.local
+  set +a
 fi
 
 # Remaining args passed to git push

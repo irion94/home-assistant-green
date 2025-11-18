@@ -34,4 +34,3 @@ template:
             states('sensor.tauron_amiplus_123_yearly_energy_generation') | is_number and
             states('sensor.tauron_amiplus_123_yearly_energy_consumption') | is_number
           }}
-

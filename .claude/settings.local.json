@@ -9,7 +9,13 @@
       "Bash(done)",
       "Bash(chmod:*)",
       "Bash(git rev-parse:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(gh api:*)",
+      "Bash(pytest:*)",
+      "Bash(python3 -m pytest:*)",
+      "Bash(pip3 install:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run list:*)"
     ]
   },
   "enableAllProjectMcpServers": false

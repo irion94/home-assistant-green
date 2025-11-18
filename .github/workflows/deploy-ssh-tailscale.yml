@@ -6,7 +6,7 @@ name: Deploy (SSH) - via Tailscale
 # securely without port forwarding.
 #
 # Setup completed:
-# ✅ Tailscale installed on HA (100.116.140.76)
+# ✅ Tailscale installed on HA
 # ✅ OAuth credentials configured
 # ✅ GitHub Secrets updated
 #
@@ -30,6 +30,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Record deployment start time
+        id: start-time
+        run: |
+          echo "timestamp=$(date +%s)" >> $GITHUB_OUTPUT
+          echo "datetime=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+
       - name: Checkout repo
         uses: actions/checkout@v4
 
@@ -63,6 +69,7 @@ jobs:
           fi
 
       - name: Deploy via SSH
+        id: deploy
         env:
           HA_HOST: ${{ secrets.HA_HOST }}
           HA_SSH_USER: ${{ secrets.HA_SSH_USER }}
@@ -72,3 +79,133 @@ jobs:
           STRAVA_CLIENT_SECRET: ${{ secrets.STRAVA_CLIENT_SECRET }}
         run: |
           ./scripts/deploy_via_ssh.sh
+
+      - name: Calculate deployment metrics
+        id: metrics
+        if: always()
+        run: |
+          END_TIME=$(date +%s)
+          START_TIME=${{ steps.start-time.outputs.timestamp }}
+          DURATION=$((END_TIME - START_TIME))
+          MINUTES=$((DURATION / 60))
+          SECONDS=$((DURATION % 60))
+
+          echo "duration=${DURATION}" >> $GITHUB_OUTPUT
+          echo "duration_formatted=${MINUTES}m ${SECONDS}s" >> $GITHUB_OUTPUT
+
+      - name: Report deployment success
+        if: success()
+        run: |
+          echo "### ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployment Metrics**" >> $GITHUB_STEP_SUMMARY
+          echo "- **Duration**: ${{ steps.metrics.outputs.duration_formatted }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Started**: ${{ steps.start-time.outputs.datetime }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by**: @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Changes Deployed**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          git log --oneline -5 >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🏠 Home Assistant has been updated and is running healthy." >> $GITHUB_STEP_SUMMARY
+
+      - name: Report deployment failure
+        if: failure()
+        run: |
+          echo "### ❌ Deployment Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployment Metrics**" >> $GITHUB_STEP_SUMMARY
+          echo "- **Duration**: ${{ steps.metrics.outputs.duration_formatted }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Started**: ${{ steps.start-time.outputs.datetime }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Failed at**: $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Rollback Options**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Check the workflow logs for error details" >> $GITHUB_STEP_SUMMARY
+          echo "2. Use the [Rollback workflow](${{ github.server_url }}/${{ github.repository }}/actions/workflows/rollback.yml) if needed" >> $GITHUB_STEP_SUMMARY
+          echo "3. Previous config snapshot: \`config-snapshot-${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Send deployment success notification
+        if: success()
+        continue-on-error: true
+        run: |
+          # Create notification badge
+          STATUS_BADGE="✅ Success"
+          MESSAGE="Home Assistant deployment completed successfully in ${{ steps.metrics.outputs.duration_formatted }}"
+
+          # GitHub CLI notification (always available)
+          echo "::notice title=Deployment Success::${MESSAGE}"
+
+          # Optional: Slack notification (if webhook configured)
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+              -H 'Content-Type: application/json' \
+              -d '{
+                "text": "'"${STATUS_BADGE}"' Home Assistant Deployment",
+                "blocks": [
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "*'"${STATUS_BADGE}"' Home Assistant Deployment*\n'"${MESSAGE}"'\n\n*Triggered by:* @${{ github.actor }}\n*Duration:* ${{ steps.metrics.outputs.duration_formatted }}\n*Commit:* `${{ github.sha }}`"
+                    }
+                  }
+                ]
+              }'
+          fi
+
+      - name: Send deployment failure notification
+        if: failure()
+        continue-on-error: true
+        run: |
+          # Create notification badge
+          STATUS_BADGE="❌ Failed"
+          MESSAGE="Home Assistant deployment failed after ${{ steps.metrics.outputs.duration_formatted }}"
+
+          # GitHub CLI notification (always available)
+          echo "::error title=Deployment Failed::${MESSAGE}"
+
+          # Optional: Slack notification (if webhook configured)
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+              -H 'Content-Type: application/json' \
+              -d '{
+                "text": "'"${STATUS_BADGE}"' Home Assistant Deployment",
+                "blocks": [
+                  {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "*'"${STATUS_BADGE}"' Home Assistant Deployment*\n'"${MESSAGE}"'\n\n*Triggered by:* @${{ github.actor }}\n*Duration:* ${{ steps.metrics.outputs.duration_formatted }}\n\n⚠️ *Action Required:* Check workflow logs and consider rollback if needed."
+                    }
+                  },
+                  {
+                    "type": "actions",
+                    "elements": [
+                      {
+                        "type": "button",
+                        "text": {
+                          "type": "plain_text",
+                          "text": "View Workflow"
+                        },
+                        "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                      },
+                      {
+                        "type": "button",
+                        "text": {
+                          "type": "plain_text",
+                          "text": "Rollback"
+                        },
+                        "url": "${{ github.server_url }}/${{ github.repository }}/actions/workflows/rollback.yml"
+                      }
+                    ]
+                  }
+                ]
+              }'
+          fi
+
+      - name: Cleanup SSH key
+        if: always()
+        run: |
+          rm -f id_ha
