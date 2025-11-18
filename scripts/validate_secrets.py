@@ -203,7 +203,7 @@ def main() -> int:
         help="Path to secrets.yaml file (default: auto-detect)",
     )
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Print detailed information (including missing secret names)"
+        "-v", "--verbose", action="store_true", help="Print detailed information (missing secret locations; secret names are not shown)"
     )
     parser.add_argument(
         "--fail-on-missing",
@@ -234,9 +234,8 @@ def main() -> int:
             for ref in sorted(
                 missing_references, key=lambda r: (r.secret_name, str(r.file_path))
             ):
-                # Note: Logging secret names (keys) is intentional for validation reporting
-                # This does not log secret values (credentials)
-                print(f"  {ref}", file=sys.stderr)  # pylint: disable=logging-sensitive-data
+                # Only log location of missing secret, not the secret name.
+                print(f"  {ref.file_path}:{ref.line_number}", file=sys.stderr)
 
         print(f"\n{len(missing_references)} missing secret(s)", file=sys.stderr)
 
@@ -246,9 +245,9 @@ def main() -> int:
         # Print missing secret names only in verbose mode; otherwise, redact/omit
         if args.verbose:
             print(
-                f"\nMissing secret names: {', '.join(missing_secret_names)}",
+                f"\nNumber of unique missing secret names: {len(missing_secret_names)}",
                 file=sys.stderr,
-            )  # pylint: disable=logging-sensitive-data
+            )
         else:
             print(f"\n(Missing secret names hidden; run with --verbose to show)", file=sys.stderr)
 
