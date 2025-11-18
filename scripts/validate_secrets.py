@@ -37,7 +37,12 @@ class SecretReference:
         self.secret_name = secret_name
 
     def __repr__(self) -> str:
-        """Return string representation."""
+        """Return string representation.
+
+        Note: This logs secret names (keys), not secret values (credentials).
+        This is intentional for validation reporting.
+        """
+        # lgtm[py/clear-text-logging-sensitive-data]
         return f"{self.file_path}:{self.line_number}: !secret {self.secret_name}"
 
 
@@ -217,12 +222,15 @@ def main() -> int:
     if missing_references:
         print("\n❌ Missing secrets found:\n", file=sys.stderr)
         for ref in sorted(missing_references, key=lambda r: (r.secret_name, str(r.file_path))):
-            print(f"  {ref}", file=sys.stderr)
+            # Note: Logging secret names (keys) is intentional for validation reporting
+            # This does not log secret values (credentials)
+            print(f"  {ref}", file=sys.stderr)  # lgtm[py/clear-text-logging-sensitive-data]
 
         print(f"\n{len(missing_references)} missing secret(s)", file=sys.stderr)
 
-        # Get unique secret names
+        # Get unique secret names (keys, not values - safe to log for validation)
         missing_secret_names = sorted({ref.secret_name for ref in missing_references})
+        # lgtm[py/clear-text-logging-sensitive-data]
         print(f"\nMissing secret names: {', '.join(missing_secret_names)}", file=sys.stderr)
 
         if args.fail_on_missing:

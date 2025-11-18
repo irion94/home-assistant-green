@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from typing import Any
 
 import pytest
 import yaml
 from homeassistant.config import YAML_CONFIG_FILE
-from homeassistant.helpers import config_validation as cv
-from homeassistant.util.yaml import load_yaml
 
 pytestmark = pytest.mark.asyncio
 
