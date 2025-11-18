@@ -504,7 +504,9 @@
 
             async fetchStates() {
                 try {
-                    const response = await fetch(`${this.baseUrl}/api/states`);
+                    const response = await fetch(`${this.baseUrl}/api/states`, {
+                        credentials: 'same-origin'
+                    });
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     return await response.json();
                 } catch (error) {
@@ -517,7 +519,10 @@
                 try {
                     const timestamp = startTime || new Date(Date.now() - CONFIG.historyHours * 3600000).toISOString();
                     const response = await fetch(
-                        `${this.baseUrl}/api/history/period/${timestamp}?filter_entity_id=${entityId}`
+                        `${this.baseUrl}/api/history/period/${timestamp}?filter_entity_id=${entityId}`,
+                        {
+                            credentials: 'same-origin'
+                        }
                     );
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     return await response.json();
@@ -535,6 +540,7 @@
                     const response = await fetch(`${this.baseUrl}/api/services/${domain}/${service}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
                         body: JSON.stringify({ entity_id: entityId })
                     });
 
