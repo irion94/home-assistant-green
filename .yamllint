@@ -14,12 +14,13 @@ yaml-files:
   - '*.yml'
 
 ignore: |
-  .storage/
-  backups/
-  deps/
-  .cloud/
-  tts/
-  custom_components/solarman/
-  custom_components/xiaomi_home/
-  dashboards/
-  blueprints/
+  config/.storage/
+  config/backups/
+  config/deps/
+  config/.cloud/
+  config/tts/
+  config/dashboards/
+  config/blueprints/
+  config/custom_components/solarman/
+  config/custom_components/xiaomi_home/
+  config/custom_components/ha_strava/
