@@ -1,0 +1,19 @@
+---
+# Analytics Dashboard Package
+# Adds a custom HTML dashboard as a sidebar panel in Home Assistant
+#
+# Features:
+# - Real-time sensor monitoring
+# - Interactive controls for lights/switches
+# - Historical charts (temperature, energy)
+# - System statistics
+# - Modern responsive design
+#
+# Access: Home Assistant sidebar → "Analytics" tab
+
+panel_iframe:
+  analytics:
+    title: "Analytics"
+    icon: mdi:chart-line
+    url: "/local/analytics-dashboard.html"
+    require_admin: false
