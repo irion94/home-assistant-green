@@ -19,3 +19,7 @@ ignore: |
   deps/
   .cloud/
   tts/
+  custom_components/solarman/
+  custom_components/xiaomi_home/
+  dashboards/
+  blueprints/
