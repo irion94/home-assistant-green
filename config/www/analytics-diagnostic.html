@@ -64,6 +64,7 @@
         <button onclick="testAPI()">Test API Connection</button>
         <button onclick="testEntities()">Check Entities</button>
         <button onclick="testHistory()">Test History API</button>
+        <button onclick="clearToken(); location.reload();" style="background: var(--danger);">Clear Token & Reload</button>
         <div id="api-results"></div>
     </div>
 
@@ -105,6 +106,60 @@
         };
 
         let logLines = [];
+        let authToken = null;
+
+        // Get authentication token
+        function getAuthToken() {
+            // Try to get from localStorage first
+            let token = localStorage.getItem('ha_access_token');
+
+            if (!token) {
+                // Try to get from parent window (if in iframe)
+                try {
+                    if (window.parent && window.parent !== window) {
+                        // When embedded in HA, try to access parent's auth
+                        token = window.parent.localStorage?.getItem('hassTokens');
+                        if (token) {
+                            try {
+                                const tokens = JSON.parse(token);
+                                token = tokens.access_token;
+                                log('Retrieved auth token from parent window');
+                            } catch (e) {
+                                log(`Failed to parse parent tokens: ${e.message}`, 'error');
+                            }
+                        }
+                    }
+                } catch (e) {
+                    log(`Cannot access parent window: ${e.message}`, 'info');
+                }
+            }
+
+            if (!token) {
+                // Prompt user for token
+                log('No authentication token found', 'error');
+                token = prompt(
+                    'Please enter a Home Assistant long-lived access token:\n\n' +
+                    'Create one at: Profile → Security → Long-Lived Access Tokens\n\n' +
+                    'The token will be stored in localStorage for future use.'
+                );
+
+                if (token) {
+                    localStorage.setItem('ha_access_token', token);
+                    log('Token saved to localStorage');
+                }
+            } else {
+                log('Using stored authentication token');
+            }
+
+            return token;
+        }
+
+        // Clear stored token (for testing/debugging)
+        function clearToken() {
+            localStorage.removeItem('ha_access_token');
+            authToken = null;
+            log('Authentication token cleared');
+        }
 
         function log(message, type = 'info') {
             const timestamp = new Date().toISOString();
@@ -143,12 +198,19 @@
             log('Starting API connection test');
 
             try {
+                if (!authToken) {
+                    authToken = getAuthToken();
+                    if (!authToken) {
+                        throw new Error('No authentication token provided');
+                    }
+                }
+
                 const baseUrl = window.location.origin;
                 log(`Making request to: ${baseUrl}/api/states`);
 
                 const response = await fetch(`${baseUrl}/api/states`, {
-                    credentials: 'same-origin',
                     headers: {
+                        'Authorization': `Bearer ${authToken}`,
                         'Content-Type': 'application/json'
                     }
                 });
@@ -196,9 +258,19 @@
             log('Starting entity check');
 
             try {
+                if (!authToken) {
+                    authToken = getAuthToken();
+                    if (!authToken) {
+                        throw new Error('No authentication token provided');
+                    }
+                }
+
                 const baseUrl = window.location.origin;
                 const response = await fetch(`${baseUrl}/api/states`, {
-                    credentials: 'same-origin'
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
                 });
 
                 if (!response.ok) {
@@ -256,6 +328,13 @@
             log('Starting history API test');
 
             try {
+                if (!authToken) {
+                    authToken = getAuthToken();
+                    if (!authToken) {
+                        throw new Error('No authentication token provided');
+                    }
+                }
+
                 const baseUrl = window.location.origin;
                 const testEntity = 'sensor.daikin_sypialnia_climatecontrol_room_temperature';
                 const timestamp = new Date(Date.now() - 3600000).toISOString(); // 1 hour ago
@@ -263,7 +342,12 @@
                 log(`Testing history for: ${testEntity}`);
                 const response = await fetch(
                     `${baseUrl}/api/history/period/${timestamp}?filter_entity_id=${testEntity}`,
-                    { credentials: 'same-origin' }
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    }
                 );
 
                 log(`History API status: ${response.status}`);

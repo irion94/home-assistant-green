@@ -500,12 +500,68 @@
                 this.baseUrl = window.location.origin;
                 this.connected = false;
                 this.subscribers = [];
+                this.authToken = null;
+            }
+
+            getAuthToken() {
+                if (this.authToken) return this.authToken;
+
+                // Try to get from localStorage first
+                let token = localStorage.getItem('ha_access_token');
+
+                if (!token) {
+                    // Try to get from parent window (if in iframe)
+                    try {
+                        if (window.parent && window.parent !== window) {
+                            token = window.parent.localStorage?.getItem('hassTokens');
+                            if (token) {
+                                try {
+                                    const tokens = JSON.parse(token);
+                                    token = tokens.access_token;
+                                    console.log('Retrieved auth token from parent window');
+                                } catch (e) {
+                                    console.error('Failed to parse parent tokens:', e);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.info('Cannot access parent window:', e);
+                    }
+                }
+
+                if (!token) {
+                    // Prompt user for token
+                    console.error('No authentication token found');
+                    token = prompt(
+                        'Please enter a Home Assistant long-lived access token:\n\n' +
+                        'Create one at: Profile → Security → Long-Lived Access Tokens\n\n' +
+                        'The token will be stored in localStorage for future use.'
+                    );
+
+                    if (token) {
+                        localStorage.setItem('ha_access_token', token);
+                        console.log('Token saved to localStorage');
+                    }
+                } else {
+                    console.log('Using stored authentication token');
+                }
+
+                this.authToken = token;
+                return token;
+            }
+
+            getHeaders() {
+                const token = this.getAuthToken();
+                return {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                };
             }
 
             async fetchStates() {
                 try {
                     const response = await fetch(`${this.baseUrl}/api/states`, {
-                        credentials: 'same-origin'
+                        headers: this.getHeaders()
                     });
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     return await response.json();
@@ -521,7 +577,7 @@
                     const response = await fetch(
                         `${this.baseUrl}/api/history/period/${timestamp}?filter_entity_id=${entityId}`,
                         {
-                            credentials: 'same-origin'
+                            headers: this.getHeaders()
                         }
                     );
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -539,8 +595,7 @@
 
                     const response = await fetch(`${this.baseUrl}/api/services/${domain}/${service}`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'same-origin',
+                        headers: this.getHeaders(),
                         body: JSON.stringify({ entity_id: entityId })
                     });
 
