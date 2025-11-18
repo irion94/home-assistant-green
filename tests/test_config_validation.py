@@ -13,6 +13,27 @@ pytestmark = pytest.mark.asyncio
 CONFIG_DIR = Path(__file__).parent.parent / "config"
 
 
+def create_ha_yaml_loader():
+    """Create a YAML loader that supports Home Assistant custom tags.
+
+    Returns a SafeLoader with constructors for HA tags like !include, !secret, etc.
+    """
+    loader = yaml.SafeLoader
+
+    # Add constructors for Home Assistant custom tags
+    # These just return placeholder values since we're only testing syntax
+    loader.add_constructor("!include", lambda loader, node: f"!include {node.value}")
+    loader.add_constructor("!include_dir_named", lambda loader, node: {})
+    loader.add_constructor("!include_dir_list", lambda loader, node: [])
+    loader.add_constructor("!include_dir_merge_list", lambda loader, node: [])
+    loader.add_constructor("!include_dir_merge_named", lambda loader, node: {})
+    loader.add_constructor("!secret", lambda loader, node: f"!secret {node.value}")
+    loader.add_constructor("!env_var", lambda loader, node: f"!env_var {node.value}")
+    loader.add_constructor("!input", lambda loader, node: f"!input {node.value}")
+
+    return loader
+
+
 class TestConfigurationValidation:
     """Test suite for validating Home Assistant configuration files."""
 
@@ -33,7 +54,7 @@ class TestConfigurationValidation:
         try:
             with open(config_file, encoding="utf-8") as f:
                 # Try to parse the YAML, allowing HA-specific tags
-                yaml.safe_load(f)
+                yaml.load(f, Loader=create_ha_yaml_loader())
         except yaml.YAMLError as err:
             pytest.fail(f"configuration.yaml has invalid YAML syntax: {err}")
 
@@ -71,7 +92,7 @@ class TestConfigurationValidation:
         for yaml_file in yaml_files:
             try:
                 with open(yaml_file, encoding="utf-8") as f:
-                    yaml.safe_load(f)
+                    yaml.load(f, Loader=create_ha_yaml_loader())
             except yaml.YAMLError as err:
                 pytest.fail(f"{yaml_file.name} has invalid YAML syntax: {err}")
 

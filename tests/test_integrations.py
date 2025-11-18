@@ -43,7 +43,8 @@ class TestCustomComponentStructure:
         """Test that manifest versions follow semantic versioning."""
         import re
 
-        semver_pattern = r"^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$"
+        # Allow optional leading 'v' prefix (common in many projects)
+        semver_pattern = r"^v?\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$"
 
         for component_dir in component_dirs:
             manifest_file = component_dir / "manifest.json"
@@ -56,7 +57,7 @@ class TestCustomComponentStructure:
             version = manifest.get("version", "")
             assert re.match(
                 semver_pattern, version
-            ), f"{component_dir.name} version '{version}' should follow semver"
+            ), f"{component_dir.name} version '{version}' should follow semver (with optional 'v' prefix)"
 
     def test_manifest_requirements_format(self, component_dirs: list[Path]) -> None:
         """Test that manifest requirements are properly formatted."""
