@@ -1,10 +1,8 @@
 ---
 # Analytics Dashboard Documentation
 #
-# NOTE: panel_iframe configuration cannot be in packages, it's in configuration.yaml
-#
 # Dashboard location: /config/www/analytics-dashboard.html
-# Configuration: See configuration.yaml → panel_iframe → analytics
+# Configuration: See dashboards/views/16_analytics.yaml
 #
 # Features:
 # - Real-time sensor monitoring (system, environment)
@@ -20,8 +18,9 @@
 # - Material Icons and Google Fonts
 # - CSS Grid/Flexbox responsive layouts
 #
-# Access: Home Assistant sidebar → "Analytics" tab
-# Direct URL: http://your-ha-ip:8123/local/analytics-dashboard.html
+# Access Methods:
+# 1. Lovelace Dashboard → "Analytics" view (embedded iframe)
+# 2. Direct URL: http://your-ha-ip:8123/local/analytics-dashboard.html
 #
 # This package file is kept for documentation purposes.
 # You can add related sensors, automations, or scripts here if needed.

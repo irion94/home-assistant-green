@@ -1,0 +1,21 @@
+---
+# Analytics Dashboard View
+# Modern HTML dashboard with real-time monitoring, controls, and charts
+
+title: Analytics
+path: analytics
+icon: mdi:chart-line
+badges: []
+cards:
+  - type: iframe
+    url: /local/analytics-dashboard.html
+    aspect_ratio: 100%
+    style: |
+      ha-card {
+        height: calc(100vh - 120px) !important;
+        border: none;
+        box-shadow: none;
+      }
+      iframe {
+        height: 100% !important;
+      }

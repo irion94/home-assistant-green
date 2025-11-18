@@ -25,6 +25,8 @@
             --success: #4caf50;
             --warning: #ff9800;
             --danger: #f44336;
+            --heating: #ff6b6b;
+            --cooling: #4ecdc4;
             --shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
 
@@ -139,6 +141,18 @@
             border-left: 3px solid var(--accent);
         }
 
+        .sensor-item.heating {
+            border-left-color: var(--heating);
+        }
+
+        .sensor-item.cooling {
+            border-left-color: var(--cooling);
+        }
+
+        .sensor-item.climate {
+            border-left-color: var(--warning);
+        }
+
         .sensor-name {
             font-size: 14px;
             color: var(--text-secondary);
@@ -156,6 +170,28 @@
             font-size: 14px;
             color: var(--text-secondary);
             font-weight: 400;
+        }
+
+        .climate-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--secondary-bg);
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .climate-status.heating {
+            border-left: 3px solid var(--heating);
+        }
+
+        .climate-status.cooling {
+            border-left: 3px solid var(--cooling);
+        }
+
+        .climate-status.off {
+            border-left: 3px solid var(--text-secondary);
         }
 
         .controls-grid {
@@ -295,6 +331,35 @@
     <div id="errorContainer"></div>
 
     <div class="dashboard-grid">
+        <!-- Heating & Climate - NEW SECTION -->
+        <div class="card full-width">
+            <div class="card-header">
+                <div class="card-title">
+                    <span class="material-icons">heat_pump</span>
+                    Heating & Climate
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+                <!-- AC Sypialnia -->
+                <div id="acSypialnia" style="padding: 12px; background: var(--secondary-bg); border-radius: 8px;">
+                    <div style="font-weight: 500; margin-bottom: 8px; color: var(--accent);">🌡️ AC Sypialnia</div>
+                    <div class="loading"><div class="spinner"></div>Loading...</div>
+                </div>
+
+                <!-- AC Salon -->
+                <div id="acSalon" style="padding: 12px; background: var(--secondary-bg); border-radius: 8px;">
+                    <div style="font-weight: 500; margin-bottom: 8px; color: var(--accent);">🌡️ AC Salon</div>
+                    <div class="loading"><div class="spinner"></div>Loading...</div>
+                </div>
+
+                <!-- Heat Pump -->
+                <div id="heatPump" style="padding: 12px; background: var(--secondary-bg); border-radius: 8px;">
+                    <div style="font-weight: 500; margin-bottom: 8px; color: var(--accent);">♨️ Pompa ciepła</div>
+                    <div class="loading"><div class="spinner"></div>Loading...</div>
+                </div>
+            </div>
+        </div>
+
         <!-- System Overview -->
         <div class="card">
             <div class="card-header">
@@ -380,16 +445,16 @@
             </div>
         </div>
 
-        <!-- Power Consumption Chart -->
+        <!-- HVAC Energy Consumption Chart -->
         <div class="card full-width">
             <div class="card-header">
                 <div class="card-title">
-                    <span class="material-icons">electrical_services</span>
-                    Energy Analytics
+                    <span class="material-icons">local_fire_department</span>
+                    HVAC Energy Consumption (Today)
                 </div>
             </div>
             <div class="chart-container">
-                <canvas id="energyChart"></canvas>
+                <canvas id="hvacEnergyChart"></canvas>
             </div>
         </div>
     </div>
@@ -399,15 +464,40 @@
         const CONFIG = {
             updateInterval: 5000, // 5 seconds
             historyHours: 24,
-            useWebSocket: true
+            useWebSocket: false
+        };
+
+        // HVAC entity mappings
+        const HVAC_ENTITIES = {
+            acSypialnia: {
+                climate: 'climate.daikin_sypialnia_room_temperature',
+                temp: 'sensor.daikin_sypialnia_climatecontrol_room_temperature',
+                outdoor: 'sensor.daikin_sypialnia_climatecontrol_outdoor_temperature',
+                heating: 'sensor.daikin_sypialnia_climatecontrol_heating_daily_electrical_consumption',
+                cooling: 'sensor.daikin_sypialnia_climatecontrol_cooling_daily_electrical_consumption'
+            },
+            acSalon: {
+                climate: 'climate.daikin_salon_room_temperature',
+                temp: 'sensor.daikin_salon_climatecontrol_room_temperature',
+                outdoor: 'sensor.daikin_salon_climatecontrol_outdoor_temperature',
+                heating: 'sensor.daikin_salon_climatecontrol_heating_daily_electrical_consumption',
+                cooling: 'sensor.daikin_salon_climatecontrol_cooling_daily_electrical_consumption'
+            },
+            heatPump: {
+                climate: 'climate.pompa_ciepla_room_temperature',
+                temp: 'sensor.pompa_ciepla_climatecontrol_room_temperature',
+                water: 'sensor.pompa_ciepla_climatecontrol_leaving_water_temperature',
+                outdoor: 'sensor.pompa_ciepla_climatecontrol_outdoor_temperature',
+                heating: 'sensor.pompa_ciepla_climatecontrol_heating_daily_electrical_consumption',
+                cooling: 'sensor.pompa_ciepla_climatecontrol_cooling_daily_electrical_consumption',
+                dhw: 'sensor.pompa_ciepla_domestichotwatertank_heating_daily_electrical_consumption'
+            }
         };
 
         // Home Assistant API Client
         class HomeAssistantClient {
             constructor() {
                 this.baseUrl = window.location.origin;
-                this.token = localStorage.getItem('ha_token');
-                this.ws = null;
                 this.connected = false;
                 this.subscribers = [];
             }
@@ -507,12 +597,148 @@
                 setInterval(() => this.loadData(), CONFIG.updateInterval);
             }
 
+            getEntityState(entityId) {
+                return this.states.find(s => s.entity_id === entityId);
+            }
+
             render() {
+                this.renderHVAC();
                 this.renderSystemSensors();
                 this.renderEnvironmentSensors();
                 this.renderControls();
                 this.renderStats();
                 this.updateCharts();
+            }
+
+            renderHVAC() {
+                // AC Sypialnia
+                this.renderClimate('acSypialnia', HVAC_ENTITIES.acSypialnia, 'AC Sypialnia');
+
+                // AC Salon
+                this.renderClimate('acSalon', HVAC_ENTITIES.acSalon, 'AC Salon');
+
+                // Heat Pump
+                this.renderHeatPump();
+            }
+
+            renderClimate(containerId, entities, name) {
+                const container = document.getElementById(containerId);
+                const climate = this.getEntityState(entities.climate);
+                const temp = this.getEntityState(entities.temp);
+                const outdoor = this.getEntityState(entities.outdoor);
+                const heating = this.getEntityState(entities.heating);
+                const cooling = this.getEntityState(entities.cooling);
+
+                if (!climate || !temp) {
+                    container.innerHTML = '<div style="color: var(--text-secondary); padding: 8px;">Not available</div>';
+                    return;
+                }
+
+                const hvacAction = climate.attributes.hvac_action || 'off';
+                const currentTemp = temp.state;
+                const targetTemp = climate.attributes.temperature || '-';
+                const outdoorTemp = outdoor ? outdoor.state : '-';
+
+                const statusClass = hvacAction === 'heating' ? 'heating' :
+                                  hvacAction === 'cooling' ? 'cooling' : 'off';
+                const statusIcon = hvacAction === 'heating' ? '🔥' :
+                                 hvacAction === 'cooling' ? '❄️' : '⏸️';
+                const statusText = hvacAction === 'heating' ? 'Grzanie' :
+                                 hvacAction === 'cooling' ? 'Chłodzenie' : 'Wyłączone';
+
+                container.innerHTML = `
+                    <div class="climate-status ${statusClass}" style="margin-bottom: 12px;">
+                        <span>${statusIcon}</span>
+                        <span>${statusText}</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Obecna:</span>
+                            <span style="font-weight: 500;">${currentTemp}°C</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Zadana:</span>
+                            <span style="font-weight: 500;">${targetTemp}°C</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Zewnętrzna:</span>
+                            <span style="font-weight: 500;">${outdoorTemp}°C</span>
+                        </div>
+                        ${heating ? `
+                        <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);">
+                            <span style="color: var(--heating);">🔥 Grzanie:</span>
+                            <span style="font-weight: 500;">${heating.state} ${heating.attributes.unit_of_measurement || ''}</span>
+                        </div>
+                        ` : ''}
+                        ${cooling ? `
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--cooling);">❄️ Chłodzenie:</span>
+                            <span style="font-weight: 500;">${cooling.state} ${cooling.attributes.unit_of_measurement || ''}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            renderHeatPump() {
+                const container = document.getElementById('heatPump');
+                const entities = HVAC_ENTITIES.heatPump;
+                const climate = this.getEntityState(entities.climate);
+                const temp = this.getEntityState(entities.temp);
+                const water = this.getEntityState(entities.water);
+                const outdoor = this.getEntityState(entities.outdoor);
+                const heating = this.getEntityState(entities.heating);
+                const dhw = this.getEntityState(entities.dhw);
+
+                if (!climate || !temp) {
+                    container.innerHTML = '<div style="color: var(--text-secondary); padding: 8px;">Not available</div>';
+                    return;
+                }
+
+                const hvacAction = climate.attributes.hvac_action || 'off';
+                const statusClass = hvacAction === 'heating' ? 'heating' :
+                                  hvacAction === 'cooling' ? 'cooling' : 'off';
+                const statusIcon = hvacAction === 'heating' ? '🔥' :
+                                 hvacAction === 'cooling' ? '❄️' : '⏸️';
+                const statusText = hvacAction === 'heating' ? 'Grzanie' :
+                                 hvacAction === 'cooling' ? 'Chłodzenie' : 'Wyłączone';
+
+                container.innerHTML = `
+                    <div class="climate-status ${statusClass}" style="margin-bottom: 12px;">
+                        <span>${statusIcon}</span>
+                        <span>${statusText}</span>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Temp. pokojowa:</span>
+                            <span style="font-weight: 500;">${temp.state}°C</span>
+                        </div>
+                        ${water ? `
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Woda wyjściowa:</span>
+                            <span style="font-weight: 500;">${water.state}°C</span>
+                        </div>
+                        ` : ''}
+                        ${outdoor ? `
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--text-secondary);">Zewnętrzna:</span>
+                            <span style="font-weight: 500;">${outdoor.state}°C</span>
+                        </div>
+                        ` : ''}
+                        ${heating ? `
+                        <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);">
+                            <span style="color: var(--heating);">🔥 Obieg grzewczy:</span>
+                            <span style="font-weight: 500;">${heating.state} ${heating.attributes.unit_of_measurement || ''}</span>
+                        </div>
+                        ` : ''}
+                        ${dhw ? `
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--warning);">💧 CWU:</span>
+                            <span style="font-weight: 500;">${dhw.state} ${dhw.attributes.unit_of_measurement || ''}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
             }
 
             renderSystemSensors() {
@@ -543,11 +769,13 @@
             renderEnvironmentSensors() {
                 const container = document.getElementById('environmentSensors');
                 const sensors = this.states.filter(s =>
-                    s.attributes.device_class === 'temperature' ||
+                    (s.attributes.device_class === 'temperature' ||
                     s.attributes.device_class === 'humidity' ||
                     s.attributes.device_class === 'pressure' ||
                     s.entity_id.includes('temperature') ||
-                    s.entity_id.includes('humidity')
+                    s.entity_id.includes('humidity')) &&
+                    !s.entity_id.includes('daikin') &&
+                    !s.entity_id.includes('pompa')
                 ).slice(0, 5);
 
                 if (sensors.length === 0) {
@@ -651,26 +879,38 @@
                     });
                 }
 
-                // Energy Chart
-                const energyCtx = document.getElementById('energyChart');
-                if (energyCtx) {
-                    this.charts.energy = new Chart(energyCtx, {
+                // HVAC Energy Chart
+                const hvacCtx = document.getElementById('hvacEnergyChart');
+                if (hvacCtx) {
+                    this.charts.hvacEnergy = new Chart(hvacCtx, {
                         type: 'bar',
                         data: {
-                            labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-                            datasets: [{
-                                label: 'Energy (kWh)',
-                                data: [12, 19, 15, 18, 14, 16, 13],
-                                backgroundColor: 'rgba(76, 175, 80, 0.6)',
-                                borderColor: '#4caf50',
-                                borderWidth: 2
-                            }]
+                            labels: ['AC Sypialnia', 'AC Salon', 'Heat Pump'],
+                            datasets: [
+                                {
+                                    label: 'Heating (kWh)',
+                                    data: [0, 0, 0],
+                                    backgroundColor: 'rgba(255, 107, 107, 0.6)',
+                                    borderColor: '#ff6b6b',
+                                    borderWidth: 2
+                                },
+                                {
+                                    label: 'Cooling (kWh)',
+                                    data: [0, 0, 0],
+                                    backgroundColor: 'rgba(78, 205, 196, 0.6)',
+                                    borderColor: '#4ecdc4',
+                                    borderWidth: 2
+                                }
+                            ]
                         },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
                             plugins: {
-                                legend: { display: false }
+                                legend: {
+                                    display: true,
+                                    labels: { color: '#e1e1e1' }
+                                }
                             },
                             scales: {
                                 x: {
@@ -688,11 +928,9 @@
             }
 
             async updateCharts() {
-                // Find a temperature sensor
-                const tempSensor = this.states.find(s =>
-                    s.attributes.device_class === 'temperature' ||
-                    s.entity_id.includes('temperature')
-                );
+                // Update temperature chart
+                const tempSensor = this.getEntityState(HVAC_ENTITIES.acSypialnia.temp) ||
+                                 this.states.find(s => s.attributes.device_class === 'temperature');
 
                 if (tempSensor && this.charts.temperature) {
                     const history = await this.client.fetchHistory(tempSensor.entity_id);
@@ -708,6 +946,32 @@
                         this.charts.temperature.data.datasets[0].data = values;
                         this.charts.temperature.update('none');
                     }
+                }
+
+                // Update HVAC energy chart
+                if (this.charts.hvacEnergy) {
+                    const acSypialniaHeating = this.getEntityState(HVAC_ENTITIES.acSypialnia.heating);
+                    const acSypialniaCooling = this.getEntityState(HVAC_ENTITIES.acSypialnia.cooling);
+                    const acSalonHeating = this.getEntityState(HVAC_ENTITIES.acSalon.heating);
+                    const acSalonCooling = this.getEntityState(HVAC_ENTITIES.acSalon.cooling);
+                    const hpHeating = this.getEntityState(HVAC_ENTITIES.heatPump.heating);
+                    const hpCooling = this.getEntityState(HVAC_ENTITIES.heatPump.cooling);
+
+                    const heatingData = [
+                        acSypialniaHeating ? parseFloat(acSypialniaHeating.state) : 0,
+                        acSalonHeating ? parseFloat(acSalonHeating.state) : 0,
+                        hpHeating ? parseFloat(hpHeating.state) : 0
+                    ];
+
+                    const coolingData = [
+                        acSypialniaCooling ? parseFloat(acSypialniaCooling.state) : 0,
+                        acSalonCooling ? parseFloat(acSalonCooling.state) : 0,
+                        hpCooling ? parseFloat(hpCooling.state) : 0
+                    ];
+
+                    this.charts.hvacEnergy.data.datasets[0].data = heatingData;
+                    this.charts.hvacEnergy.data.datasets[1].data = coolingData;
+                    this.charts.hvacEnergy.update('none');
                 }
             }
 
