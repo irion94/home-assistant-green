@@ -1,13 +1,21 @@
-# .yamllint
+---
 extends: default
+
 rules:
   truthy: disable
   line-length:
     max: 120
+    allow-non-breakable-words: true
+    allow-non-breakable-inline-mappings: true
+  document-start: disable
+
 yaml-files:
   - '*.yaml'
-custom-tags:
-  - !include
-  - !include_dir_named
-  - !include_dir_merge_named
-  - !include_dir_merge_list
+  - '*.yml'
+
+ignore: |
+  .storage/
+  backups/
+  deps/
+  .cloud/
+  tts/
