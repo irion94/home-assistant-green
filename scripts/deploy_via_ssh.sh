@@ -56,23 +56,23 @@ while [ $ELAPSED -lt $MAX_WAIT ]; do
   sleep $WAIT_INTERVAL
   ELAPSED=$((ELAPSED + WAIT_INTERVAL))
 
-  # Check if HA is running
+  # Check if HA API is responding (more reliable than checking state)
   if ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
     "${HA_SSH_USER}@${HA_HOST}" \
-    "ha core info 2>/dev/null | grep -q 'state: running'" 2>/dev/null; then
+    "curl -s -f http://localhost:8123/api/ -H 'Content-Type: application/json' >/dev/null 2>&1"; then
 
     RESTART_END=$(date +%s)
     RESTART_DURATION=$((RESTART_END - RESTART_START))
-    echo "[deploy] ✓ Home Assistant is healthy (took ${RESTART_DURATION}s)"
+    echo "[deploy] ✓ Home Assistant API is responding (took ${RESTART_DURATION}s)"
 
-    # Additional health check: verify API is responding
-    echo "[deploy] verifying API health..."
+    # Additional verification: check core info
+    echo "[deploy] verifying core status..."
     if ssh -i "${HA_SSH_KEY}" -p "${HA_SSH_PORT}" -o StrictHostKeyChecking=accept-new \
       "${HA_SSH_USER}@${HA_HOST}" \
-      "curl -s -f http://localhost:8123/api/ -H 'Content-Type: application/json' >/dev/null 2>&1"; then
-      echo "[deploy] ✓ API is responding"
+      "ha core info >/dev/null 2>&1"; then
+      echo "[deploy] ✓ Core info accessible"
     else
-      echo "[deploy] ⚠ Warning: HA is running but API may not be ready yet"
+      echo "[deploy] ⚠ Warning: Core info check failed, but API is responding"
     fi
 
     echo "[deploy] ✓ deployment successful"
