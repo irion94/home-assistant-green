@@ -41,8 +41,8 @@ class SecretReference:
         Note: This logs secret names (keys), not secret values (credentials).
         This is intentional for validation reporting.
         """
+        # pylint: disable=logging-sensitive-data
         # nosec B608  # noqa: S608
-        # nosemgrep: python.lang.security.audit.logging-sensitive-data
         return f"{self.file_path}:{self.line_number}: !secret {self.secret_name}"
 
 
@@ -66,8 +66,8 @@ def find_secret_references(yaml_file: Path) -> list[SecretReference]:
                     continue
 
                 matches = secret_pattern.findall(line)
+                # pylint: disable=logging-sensitive-data
                 # nosec B608  # noqa: S608
-                # nosemgrep: python.lang.security.audit.logging-sensitive-data
                 for secret_name in matches:
                     # Note: secret_name is a key reference, not a credential value
                     references.append(SecretReference(yaml_file, line_num, secret_name))
@@ -173,8 +173,8 @@ def validate_secrets(
 
     # Check for missing secrets (comparing key names, not credential values)
     missing_references: list[SecretReference] = []
+    # pylint: disable=logging-sensitive-data
     # nosec B608  # noqa: S608
-    # nosemgrep: python.lang.security.audit.logging-sensitive-data
     for ref in all_references:
         if ref.secret_name not in defined_secrets:
             missing_references.append(ref)
@@ -226,25 +226,28 @@ def main() -> int:
     # Report results
     if missing_references:
         print("\n❌ Missing secrets found:\n", file=sys.stderr)
-        # Suppression: Only secret names (keys like "api_key") are logged, not credential values
-        # nosemgrep: python.lang.security.audit.logging-sensitive-data
-        for ref in sorted(  # nosec B608  # noqa: S608
+        # pylint: disable=logging-sensitive-data
+        # nosec B608  # noqa: S608
+        # Intentionally logging secret names (keys), not values
+        for ref in sorted(
             missing_references, key=lambda r: (r.secret_name, str(r.file_path))
         ):
             # Note: Logging secret names (keys) is intentional for validation reporting
             # This does not log secret values (credentials)
-            print(f"  {ref}", file=sys.stderr)  # nosec  # noqa: S608
+            print(f"  {ref}", file=sys.stderr)  # pylint: disable=logging-sensitive-data
 
         print(f"\n{len(missing_references)} missing secret(s)", file=sys.stderr)
 
         # Get unique secret names (keys, not values - safe to log for validation)
-        # nosemgrep: python.lang.security.audit.logging-sensitive-data
-        missing_secret_names = sorted(  # nosec B608  # noqa: S608
+        # pylint: disable=logging-sensitive-data
+        # nosec B608  # noqa: S608
+        missing_secret_names = sorted(
             {ref.secret_name for ref in missing_references}
         )
-        print(  # nosec  # noqa: S608
-            f"\nMissing secret names: {', '.join(missing_secret_names)}", file=sys.stderr
-        )
+        print(
+            f"\nMissing secret names: {', '.join(missing_secret_names)}",
+            file=sys.stderr,
+        )  # pylint: disable=logging-sensitive-data
 
         if args.fail_on_missing:
             return 1
