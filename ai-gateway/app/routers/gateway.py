@@ -1,0 +1,156 @@
+"""API router for AI Gateway endpoints.
+
+This module implements the main /ask endpoint that orchestrates
+the natural language → plan → execution pipeline.
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.models import AskRequest, AskResponse, Config
+from app.services.ha_client import HomeAssistantClient
+from app.services.ollama_client import OllamaClient
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+
+def get_config() -> Config:
+    """Dependency to get application configuration.
+
+    Returns:
+        Loaded configuration
+    """
+    return Config()
+
+
+def get_ollama_client(config: Config = Depends(get_config)) -> OllamaClient:
+    """Dependency to get Ollama client.
+
+    Args:
+        config: Application configuration
+
+    Returns:
+        Initialized Ollama client
+    """
+    return OllamaClient(config)
+
+
+def get_ha_client(config: Config = Depends(get_config)) -> HomeAssistantClient:
+    """Dependency to get Home Assistant client.
+
+    Args:
+        config: Application configuration
+
+    Returns:
+        Initialized HA client
+    """
+    return HomeAssistantClient(config)
+
+
+@router.post("/ask", response_model=AskResponse)
+async def ask(
+    request: AskRequest,
+    ollama_client: OllamaClient = Depends(get_ollama_client),
+    ha_client: HomeAssistantClient = Depends(get_ha_client),
+) -> AskResponse:
+    """Process natural language command and execute Home Assistant action.
+
+    Flow:
+    1. Receive natural language command
+    2. Send to Ollama for translation to HA action plan
+    3. Validate the plan
+    4. Execute via Home Assistant REST API
+    5. Return result
+
+    Args:
+        request: Natural language command request
+        ollama_client: Ollama client instance
+        ha_client: Home Assistant client instance
+
+    Returns:
+        Response with execution status and results
+
+    Raises:
+        HTTPException: If processing fails at any stage
+    """
+    # Generate correlation ID for request tracing
+    correlation_id = str(uuid.uuid4())
+    logger.info(f"[{correlation_id}] Processing request: {request.text}")
+
+    try:
+        # Step 1: Translate command to action plan
+        action = await ollama_client.translate_command(request.text)
+
+        if not action:
+            logger.warning(f"[{correlation_id}] Failed to translate command")
+            return AskResponse(
+                status="error",
+                message="Failed to translate command to action plan",
+            )
+
+        # Step 2: Handle "none" action (unsupported/unknown command)
+        if action.action == "none":
+            logger.info(f"[{correlation_id}] Command not supported: {request.text}")
+            return AskResponse(
+                status="success",
+                plan=action,
+                message="Command understood but no action available",
+            )
+
+        # Step 3: Execute service call
+        ha_response = await ha_client.call_service(action)
+
+        if not ha_response:
+            logger.error(f"[{correlation_id}] Failed to execute HA service call")
+            return AskResponse(
+                status="error",
+                plan=action,
+                message="Failed to execute Home Assistant service call",
+            )
+
+        # Step 4: Success!
+        logger.info(f"[{correlation_id}] Successfully executed action")
+        return AskResponse(
+            status="success",
+            plan=action,
+            message="Action executed successfully",
+            ha_response=ha_response,
+        )
+
+    except Exception as e:
+        logger.error(f"[{correlation_id}] Unexpected error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+
+
+@router.get("/health")
+async def health(ha_client: HomeAssistantClient = Depends(get_ha_client)) -> dict[str, str]:
+    """Health check endpoint.
+
+    Verifies that:
+    1. API gateway is running
+    2. Home Assistant is accessible
+
+    Args:
+        ha_client: Home Assistant client instance
+
+    Returns:
+        Health status dictionary
+
+    Raises:
+        HTTPException: If health check fails
+    """
+    # Check HA connectivity
+    ha_ok = await ha_client.health_check()
+
+    if not ha_ok:
+        raise HTTPException(status_code=503, detail="Home Assistant not accessible")
+
+    return {
+        "status": "healthy",
+        "home_assistant": "connected",
+    }
