@@ -61,8 +61,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger.info("AI Gateway starting up")
     logger.info(f"Home Assistant URL: {config.ha_base_url}")
-    logger.info(f"Ollama URL: {config.ollama_base_url}")
-    logger.info(f"Ollama Model: {config.ollama_model}")
+    logger.info(f"LLM Provider: {config.llm_provider}")
+    if config.llm_provider.lower() == "openai":
+        logger.info(f"OpenAI Model: {config.openai_model}")
+    else:
+        logger.info(f"Ollama URL: {config.ollama_base_url}")
+        logger.info(f"Ollama Model: {config.ollama_model}")
 
     yield
 

@@ -48,9 +48,14 @@ services:
       # Home Assistant connection
       - HA_TOKEN=${HA_TOKEN}
       - HA_BASE_URL=${HA_BASE_URL:-http://host.docker.internal:8123}
-      # Ollama connection (running on host)
+      # LLM Provider selection (ollama or openai)
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      # Ollama configuration (used when LLM_PROVIDER=ollama)
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
+      # OpenAI configuration (used when LLM_PROVIDER=openai)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
@@ -88,7 +93,7 @@ services:
       - INFERENCE_FRAMEWORK=tflite
       - AI_GATEWAY_URL=http://host.docker.internal:8080
       - REQUEST_TIMEOUT=120
-      - RECORDING_DURATION=30
+      - RECORDING_DURATION=10
       - ENABLE_BEEP=true
       - BEEP_VOLUME=0.8
       - LOG_LEVEL=INFO

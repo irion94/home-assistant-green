@@ -187,10 +187,10 @@ class AudioCapture:
         max_chunks = int(duration * self.sample_rate / self.chunk_size)
         recorded_chunks = []
 
-        # VAD parameters
-        silence_threshold = 1500  # Audio level below this is considered silence
-        silence_chunks_to_stop = 15  # ~1.2 seconds of silence to stop (at 80ms per chunk)
-        min_speech_chunks = 10  # Minimum ~0.8 seconds of speech before allowing stop
+        # VAD parameters - tuned for faster cutoff
+        silence_threshold = 1000  # Audio level below this is considered silence (lowered for sensitivity)
+        silence_chunks_to_stop = 10  # ~0.8 seconds of silence to stop (reduced from 15)
+        min_speech_chunks = 5  # Minimum ~0.4 seconds of speech before allowing stop
 
         consecutive_silence = 0
         speech_detected = False

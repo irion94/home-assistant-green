@@ -21,10 +21,24 @@ class Config(BaseSettings):
     ha_base_url: str = Field(
         default="http://homeassistant:8123", description="Home Assistant base URL"
     )
+
+    # LLM Provider selection
+    llm_provider: str = Field(
+        default="ollama", description="LLM provider to use: 'ollama' or 'openai'"
+    )
+
+    # Ollama configuration
     ollama_base_url: str = Field(
         default="http://host.docker.internal:11434", description="Ollama API base URL"
     )
     ollama_model: str = Field(default="llama3.2:3b", description="Ollama model to use")
+
+    # OpenAI configuration
+    openai_api_key: str | None = Field(
+        default=None, description="OpenAI API key (required if llm_provider=openai)"
+    )
+    openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model to use")
+
     log_level: str = Field(default="INFO", description="Logging level")
 
 

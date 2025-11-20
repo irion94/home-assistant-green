@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
 from app.models import AskRequest, AskResponse, Config
 from app.services.ha_client import HomeAssistantClient
-from app.services.ollama_client import OllamaClient
+from app.services.llm_client import LLMClient, get_llm_client
 from app.services.whisper_client import WhisperClient, get_whisper_client
 
 logger = logging.getLogger(__name__)
@@ -29,16 +29,16 @@ def get_config() -> Config:
     return Config()
 
 
-def get_ollama_client(config: Config = Depends(get_config)) -> OllamaClient:
-    """Dependency to get Ollama client.
+def get_llm_client_dependency(config: Config = Depends(get_config)) -> LLMClient:
+    """Dependency to get LLM client (Ollama or OpenAI).
 
     Args:
         config: Application configuration
 
     Returns:
-        Initialized Ollama client
+        Initialized LLM client based on configuration
     """
-    return OllamaClient(config)
+    return get_llm_client(config)
 
 
 def get_ha_client(config: Config = Depends(get_config)) -> HomeAssistantClient:
@@ -56,7 +56,7 @@ def get_ha_client(config: Config = Depends(get_config)) -> HomeAssistantClient:
 @router.post("/ask", response_model=AskResponse)
 async def ask(
     request: AskRequest,
-    ollama_client: OllamaClient = Depends(get_ollama_client),
+    llm_client: LLMClient = Depends(get_llm_client_dependency),
     ha_client: HomeAssistantClient = Depends(get_ha_client),
 ) -> AskResponse:
     """Process natural language command and execute Home Assistant action.
@@ -85,7 +85,7 @@ async def ask(
 
     try:
         # Step 1: Translate command to action plan
-        action = await ollama_client.translate_command(request.text)
+        action = await llm_client.translate_command(request.text)
 
         if not action:
             logger.warning(f"[{correlation_id}] Failed to translate command")
@@ -132,7 +132,7 @@ async def ask(
 async def voice(
     audio: UploadFile = File(..., description="Audio file in WAV format"),
     whisper_client: WhisperClient = Depends(get_whisper_client),
-    ollama_client: OllamaClient = Depends(get_ollama_client),
+    llm_client: LLMClient = Depends(get_llm_client_dependency),
     ha_client: HomeAssistantClient = Depends(get_ha_client),
 ) -> AskResponse:
     """Process voice command audio and execute Home Assistant action.
@@ -186,7 +186,7 @@ async def voice(
         logger.info(f"[{correlation_id}] Transcribed text: {text}")
 
         # Step 3: Translate command to action plan
-        action = await ollama_client.translate_command(text)
+        action = await llm_client.translate_command(text)
 
         if not action:
             logger.warning(f"[{correlation_id}] Failed to translate command")

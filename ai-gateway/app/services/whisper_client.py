@@ -115,7 +115,7 @@ def get_whisper_client() -> WhisperClient:
     global _whisper_client
     if _whisper_client is None:
         _whisper_client = WhisperClient(
-            model_size="base",  # Good balance for RPi5
+            model_size="small",  # Better accuracy for Polish (base was too inaccurate)
             device="cpu",
             compute_type="int8",  # Optimized for CPU
         )
