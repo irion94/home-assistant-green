@@ -78,7 +78,7 @@ class WhisperClient:
                 segments, info = model.transcribe(
                     str(tmp_path),
                     beam_size=5,
-                    language="en",  # Force English (faster, also handles Polish reasonably)
+                    language="pl",  # Polish language for transcription
                     vad_filter=True,  # Filter out silence
                 )
 
