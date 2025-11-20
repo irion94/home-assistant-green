@@ -39,6 +39,21 @@ class Config(BaseSettings):
     )
     openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model to use")
 
+    # STT Provider selection
+    stt_provider: str = Field(
+        default="vosk", description="STT provider to use: 'whisper' or 'vosk'"
+    )
+
+    # Whisper configuration
+    whisper_model: str = Field(
+        default="small", description="Whisper model size: tiny, base, small, medium, large"
+    )
+
+    # Vosk configuration
+    vosk_model_path: str | None = Field(
+        default=None, description="Path to Vosk model directory (auto-downloads if not set)"
+    )
+
     log_level: str = Field(default="INFO", description="Logging level")
 
 

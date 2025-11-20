@@ -12,10 +12,12 @@ from pathlib import Path
 
 from faster_whisper import WhisperModel
 
+from app.services.stt_client import STTClient
+
 logger = logging.getLogger(__name__)
 
 
-class WhisperClient:
+class WhisperSTTClient(STTClient):
     """Client for Whisper audio transcription."""
 
     def __init__(self, model_size: str = "base", device: str = "cpu", compute_type: str = "int8"):
@@ -74,12 +76,20 @@ class WhisperClient:
                 # Get model (lazy loading)
                 model = self._get_model()
 
-                # Transcribe
+                # Transcribe with initial prompt for better Polish recognition
+                # The initial prompt provides vocabulary hints to improve accuracy
+                initial_prompt = (
+                    "Zapal światło w salonie. Zgaś światło w kuchni. "
+                    "Zapal lampkę. Zgaś lampę. Włącz światło w sypialni. "
+                    "Wyłącz światło. Powiedz cześć. Ustaw jasność."
+                )
+
                 segments, info = model.transcribe(
                     str(tmp_path),
                     beam_size=5,
                     language="pl",  # Polish language for transcription
                     vad_filter=True,  # Filter out silence
+                    initial_prompt=initial_prompt,  # Vocabulary hints
                 )
 
                 # Combine all segments
@@ -102,21 +112,6 @@ class WhisperClient:
             raise
 
 
-# Global instance for dependency injection
-_whisper_client: WhisperClient | None = None
 
-
-def get_whisper_client() -> WhisperClient:
-    """Get or create global Whisper client instance.
-
-    Returns:
-        WhisperClient instance
-    """
-    global _whisper_client
-    if _whisper_client is None:
-        _whisper_client = WhisperClient(
-            model_size="small",  # Better accuracy for Polish (base was too inaccurate)
-            device="cpu",
-            compute_type="int8",  # Optimized for CPU
-        )
-    return _whisper_client
+# Keep old alias for backwards compatibility
+WhisperClient = WhisperSTTClient

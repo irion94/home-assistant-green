@@ -67,6 +67,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         logger.info(f"Ollama URL: {config.ollama_base_url}")
         logger.info(f"Ollama Model: {config.ollama_model}")
+    logger.info(f"STT Provider: {config.stt_provider}")
+    if config.stt_provider.lower() == "whisper":
+        logger.info(f"Whisper Model: {config.whisper_model}")
 
     yield
 

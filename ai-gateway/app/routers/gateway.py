@@ -13,8 +13,9 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
 from app.models import AskRequest, AskResponse, Config
 from app.services.ha_client import HomeAssistantClient
+from app.services.intent_matcher import IntentMatcher, get_intent_matcher
 from app.services.llm_client import LLMClient, get_llm_client
-from app.services.whisper_client import WhisperClient, get_whisper_client
+from app.services.stt_client import STTClient, get_stt_client
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -56,6 +57,7 @@ def get_ha_client(config: Config = Depends(get_config)) -> HomeAssistantClient:
 @router.post("/ask", response_model=AskResponse)
 async def ask(
     request: AskRequest,
+    intent_matcher: IntentMatcher = Depends(get_intent_matcher),
     llm_client: LLMClient = Depends(get_llm_client_dependency),
     ha_client: HomeAssistantClient = Depends(get_ha_client),
 ) -> AskResponse:
@@ -63,14 +65,15 @@ async def ask(
 
     Flow:
     1. Receive natural language command
-    2. Send to Ollama for translation to HA action plan
-    3. Validate the plan
+    2. Try fast pattern matching first
+    3. Fall back to LLM if no match
     4. Execute via Home Assistant REST API
     5. Return result
 
     Args:
         request: Natural language command request
-        ollama_client: Ollama client instance
+        intent_matcher: Fast pattern matcher instance
+        llm_client: LLM client instance (Ollama or OpenAI)
         ha_client: Home Assistant client instance
 
     Returns:
@@ -84,8 +87,14 @@ async def ask(
     logger.info(f"[{correlation_id}] Processing request: {request.text}")
 
     try:
-        # Step 1: Translate command to action plan
-        action = await llm_client.translate_command(request.text)
+        # Step 1: Try fast pattern matching first
+        action = intent_matcher.match(request.text)
+        if action:
+            logger.info(f"[{correlation_id}] Fast path: matched via pattern")
+        else:
+            # Step 2: Fall back to LLM for complex commands
+            logger.info(f"[{correlation_id}] Slow path: using LLM")
+            action = await llm_client.translate_command(request.text)
 
         if not action:
             logger.warning(f"[{correlation_id}] Failed to translate command")
@@ -128,10 +137,23 @@ async def ask(
         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
 
+def get_stt_client_dependency(config: Config = Depends(get_config)) -> STTClient:
+    """Dependency to get STT client (Whisper or Vosk).
+
+    Args:
+        config: Application configuration
+
+    Returns:
+        Initialized STT client based on configuration
+    """
+    return get_stt_client(config)
+
+
 @router.post("/voice", response_model=AskResponse)
 async def voice(
     audio: UploadFile = File(..., description="Audio file in WAV format"),
-    whisper_client: WhisperClient = Depends(get_whisper_client),
+    stt_client: STTClient = Depends(get_stt_client_dependency),
+    intent_matcher: IntentMatcher = Depends(get_intent_matcher),
     llm_client: LLMClient = Depends(get_llm_client_dependency),
     ha_client: HomeAssistantClient = Depends(get_ha_client),
 ) -> AskResponse:
@@ -168,7 +190,7 @@ async def voice(
 
         # Step 2: Transcribe audio to text
         try:
-            text = await whisper_client.transcribe(audio_bytes)
+            text = await stt_client.transcribe(audio_bytes)
         except Exception as e:
             logger.error(f"[{correlation_id}] Transcription failed: {e}")
             return AskResponse(
@@ -185,8 +207,14 @@ async def voice(
 
         logger.info(f"[{correlation_id}] Transcribed text: {text}")
 
-        # Step 3: Translate command to action plan
-        action = await llm_client.translate_command(text)
+        # Step 3: Try fast pattern matching first
+        action = intent_matcher.match(text)
+        if action:
+            logger.info(f"[{correlation_id}] Fast path: matched via pattern")
+        else:
+            # Step 4: Fall back to LLM for complex commands
+            logger.info(f"[{correlation_id}] Slow path: using LLM")
+            action = await llm_client.translate_command(text)
 
         if not action:
             logger.warning(f"[{correlation_id}] Failed to translate command")
@@ -195,7 +223,7 @@ async def voice(
                 message="Failed to translate command to action plan",
             )
 
-        # Step 4: Handle "none" action (unsupported/unknown command)
+        # Step 5: Handle "none" action (unsupported/unknown command)
         if action.action == "none":
             logger.info(f"[{correlation_id}] Command not supported: {text}")
             return AskResponse(
@@ -204,7 +232,7 @@ async def voice(
                 message=f"Understood: '{text}' but no action available",
             )
 
-        # Step 5: Execute service call
+        # Step 6: Execute service call
         ha_response = await ha_client.call_service(action)
 
         if ha_response is None:
@@ -215,7 +243,7 @@ async def voice(
                 message="Failed to execute Home Assistant service call",
             )
 
-        # Step 6: Success!
+        # Step 7: Success!
         logger.info(f"[{correlation_id}] Successfully executed action from voice command")
         return AskResponse(
             status="success",

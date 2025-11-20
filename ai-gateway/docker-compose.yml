@@ -56,6 +56,9 @@ services:
       # OpenAI configuration (used when LLM_PROVIDER=openai)
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      # STT Provider selection (vosk or whisper)
+      - STT_PROVIDER=${STT_PROVIDER:-vosk}
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
