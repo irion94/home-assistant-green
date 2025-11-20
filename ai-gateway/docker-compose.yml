@@ -7,7 +7,7 @@ services:
     container_name: homeassistant
     network_mode: host
     volumes:
-      - ./ha-config:/config
+      - /mnt/data-ssd/ha-data/ha-config:/config
     environment:
       - TZ=Europe/Warsaw
     restart: unless-stopped
@@ -26,9 +26,9 @@ services:
       - "1883:1883"
       - "9001:9001"
     volumes:
-      - ./mosquitto/config:/mosquitto/config
-      - ./mosquitto/data:/mosquitto/data
-      - ./mosquitto/log:/mosquitto/log
+      - /mnt/data-ssd/ha-data/mosquitto/config:/mosquitto/config
+      - /mnt/data-ssd/ha-data/mosquitto/data:/mosquitto/data
+      - /mnt/data-ssd/ha-data/mosquitto/log:/mosquitto/log
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
@@ -47,15 +47,14 @@ services:
     environment:
       # Home Assistant connection
       - HA_TOKEN=${HA_TOKEN}
-      - HA_BASE_URL=${HA_BASE_URL:-http://homeassistant:8123}
+      - HA_BASE_URL=${HA_BASE_URL:-http://host.docker.internal:8123}
       # Ollama connection (running on host)
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
-      homeassistant:
-        condition: service_healthy
+      - homeassistant
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -66,8 +65,44 @@ services:
       retries: 3
       start_period: 10s
 
-volumes:
-  ha-config:
-  mosquitto-config:
-  mosquitto-data:
-  mosquitto-log:
+  # Wake-Word Detection Service
+  wake-word:
+    build:
+      context: ../wake-word-service
+      dockerfile: Dockerfile
+    container_name: wake-word
+    privileged: true
+    devices:
+      - /dev/snd:/dev/snd
+      - /dev/bus/usb:/dev/bus/usb
+      - /dev/spidev0.0:/dev/spidev0.0
+      - /dev/spidev0.1:/dev/spidev0.1
+      - /dev/gpiomem:/dev/gpiomem
+    environment:
+      - AUDIO_DEVICE=hw:2,0
+      - CHANNELS=6
+      - SAMPLE_RATE=16000
+      - CHUNK_SIZE=1280
+      - WAKE_WORD_MODEL=hey_jarvis
+      - DETECTION_THRESHOLD=0.35
+      - INFERENCE_FRAMEWORK=tflite
+      - AI_GATEWAY_URL=http://host.docker.internal:8080
+      - REQUEST_TIMEOUT=120
+      - RECORDING_DURATION=30
+      - ENABLE_BEEP=true
+      - BEEP_VOLUME=0.8
+      - LOG_LEVEL=INFO
+    depends_on:
+      - ai-gateway
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../wake-word-service/sounds:/app/sounds:ro
+      - /mnt/data-ssd/ha-data/wake-word-models:/app/models
+    group_add:
+      - audio
+
+# Volumes are now using SSD paths directly
+# /mnt/data-ssd/ha-data/ha-config
+# /mnt/data-ssd/ha-data/mosquitto/{config,data,log}

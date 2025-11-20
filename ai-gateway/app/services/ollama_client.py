@@ -17,15 +17,21 @@ logger = logging.getLogger(__name__)
 
 # Entity mapping: friendly names -> Home Assistant entity IDs
 ENTITY_MAPPING = {
-    "living room": "light.living_room_main",
-    "living room lights": "light.living_room_main",
-    "salon": "light.living_room_main",  # Polish
-    "kitchen": "light.kitchen",
-    "kitchen lights": "light.kitchen",
-    "kuchnia": "light.kitchen",  # Polish
-    "bedroom": "light.bedroom",
-    "bedroom lights": "light.bedroom",
-    "sypialnia": "light.bedroom",  # Polish
+    "living room": "light.yeelight_color_0x80156a9",
+    "living room lights": "light.yeelight_color_0x80156a9",
+    "salon": "light.yeelight_color_0x80156a9",  # Polish
+    "lights": "light.yeelight_color_0x80156a9",  # Default to living room
+    "the lights": "light.yeelight_color_0x80156a9",
+    "kitchen": "light.yeelight_color_0x49c27e1",
+    "kitchen lights": "light.yeelight_color_0x49c27e1",
+    "kuchnia": "light.yeelight_color_0x49c27e1",  # Polish
+    "bedroom": "light.yeelight_color_0x80147dd",
+    "bedroom lights": "light.yeelight_color_0x80147dd",
+    "sypialnia": "light.yeelight_color_0x80147dd",  # Polish
+    "lamp 1": "light.yeelight_color_0x801498b",
+    "lampa 1": "light.yeelight_color_0x801498b",
+    "lamp 2": "light.yeelight_color_0x8015154",
+    "lampa 2": "light.yeelight_color_0x8015154",
 }
 
 # System prompt for Ollama - forces JSON-only responses
@@ -39,9 +45,11 @@ CRITICAL RULES:
 5. If you cannot understand the command or map it to an entity, return {"action":"none"}
 
 ENTITY MAPPING:
-- "living room" / "salon" → light.living_room_main
-- "kitchen" / "kuchnia" → light.kitchen
-- "bedroom" / "sypialnia" → light.bedroom
+- "living room" / "salon" / "lights" / "the lights" → light.yeelight_color_0x80156a9
+- "kitchen" / "kuchnia" → light.yeelight_color_0x49c27e1
+- "bedroom" / "sypialnia" → light.yeelight_color_0x80147dd
+- "lamp 1" / "lampa 1" → light.yeelight_color_0x801498b
+- "lamp 2" / "lampa 2" → light.yeelight_color_0x8015154
 
 SUPPORTED ACTIONS:
 - Turn on lights: {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{}}
@@ -50,17 +58,20 @@ SUPPORTED ACTIONS:
 - Unknown/unsupported: {"action":"none"}
 
 RESPONSE FORMAT (STRICTLY JSON ONLY):
-{"action":"call_service","service":"light.turn_on","entity_id":"light.living_room_main","data":{}}
+{"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80156a9","data":{}}
 
 EXAMPLES:
 Input: "Turn on living room lights"
-Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.living_room_main","data":{}}
+Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80156a9","data":{}}
+
+Input: "Turn on the lights"
+Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80156a9","data":{}}
 
 Input: "Wyłącz światło w kuchni"
-Output: {"action":"call_service","service":"light.turn_off","entity_id":"light.kitchen","data":{}}
+Output: {"action":"call_service","service":"light.turn_off","entity_id":"light.yeelight_color_0x49c27e1","data":{}}
 
 Input: "Set bedroom to 50% brightness"
-Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.bedroom","data":{"brightness":128}}
+Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80147dd","data":{"brightness":128}}
 
 Input: "What's the weather?"
 Output: {"action":"none"}
@@ -79,7 +90,7 @@ class OllamaClient:
         """
         self.base_url = config.ollama_base_url
         self.model = config.ollama_model
-        self.timeout = 30.0  # 30 second timeout for LLM requests
+        self.timeout = 90.0  # 90 second timeout for LLM requests (RPi5 can be slow)
 
     async def translate_command(self, command: str) -> HAAction | None:
         """Translate natural language command to Home Assistant action plan.
@@ -134,8 +145,12 @@ class OllamaClient:
 
             return action
 
+        except httpx.TimeoutException:
+            logger.error(f"Timeout calling Ollama (>{self.timeout}s) - model may be loading")
+            return None
+
         except httpx.HTTPError as e:
-            logger.error(f"HTTP error calling Ollama: {e}")
+            logger.error(f"HTTP error calling Ollama: {type(e).__name__}: {e}")
             return None
 
         except Exception as e:

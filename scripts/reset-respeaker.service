@@ -1,0 +1,15 @@
+[Unit]
+Description=Reset ReSpeaker USB device for proper audio initialization
+After=local-fs.target
+Before=docker.service
+Wants=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/irion94/home-assistant-green/scripts/reset-respeaker.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
