@@ -1,0 +1,232 @@
+"""Conversation client for small talk mode with OpenAI streaming.
+
+This module handles conversational AI responses using OpenAI GPT
+with session memory and streaming output for TTS.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING, AsyncIterator
+from collections import defaultdict
+
+import httpx
+
+if TYPE_CHECKING:
+    from app.models import Config
+
+logger = logging.getLogger(__name__)
+
+# Session storage for conversation history
+_sessions: dict[str, list[dict[str, str]]] = defaultdict(list)
+
+# System prompt for conversation mode
+CONVERSATION_SYSTEM_PROMPT = """You are a friendly AI assistant named Jarvis. You are helpful, conversational, and engaging.
+
+Rules:
+1. Keep responses concise (1-3 sentences) - they will be read aloud
+2. Respond in the SAME LANGUAGE the user speaks (Polish or English)
+3. Be natural and conversational, not robotic
+4. You can discuss any topic - weather, news, jokes, facts, etc.
+5. If asked about home automation, mention you can control lights with specific commands
+6. Remember the conversation context
+
+Examples of good responses:
+- User: "What's the weather like?" → "I don't have access to weather data, but I can help you set up a weather sensor in Home Assistant!"
+- User: "Opowiedz żart" → "Dlaczego programista nosi okulary? Bo nie widzi C#!"
+- User: "Tell me something interesting" → "Did you know octopuses have three hearts and blue blood?"
+"""
+
+
+class ConversationClient:
+    """Client for conversational AI using OpenAI streaming."""
+
+    def __init__(self, config: Config):
+        """Initialize conversation client.
+
+        Args:
+            config: Application configuration
+        """
+        self.api_key = config.openai_api_key
+        self.model = config.openai_model
+        self.base_url = "https://api.openai.com/v1"
+        self.timeout = 30.0
+
+        if not self.api_key:
+            raise ValueError("OpenAI API key required for conversation mode")
+
+        logger.info(f"ConversationClient initialized with model={self.model}")
+
+    def get_session(self, session_id: str) -> list[dict[str, str]]:
+        """Get conversation history for a session.
+
+        Args:
+            session_id: Unique session identifier
+
+        Returns:
+            List of message dictionaries
+        """
+        return _sessions[session_id]
+
+    def clear_session(self, session_id: str) -> None:
+        """Clear conversation history for a session.
+
+        Args:
+            session_id: Unique session identifier
+        """
+        if session_id in _sessions:
+            del _sessions[session_id]
+            logger.info(f"Cleared conversation session: {session_id}")
+
+    async def chat(self, text: str, session_id: str) -> str:
+        """Send message and get response (non-streaming).
+
+        Args:
+            text: User message
+            session_id: Session identifier for memory
+
+        Returns:
+            AI response text
+        """
+        # Add user message to history
+        _sessions[session_id].append({"role": "user", "content": text})
+
+        # Build messages with history
+        messages = [
+            {"role": "system", "content": CONVERSATION_SYSTEM_PROMPT},
+            *_sessions[session_id]
+        ]
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": messages,
+                        "max_tokens": 150,  # Keep responses short for TTS
+                        "temperature": 0.7,
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                assistant_message = data["choices"][0]["message"]["content"]
+
+                # Add assistant response to history
+                _sessions[session_id].append({
+                    "role": "assistant",
+                    "content": assistant_message
+                })
+
+                logger.info(
+                    f"Conversation response: session={session_id}, "
+                    f"history_length={len(_sessions[session_id])}"
+                )
+
+                return assistant_message
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"OpenAI API error: {e.response.status_code} - {e.response.text}")
+            raise
+        except Exception as e:
+            logger.error(f"Conversation error: {e}", exc_info=True)
+            raise
+
+    async def chat_stream(self, text: str, session_id: str) -> AsyncIterator[str]:
+        """Send message and stream response.
+
+        Args:
+            text: User message
+            session_id: Session identifier for memory
+
+        Yields:
+            Response text chunks
+        """
+        # Add user message to history
+        _sessions[session_id].append({"role": "user", "content": text})
+
+        # Build messages with history
+        messages = [
+            {"role": "system", "content": CONVERSATION_SYSTEM_PROMPT},
+            *_sessions[session_id]
+        ]
+
+        full_response = ""
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with client.stream(
+                    "POST",
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": messages,
+                        "max_tokens": 150,
+                        "temperature": 0.7,
+                        "stream": True,
+                    },
+                ) as response:
+                    response.raise_for_status()
+
+                    async for line in response.aiter_lines():
+                        if line.startswith("data: "):
+                            data = line[6:]
+                            if data == "[DONE]":
+                                break
+
+                            try:
+                                import json
+                                chunk = json.loads(data)
+                                delta = chunk["choices"][0].get("delta", {})
+                                content = delta.get("content", "")
+                                if content:
+                                    full_response += content
+                                    yield content
+                            except json.JSONDecodeError:
+                                continue
+
+            # Add full response to history
+            _sessions[session_id].append({
+                "role": "assistant",
+                "content": full_response
+            })
+
+            logger.info(
+                f"Streamed conversation: session={session_id}, "
+                f"response_length={len(full_response)}"
+            )
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"OpenAI streaming error: {e.response.status_code}")
+            raise
+        except Exception as e:
+            logger.error(f"Conversation streaming error: {e}", exc_info=True)
+            raise
+
+
+# Global instance
+_conversation_client: ConversationClient | None = None
+
+
+def get_conversation_client(config: Config) -> ConversationClient:
+    """Get or create conversation client.
+
+    Args:
+        config: Application configuration
+
+    Returns:
+        ConversationClient instance
+    """
+    global _conversation_client
+    if _conversation_client is None:
+        _conversation_client = ConversationClient(config)
+    return _conversation_client

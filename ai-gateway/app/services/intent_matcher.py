@@ -66,6 +66,18 @@ TURN_OFF_KEYWORDS = [
     "zgaść", "sgas", "z gaś",
 ]
 
+# Conversation mode triggers
+CONVERSATION_START_KEYWORDS = [
+    "let's talk", "lets talk", "talk to me", "let's chat", "lets chat",
+    "pogadajmy", "porozmawiajmy", "porozmawiaj ze mną", "pogadaj ze mną",
+    "chcę porozmawiać", "chce porozmawiać",
+]
+
+CONVERSATION_END_KEYWORDS = [
+    "stop", "enough", "that's all", "thats all", "bye", "goodbye", "end conversation",
+    "koniec", "wystarczy", "to wszystko", "koniec rozmowy", "pa pa", "do widzenia",
+]
+
 
 class IntentMatcher:
     """Fast pattern-based intent matcher using fuzzy string matching."""
@@ -93,6 +105,17 @@ class IntentMatcher:
 
         text_lower = text.lower().strip()
 
+        # Check for conversation mode triggers first
+        conversation_action = self._detect_conversation(text_lower)
+        if conversation_action:
+            logger.info(f"Conversation intent matched: {conversation_action} (text: {text})")
+            return HAAction(
+                action=conversation_action,
+                service=None,
+                entity_id=None,
+                data={},
+            )
+
         # Check for turn on/off commands
         action_type = self._detect_action(text_lower)
         if action_type:
@@ -106,6 +129,16 @@ class IntentMatcher:
                     entity_id=entity,
                     data={},
                 )
+
+        # Check for media stop commands
+        if any(word in text_lower for word in ["stop media", "zatrzymaj", "stop player", "media stop"]):
+            logger.info(f"Media stop intent matched")
+            return HAAction(
+                action="call_service",
+                service="media_player.media_stop",
+                entity_id="media_player.living_room_display",
+                data={},
+            )
 
         # Check for TTS commands
         tts_message = self._extract_tts_message(text_lower)
@@ -122,6 +155,38 @@ class IntentMatcher:
             )
 
         logger.debug(f"No intent match for: {text}")
+        return None
+
+    def _detect_conversation(self, text: str) -> str | None:
+        """Detect if text contains conversation start/end trigger.
+
+        Returns:
+            'conversation_start' or 'conversation_end' or None
+        """
+        # Check conversation start keywords
+        for keyword in CONVERSATION_START_KEYWORDS:
+            if keyword in text:
+                return "conversation_start"
+
+        # Check conversation end keywords
+        for keyword in CONVERSATION_END_KEYWORDS:
+            if keyword in text:
+                return "conversation_end"
+
+        # Fuzzy match for conversation start
+        best_start = process.extractOne(
+            text, CONVERSATION_START_KEYWORDS, scorer=fuzz.partial_ratio
+        )
+        if best_start and best_start[1] >= 85:
+            return "conversation_start"
+
+        # Fuzzy match for conversation end
+        best_end = process.extractOne(
+            text, CONVERSATION_END_KEYWORDS, scorer=fuzz.partial_ratio
+        )
+        if best_end and best_end[1] >= 85:
+            return "conversation_end"
+
         return None
 
     def _detect_action(self, text: str) -> str | None:
