@@ -9,6 +9,7 @@ import sys
 import time
 import logging
 import signal
+import uuid
 from typing import Optional
 from pathlib import Path
 
@@ -47,11 +48,15 @@ def setup_model_symlinks():
     except Exception as e:
         logger.error(f"Failed to create package models directory: {e}")
 
+    # Get inference framework to determine which model files to copy
+    inference_framework = os.getenv("INFERENCE_FRAMEWORK", "tflite")
+    ext = ".onnx" if inference_framework == "onnx" else ".tflite"
+
     # List what's actually in the custom models directory
     try:
         if custom_models_dir.exists():
-            files = list(custom_models_dir.glob("*.tflite"))
-            logger.info(f"Found {len(files)} .tflite files in {custom_models_dir}")
+            files = list(custom_models_dir.glob(f"*{ext}"))
+            logger.info(f"Found {len(files)} {ext} files in {custom_models_dir}")
             for f in files:
                 logger.info(f"  - {f.name}")
         else:
@@ -59,8 +64,8 @@ def setup_model_symlinks():
     except Exception as e:
         logger.error(f"Error listing custom models: {e}")
 
-    # Models that need to be copied
-    preprocessing_models = ["melspectrogram.tflite", "embedding_model.tflite"]
+    # Models that need to be copied (preprocessing models for OpenWakeWord)
+    preprocessing_models = [f"melspectrogram{ext}", f"embedding_model{ext}"]
 
     for model_file in preprocessing_models:
         source = custom_models_dir / model_file
@@ -103,6 +108,7 @@ class WakeWordService:
         self.wake_word_model = os.getenv("WAKE_WORD_MODEL", "hey_jarvis_v0.1")
         self.detection_threshold = float(os.getenv("DETECTION_THRESHOLD", "0.5"))
         self.recording_duration = int(os.getenv("RECORDING_DURATION", "7"))
+        self.conversation_timeout = int(os.getenv("CONVERSATION_TIMEOUT", "30"))
 
     def setup(self):
         """Initialize all components"""
@@ -144,6 +150,122 @@ class WakeWordService:
             logger.error(f"Failed to initialize service: {e}")
             raise
 
+    def run_conversation_loop(self, session_id: str):
+        """Run continuous conversation loop until exit or timeout.
+
+        Args:
+            session_id: Unique session identifier
+        """
+        logger.info(f"Starting conversation mode (session={session_id}, timeout={self.conversation_timeout}s)")
+        last_activity = time.time()
+
+        try:
+            while self.running:
+                # Check timeout
+                if time.time() - last_activity > self.conversation_timeout:
+                    logger.info("Conversation timeout reached")
+                    break
+
+                # Show listening LED
+                self.feedback.play_listening()
+
+                # Record user speech
+                logger.info("Listening for conversation input...")
+                audio_data = self.audio_capture.record(duration=self.recording_duration)
+                logger.info(f"Recorded {len(audio_data)} audio frames")
+
+                # Show processing LED
+                self.feedback.processing()
+
+                # Send to conversation endpoint
+                response = self.ai_client.send_conversation_voice(
+                    audio_data=audio_data,
+                    sample_rate=self.sample_rate,
+                    session_id=session_id
+                )
+
+                if not response:
+                    logger.warning("No response from conversation endpoint")
+                    self.feedback.play_error()
+                    continue
+
+                # Update activity timestamp
+                last_activity = time.time()
+
+                status = response.get("status")
+                message = response.get("message", "")
+
+                if status == "error":
+                    # Check if it's a silence/no speech error
+                    if "could not understand" in message.lower():
+                        logger.info("No speech detected, continuing conversation...")
+                        continue
+                    else:
+                        logger.warning(f"Conversation error: {message}")
+                        self.feedback.play_error()
+                        continue
+
+                # Check for conversation end keywords in the message
+                # Message format is "Response to: 'transcribed text'"
+                message_lower = message.lower()
+                end_keywords = ["stop", "koniec", "wystarczy", "to wszystko", "bye", "goodbye", "end conversation"]
+                should_end = any(keyword in message_lower for keyword in end_keywords)
+
+                if should_end:
+                    logger.info("Conversation end keyword detected")
+                    self.feedback.play_success()
+                    break
+
+                # Success - response was sent to TTS
+                logger.info(f"Conversation response sent to TTS")
+                self.feedback.play_success()
+
+                # Wait for TTS to finish, but listen for interrupt commands
+                # TTS speed is 1.2x, so adjust duration: ~180 words per minute = ~3 words per second
+                response_text = response.get("text", "")
+                word_count = len(response_text.split()) if response_text else 0
+                tts_duration = max(2.0, word_count / 3.0 + 0.5)  # Faster TTS = shorter wait
+                logger.info(f"TTS playing ({word_count} words, ~{tts_duration:.1f}s). Listening for interrupt...")
+
+                # Listen for interrupt during TTS playback
+                interrupt_keywords = ["przerwij", "stop", "cancel", "anuluj", "czekaj", "wait"]
+                interrupt_detected = False
+                start_time = time.time()
+
+                while time.time() - start_time < tts_duration:
+                    # Record short audio for interrupt detection (2 seconds)
+                    try:
+                        short_audio = self.audio_capture.record(duration=2)
+                        # Send for quick transcription
+                        interrupt_response = self.ai_client.send_conversation_voice(
+                            audio_data=short_audio,
+                            sample_rate=self.sample_rate,
+                            session_id=f"{session_id}_interrupt"
+                        )
+                        if interrupt_response:
+                            interrupt_text = interrupt_response.get("message", "").lower()
+                            if any(kw in interrupt_text for kw in interrupt_keywords):
+                                logger.info(f"Interrupt detected: {interrupt_text}")
+                                interrupt_detected = True
+                                # Stop media playback
+                                self.ai_client.stop_media()
+                                break
+                    except Exception as e:
+                        logger.debug(f"Interrupt check failed: {e}")
+                        time.sleep(1.0)
+
+                if interrupt_detected:
+                    logger.info("Conversation interrupted - ready for new input")
+                    self.feedback.play_listening()
+
+        except Exception as e:
+            logger.error(f"Error in conversation loop: {e}")
+        finally:
+            # End conversation session
+            self.ai_client.end_conversation(session_id)
+            logger.info(f"Conversation ended (session={session_id})")
+            self.feedback.idle()
+
     def process_wake_word_detection(self):
         """Handle wake-word detection event"""
         logger.info("Wake word detected!")
@@ -172,7 +294,26 @@ class WakeWordService:
 
             if response and response.get("status") == "success":
                 logger.info(f"Command processed successfully: {response.get('message')}")
-                self.feedback.play_success()
+
+                # Check if conversation mode was requested
+                plan = response.get("plan", {})
+                action = plan.get("action") if plan else None
+
+                if action == "conversation_start":
+                    logger.info("Entering conversation mode...")
+                    self.feedback.play_success()
+
+                    # Reset audio stream for conversation
+                    self.audio_capture.stop()
+                    time.sleep(0.5)
+                    self.audio_capture._initialize()
+                    self.audio_capture.start()
+
+                    # Run conversation loop
+                    session_id = str(uuid.uuid4())
+                    self.run_conversation_loop(session_id)
+                else:
+                    self.feedback.play_success()
             else:
                 error_msg = response.get("message", "Unknown error") if response else "No response"
                 logger.warning(f"Command processing failed: {error_msg}")

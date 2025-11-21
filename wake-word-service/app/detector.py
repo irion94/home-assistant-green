@@ -41,7 +41,9 @@ class WakeWordDetector:
             # Initialize model with absolute path to wake-word model
             # OpenWakeWord will automatically find preprocessing models in the same directory
             if model_dir:
-                wakeword_model_path = os.path.join(model_dir, f"{self.model_name}_v0.1.tflite")
+                # Determine file extension based on inference framework
+                ext = ".onnx" if inference_framework == "onnx" else ".tflite"
+                wakeword_model_path = os.path.join(model_dir, f"{self.model_name}_v0.1{ext}")
 
                 logger.info(f"Loading model from: {wakeword_model_path}")
 
@@ -76,9 +78,11 @@ class WakeWordDetector:
         from openwakeword.utils import download_models
 
         model_dir = "/app/models"
-        model_filename = f"{model_name}_v0.1.tflite"
+        inference_framework = os.getenv("INFERENCE_FRAMEWORK", "tflite")
+        ext = ".onnx" if inference_framework == "onnx" else ".tflite"
+        model_filename = f"{model_name}_v0.1{ext}"
         model_path = os.path.join(model_dir, model_filename)
-        melspec_path = os.path.join(model_dir, "melspectrogram.tflite")
+        melspec_path = os.path.join(model_dir, f"melspectrogram{ext}")
 
         # Check if both models already exist
         if os.path.exists(model_path) and os.path.exists(melspec_path):

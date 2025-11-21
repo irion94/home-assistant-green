@@ -2,6 +2,7 @@
 
 # Core wake-word detection
 openwakeword==0.6.0
+onnxruntime>=1.15.0  # For ONNX model support
 
 # Audio processing
 pyaudio==0.2.14

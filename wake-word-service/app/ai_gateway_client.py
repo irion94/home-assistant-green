@@ -119,6 +119,77 @@ class AIGatewayClient:
             logger.error(f"Error sending command: {e}")
             return None
 
+    def send_conversation_voice(
+        self,
+        audio_data: np.ndarray,
+        sample_rate: int = 16000,
+        session_id: str = "default"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Send voice to conversation endpoint
+
+        Args:
+            audio_data: Audio data as numpy array (mono, int16)
+            sample_rate: Sample rate in Hz
+            session_id: Conversation session ID
+
+        Returns:
+            Response dict or None on error
+        """
+        try:
+            wav_bytes = self._audio_to_wav_bytes(audio_data, sample_rate)
+
+            logger.info(f"Sending conversation voice ({len(wav_bytes)} bytes, session={session_id})")
+
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.post(
+                    f"{self.base_url}/conversation/voice",
+                    files={"audio": ("conversation.wav", wav_bytes, "audio/wav")},
+                    params={"session_id": session_id}
+                )
+
+                response.raise_for_status()
+                result = response.json()
+
+                logger.info(f"Conversation response: status={result.get('status')}")
+                return result
+
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error in conversation: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error in conversation: {e}")
+            return None
+
+    def end_conversation(self, session_id: str = "default") -> Optional[Dict[str, Any]]:
+        """
+        End conversation session
+
+        Args:
+            session_id: Conversation session ID
+
+        Returns:
+            Response dict or None on error
+        """
+        try:
+            with httpx.Client(timeout=10) as client:
+                response = client.post(
+                    f"{self.base_url}/conversation",
+                    json={
+                        "text": "",
+                        "session_id": session_id,
+                        "end_session": True
+                    },
+                    headers={"Content-Type": "application/json"}
+                )
+
+                response.raise_for_status()
+                return response.json()
+
+        except Exception as e:
+            logger.error(f"Error ending conversation: {e}")
+            return None
+
     def _audio_to_wav_bytes(self, audio_data: np.ndarray, sample_rate: int) -> bytes:
         """
         Convert numpy audio array to WAV file bytes
@@ -157,4 +228,26 @@ class AIGatewayClient:
 
         except Exception as e:
             logger.error(f"Health check failed: {e}")
+            return False
+
+    def stop_media(self) -> bool:
+        """
+        Stop media playback on Nest Hub
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with httpx.Client(timeout=5) as client:
+                response = client.post(
+                    f"{self.base_url}/ask",
+                    json={"text": "stop media player living room display"},
+                    headers={"Content-Type": "application/json"}
+                )
+                response.raise_for_status()
+                logger.info("Stopped media playback")
+                return True
+
+        except Exception as e:
+            logger.error(f"Failed to stop media: {e}")
             return False
