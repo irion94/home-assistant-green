@@ -89,15 +89,40 @@ def parse_ollama_response(response_text: str) -> HAAction | None:
     Returns:
         Validated HAAction, or None if parsing/validation fails
     """
+    action, _ = parse_ollama_response_with_confidence(response_text)
+    return action
+
+
+def parse_ollama_response_with_confidence(response_text: str) -> tuple[HAAction | None, float]:
+    """Parse Ollama response and extract confidence score.
+
+    Args:
+        response_text: Raw text response from Ollama
+
+    Returns:
+        Tuple of (HAAction or None, confidence 0.0-1.0)
+    """
     # Try to extract JSON
     json_str = extract_json(response_text)
     if not json_str:
         logger.warning(f"No JSON found in response: {response_text[:100]}")
-        return None
+        return (None, 0.0)
 
     # Validate and parse
     try:
-        return validate_ha_action(json_str)
-    except ValueError as e:
-        logger.error(f"Failed to validate action: {e}")
-        return None
+        # Parse JSON to get confidence before Pydantic validation
+        data = json.loads(json_str)
+        confidence = float(data.get("confidence", 0.7))  # Default 0.7 if not provided
+        confidence = max(0.0, min(1.0, confidence))  # Clamp to 0-1
+
+        # Validate action
+        action = validate_ha_action(json_str)
+        if action:
+            logger.debug(f"Parsed action with confidence={confidence:.2f}")
+            return (action, confidence)
+        else:
+            return (None, 0.0)
+
+    except (ValueError, json.JSONDecodeError) as e:
+        logger.error(f"Failed to parse response: {e}")
+        return (None, 0.0)

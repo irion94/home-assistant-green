@@ -34,6 +34,19 @@ class STTClient(ABC):
         """
         pass
 
+    async def transcribe_with_confidence(self, audio_bytes: bytes) -> tuple[str, float]:
+        """Transcribe audio and return confidence score.
+
+        Args:
+            audio_bytes: Audio data in WAV format
+
+        Returns:
+            Tuple of (transcribed text, confidence 0.0-1.0)
+        """
+        # Default implementation - subclasses can override
+        text = await self.transcribe(audio_bytes)
+        return (text, 0.7 if text else 0.0)
+
 
 def get_stt_client(config: Config) -> STTClient:
     """Factory function to get appropriate STT client based on configuration.
@@ -65,3 +78,32 @@ def get_stt_client(config: Config) -> STTClient:
 
     else:
         raise ValueError(f"Unknown STT provider: {provider}. Supported: whisper, vosk")
+
+
+def get_stt_pipeline(config: Config):
+    """Factory function to get STT pipeline with Vosk -> Whisper fallback.
+
+    Args:
+        config: Application configuration
+
+    Returns:
+        STTPipeline instance
+    """
+    from app.services.pipeline import STTPipeline
+    from app.services.vosk_client import VoskSTTClient
+    from app.services.whisper_client import WhisperSTTClient
+
+    logger.info("Creating STT pipeline (Vosk -> Whisper)")
+
+    vosk_client = VoskSTTClient(model_path=config.vosk_model_path)
+    whisper_client = WhisperSTTClient(
+        model_size=config.whisper_model,
+        device="cpu",
+        compute_type="int8",
+    )
+
+    return STTPipeline(
+        vosk_client=vosk_client,
+        whisper_client=whisper_client,
+        confidence_threshold=0.7,
+    )

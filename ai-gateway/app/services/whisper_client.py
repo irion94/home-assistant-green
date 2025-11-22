@@ -7,6 +7,7 @@ faster-whisper library optimized for CPU inference.
 from __future__ import annotations
 
 import logging
+import math
 import tempfile
 from pathlib import Path
 
@@ -111,6 +112,76 @@ class WhisperSTTClient(STTClient):
             logger.error(f"Transcription failed: {e}", exc_info=True)
             raise
 
+    async def transcribe_with_confidence(self, audio_bytes: bytes) -> tuple[str, float]:
+        """Transcribe audio and return confidence score.
+
+        Args:
+            audio_bytes: Audio data in WAV format
+
+        Returns:
+            Tuple of (transcribed text, confidence 0.0-1.0)
+        """
+        try:
+            # Write audio to temporary file
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                tmp_file.write(audio_bytes)
+                tmp_path = Path(tmp_file.name)
+
+            try:
+                # Get model
+                model = self._get_model()
+
+                # Transcribe with initial prompt
+                initial_prompt = (
+                    "Zapal światło w salonie. Zgaś światło w kuchni. "
+                    "Zapal lampkę. Zgaś lampę. Włącz światło w sypialni."
+                )
+
+                segments, info = model.transcribe(
+                    str(tmp_path),
+                    beam_size=5,
+                    language="pl",
+                    vad_filter=True,
+                    initial_prompt=initial_prompt,
+                )
+
+                # Collect segments and their confidences
+                segment_list = list(segments)
+                texts = []
+                confidences = []
+
+                for segment in segment_list:
+                    texts.append(segment.text.strip())
+                    # Convert log probability to probability
+                    # avg_logprob is typically negative, closer to 0 = higher confidence
+                    prob = math.exp(segment.avg_logprob)
+                    confidences.append(prob)
+
+                text = " ".join(texts)
+
+                # Calculate weighted average confidence
+                if confidences:
+                    confidence = sum(confidences) / len(confidences)
+                    # Normalize - Whisper probs are often low, scale up
+                    confidence = min(1.0, confidence * 2)  # Scale factor
+                else:
+                    confidence = info.language_probability if text else 0.0
+
+                logger.info(
+                    f"Whisper transcription complete: "
+                    f"text_length={len(text)}, "
+                    f"confidence={confidence:.2f}, "
+                    f"segments={len(segment_list)}"
+                )
+
+                return (text, confidence)
+
+            finally:
+                tmp_path.unlink(missing_ok=True)
+
+        except Exception as e:
+            logger.error(f"Whisper transcription failed: {e}", exc_info=True)
+            return ("", 0.0)
 
 
 # Keep old alias for backwards compatibility

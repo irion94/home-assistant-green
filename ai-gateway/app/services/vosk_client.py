@@ -173,3 +173,84 @@ class VoskSTTClient(STTClient):
         except Exception as e:
             logger.error(f"Vosk transcription failed: {e}", exc_info=True)
             raise
+
+    async def transcribe_with_confidence(self, audio_bytes: bytes) -> tuple[str, float]:
+        """Transcribe audio and return confidence score.
+
+        Args:
+            audio_bytes: Audio data in WAV format
+
+        Returns:
+            Tuple of (transcribed text, confidence 0.0-1.0)
+        """
+        try:
+            # Write to temp file to read with wave module
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                tmp_file.write(audio_bytes)
+                tmp_path = Path(tmp_file.name)
+
+            try:
+                # Get model
+                model = self._get_model()
+
+                # Read WAV file
+                with wave.open(str(tmp_path), "rb") as wf:
+                    if wf.getnchannels() != 1:
+                        raise ValueError("Audio must be mono")
+
+                    sample_rate = wf.getframerate()
+
+                    # Create recognizer with word confidence
+                    rec = KaldiRecognizer(model, sample_rate)
+                    rec.SetWords(True)
+
+                    # Process audio in chunks
+                    results = []
+                    all_confidences = []
+
+                    while True:
+                        data = wf.readframes(4000)
+                        if len(data) == 0:
+                            break
+                        if rec.AcceptWaveform(data):
+                            result = json.loads(rec.Result())
+                            if result.get("text"):
+                                results.append(result["text"])
+                            # Extract word confidences
+                            for word_info in result.get("result", []):
+                                if "conf" in word_info:
+                                    all_confidences.append(word_info["conf"])
+
+                    # Get final result
+                    final_result = json.loads(rec.FinalResult())
+                    if final_result.get("text"):
+                        results.append(final_result["text"])
+                    # Extract final word confidences
+                    for word_info in final_result.get("result", []):
+                        if "conf" in word_info:
+                            all_confidences.append(word_info["conf"])
+
+                    text = " ".join(results).strip()
+
+                    # Calculate average confidence
+                    if all_confidences:
+                        confidence = sum(all_confidences) / len(all_confidences)
+                    else:
+                        confidence = 0.7 if text else 0.0  # Default if no word scores
+
+                    logger.info(
+                        f"Vosk transcription complete: "
+                        f"text_length={len(text)}, "
+                        f"confidence={confidence:.2f}, "
+                        f"words={len(all_confidences)}"
+                    )
+
+                    return (text, confidence)
+
+            finally:
+                # Clean up
+                tmp_path.unlink(missing_ok=True)
+
+        except Exception as e:
+            logger.error(f"Vosk transcription failed: {e}", exc_info=True)
+            return ("", 0.0)

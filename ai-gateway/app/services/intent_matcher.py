@@ -101,61 +101,88 @@ class IntentMatcher:
         Returns:
             HAAction if matched, None otherwise
         """
+        action, _ = self.match_with_confidence(text)
+        return action
+
+    def match_with_confidence(self, text: str) -> tuple[HAAction | None, float]:
+        """Match text to a home control action with confidence score.
+
+        Args:
+            text: Transcribed command text
+
+        Returns:
+            Tuple of (HAAction or None, confidence 0.0-1.0)
+        """
         from app.models import HAAction
 
         text_lower = text.lower().strip()
+        confidence = 0.0
 
         # Check for conversation mode triggers first
-        conversation_action = self._detect_conversation(text_lower)
+        conversation_action, conv_confidence = self._detect_conversation_with_confidence(text_lower)
         if conversation_action:
-            logger.info(f"Conversation intent matched: {conversation_action} (text: {text})")
-            return HAAction(
-                action=conversation_action,
-                service=None,
-                entity_id=None,
-                data={},
+            logger.info(f"Conversation intent matched: {conversation_action} (confidence={conv_confidence:.2f}, text: {text})")
+            return (
+                HAAction(
+                    action=conversation_action,
+                    service=None,
+                    entity_id=None,
+                    data={},
+                ),
+                conv_confidence,
             )
 
         # Check for turn on/off commands
-        action_type = self._detect_action(text_lower)
+        action_type, action_confidence = self._detect_action_with_confidence(text_lower)
         if action_type:
-            entity = self._extract_entity(text_lower)
+            entity, entity_confidence = self._extract_entity_with_confidence(text_lower)
             if entity:
                 service = f"light.turn_{action_type}"
-                logger.info(f"Intent matched: {service} -> {entity} (text: {text})")
-                return HAAction(
-                    action="call_service",
-                    service=service,
-                    entity_id=entity,
-                    data={},
+                # Combined confidence = action * entity
+                confidence = action_confidence * entity_confidence
+                logger.info(f"Intent matched: {service} -> {entity} (confidence={confidence:.2f}, text: {text})")
+                return (
+                    HAAction(
+                        action="call_service",
+                        service=service,
+                        entity_id=entity,
+                        data={},
+                    ),
+                    confidence,
                 )
 
         # Check for media stop commands
         if any(word in text_lower for word in ["stop media", "zatrzymaj", "stop player", "media stop"]):
-            logger.info(f"Media stop intent matched")
-            return HAAction(
-                action="call_service",
-                service="media_player.media_stop",
-                entity_id="media_player.living_room_display",
-                data={},
+            logger.info(f"Media stop intent matched (confidence=1.0)")
+            return (
+                HAAction(
+                    action="call_service",
+                    service="media_player.media_stop",
+                    entity_id="media_player.living_room_display",
+                    data={},
+                ),
+                1.0,  # Exact match = full confidence
             )
 
         # Check for TTS commands
         tts_message = self._extract_tts_message(text_lower)
         if tts_message:
-            logger.info(f"TTS intent matched: {tts_message}")
-            return HAAction(
-                action="call_service",
-                service="tts.speak",
-                entity_id="tts.google_translate_en_com",
-                data={
-                    "media_player_entity_id": "media_player.living_room_display",
-                    "message": tts_message,
-                },
+            logger.info(f"TTS intent matched: {tts_message} (confidence=0.9)")
+            return (
+                HAAction(
+                    action="call_service",
+                    service="tts.speak",
+                    entity_id="tts.google_translate_en_com",
+                    data={
+                        "media_player_entity_id": "media_player.living_room_display",
+                        "message": tts_message,
+                    },
+                ),
+                0.9,  # Regex match = high confidence
             )
 
         logger.debug(f"No intent match for: {text}")
-        return None
+        return (None, 0.0)
 
     def _detect_conversation(self, text: str) -> str | None:
         """Detect if text contains conversation start/end trigger.
@@ -163,31 +190,40 @@ class IntentMatcher:
         Returns:
             'conversation_start' or 'conversation_end' or None
         """
-        # Check conversation start keywords
+        result, _ = self._detect_conversation_with_confidence(text)
+        return result
+
+    def _detect_conversation_with_confidence(self, text: str) -> tuple[str | None, float]:
+        """Detect conversation trigger with confidence score.
+
+        Returns:
+            Tuple of (action or None, confidence 0.0-1.0)
+        """
+        # Check conversation start keywords (exact match = 1.0)
         for keyword in CONVERSATION_START_KEYWORDS:
             if keyword in text:
-                return "conversation_start"
+                return ("conversation_start", 1.0)
 
-        # Check conversation end keywords
+        # Check conversation end keywords (exact match = 1.0)
         for keyword in CONVERSATION_END_KEYWORDS:
             if keyword in text:
-                return "conversation_end"
+                return ("conversation_end", 1.0)
 
         # Fuzzy match for conversation start
         best_start = process.extractOne(
             text, CONVERSATION_START_KEYWORDS, scorer=fuzz.partial_ratio
         )
         if best_start and best_start[1] >= 85:
-            return "conversation_start"
+            return ("conversation_start", best_start[1] / 100.0)
 
         # Fuzzy match for conversation end
         best_end = process.extractOne(
             text, CONVERSATION_END_KEYWORDS, scorer=fuzz.partial_ratio
         )
         if best_end and best_end[1] >= 85:
-            return "conversation_end"
+            return ("conversation_end", best_end[1] / 100.0)
 
-        return None
+        return (None, 0.0)
 
     def _detect_action(self, text: str) -> str | None:
         """Detect if text contains turn on/off action.
@@ -195,31 +231,40 @@ class IntentMatcher:
         Returns:
             'on' or 'off' or None
         """
-        # Check turn on keywords
+        result, _ = self._detect_action_with_confidence(text)
+        return result
+
+    def _detect_action_with_confidence(self, text: str) -> tuple[str | None, float]:
+        """Detect turn on/off action with confidence score.
+
+        Returns:
+            Tuple of ('on'/'off' or None, confidence 0.0-1.0)
+        """
+        # Check turn on keywords (exact match = 1.0)
         for keyword in TURN_ON_KEYWORDS:
             if keyword in text:
-                return "on"
+                return ("on", 1.0)
 
-        # Check turn off keywords
+        # Check turn off keywords (exact match = 1.0)
         for keyword in TURN_OFF_KEYWORDS:
             if keyword in text:
-                return "off"
+                return ("off", 1.0)
 
         # Fuzzy match for turn on
         best_on = process.extractOne(
             text, TURN_ON_KEYWORDS, scorer=fuzz.partial_ratio
         )
         if best_on and best_on[1] >= 80:
-            return "on"
+            return ("on", best_on[1] / 100.0)
 
         # Fuzzy match for turn off
         best_off = process.extractOne(
             text, TURN_OFF_KEYWORDS, scorer=fuzz.partial_ratio
         )
         if best_off and best_off[1] >= 80:
-            return "off"
+            return ("off", best_off[1] / 100.0)
 
-        return None
+        return (None, 0.0)
 
     def _extract_entity(self, text: str) -> str | None:
         """Extract entity ID from text.
@@ -227,8 +272,16 @@ class IntentMatcher:
         Returns:
             Entity ID or None
         """
-        # Check specific room names first (before generic "światło")
-        # Order matters - check specific rooms before defaulting
+        result, _ = self._extract_entity_with_confidence(text)
+        return result
+
+    def _extract_entity_with_confidence(self, text: str) -> tuple[str | None, float]:
+        """Extract entity ID from text with confidence score.
+
+        Returns:
+            Tuple of (entity_id or None, confidence 0.0-1.0)
+        """
+        # Check specific room names first (exact match = 1.0)
         specific_rooms = [
             # Polish locative forms (most specific)
             ("sypialni", "light.yeelight_color_0x80147dd"),
@@ -254,20 +307,20 @@ class IntentMatcher:
 
         for room_name, entity_id in specific_rooms:
             if room_name in text:
-                return entity_id
+                return (entity_id, 1.0)
 
         # Fuzzy match room names
         best_match = process.extractOne(
             text, self.room_names, scorer=fuzz.partial_ratio
         )
         if best_match and best_match[1] >= self.threshold:
-            return ROOM_ENTITIES[best_match[0]]
+            return (ROOM_ENTITIES[best_match[0]], best_match[1] / 100.0)
 
-        # Default to living room for generic "lights" commands
+        # Default to living room for generic "lights" commands (lower confidence)
         if any(word in text for word in ["światło", "światła", "light", "lights"]):
-            return ROOM_ENTITIES["salon"]
+            return (ROOM_ENTITIES["salon"], 0.7)  # Default = lower confidence
 
-        return None
+        return (None, 0.0)
 
     def _extract_tts_message(self, text: str) -> str | None:
         """Extract TTS message from text.

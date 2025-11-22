@@ -11,7 +11,7 @@ import httpx
 
 from app.models import Config, HAAction, OllamaRequest
 from app.services.llm_client import LLMClient, SYSTEM_PROMPT
-from app.utils.json_validator import parse_ollama_response
+from app.utils.json_validator import parse_ollama_response, parse_ollama_response_with_confidence
 
 logger = logging.getLogger(__name__)
 
@@ -93,3 +93,68 @@ class OllamaClient(LLMClient):
         except Exception as e:
             logger.error(f"Unexpected error in translate_command: {e}")
             return None
+
+    async def translate_command_with_confidence(self, command: str) -> tuple[HAAction | None, float]:
+        """Translate command and return confidence score.
+
+        Args:
+            command: Natural language command from user
+
+        Returns:
+            Tuple of (HAAction or None, confidence 0.0-1.0)
+        """
+        logger.info(f"Translating command with confidence: {command}")
+
+        try:
+            # Build Ollama request
+            request = OllamaRequest(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": command},
+                ],
+                stream=False,
+                format="json",
+            )
+
+            # Call Ollama API
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{self.base_url}/v1/chat/completions",
+                    json=request.model_dump(),
+                )
+                response.raise_for_status()
+
+            # Parse response
+            data = response.json()
+            logger.debug(f"Ollama response: {data}")
+
+            # Extract message content
+            if "choices" not in data or not data["choices"]:
+                logger.error("No choices in Ollama response")
+                return (None, 0.0)
+
+            message_content = data["choices"][0]["message"]["content"]
+            logger.debug(f"Message content: {message_content}")
+
+            # Validate and parse JSON with confidence
+            action, confidence = parse_ollama_response_with_confidence(message_content)
+
+            if action:
+                logger.info(f"Translated to action: {action.action} (confidence={confidence:.2f})")
+            else:
+                logger.warning("Failed to parse valid action from Ollama response")
+
+            return (action, confidence)
+
+        except httpx.TimeoutException:
+            logger.error(f"Timeout calling Ollama (>{self.timeout}s)")
+            return (None, 0.0)
+
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error calling Ollama: {type(e).__name__}: {e}")
+            return (None, 0.0)
+
+        except Exception as e:
+            logger.error(f"Unexpected error in translate_command_with_confidence: {e}")
+            return (None, 0.0)

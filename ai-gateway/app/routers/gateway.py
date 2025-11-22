@@ -18,7 +18,8 @@ from app.services.conversation_client import ConversationClient, get_conversatio
 from app.services.ha_client import HomeAssistantClient
 from app.services.intent_matcher import IntentMatcher, get_intent_matcher
 from app.services.llm_client import LLMClient, get_llm_client
-from app.services.stt_client import STTClient, get_stt_client
+from app.services.pipeline import IntentPipeline, IntentResult, STTPipeline
+from app.services.stt_client import STTClient, get_stt_client, get_stt_pipeline
 
 
 class ConversationRequest(BaseModel):
@@ -83,8 +84,8 @@ async def ask(
 
     Flow:
     1. Receive natural language command
-    2. Try fast pattern matching first
-    3. Fall back to LLM if no match
+    2. Run pipeline (pattern matcher + LLM in parallel)
+    3. Use first confident result
     4. Execute via Home Assistant REST API
     5. Return result
 
@@ -105,20 +106,25 @@ async def ask(
     logger.info(f"[{correlation_id}] Processing request: {request.text}")
 
     try:
-        # Step 1: Try fast pattern matching first
-        action = intent_matcher.match(request.text)
-        if action:
-            logger.info(f"[{correlation_id}] Fast path: matched via pattern")
-        else:
-            # Step 2: Fall back to LLM for complex commands
-            logger.info(f"[{correlation_id}] Slow path: using LLM")
-            action = await llm_client.translate_command(request.text)
+        # Create and run intent pipeline
+        pipeline = IntentPipeline(
+            intent_matcher=intent_matcher,
+            llm_client=llm_client,
+            confidence_threshold=0.8,
+        )
+        result = await pipeline.process(request.text)
+
+        action = result.action
+        logger.info(
+            f"[{correlation_id}] Pipeline result: source={result.source}, "
+            f"confidence={result.confidence:.2f}, latency={result.latency_ms:.0f}ms"
+        )
 
         if not action:
             logger.warning(f"[{correlation_id}] Failed to translate command")
             return AskResponse(
                 status="error",
-                message="Failed to translate command to action plan",
+                message="Nie udało się przetłumaczyć polecenia",
             )
 
         # Step 2: Handle special actions
@@ -127,7 +133,7 @@ async def ask(
             return AskResponse(
                 status="success",
                 plan=action,
-                message="Command understood but no action available",
+                message="Polecenie zrozumiane, ale brak dostępnej akcji",
             )
 
         if action.action == "conversation_start":
@@ -135,7 +141,7 @@ async def ask(
             return AskResponse(
                 status="success",
                 plan=action,
-                message="Conversation mode started",
+                message="Tryb rozmowy rozpoczęty",
             )
 
         if action.action == "conversation_end":
@@ -143,7 +149,7 @@ async def ask(
             return AskResponse(
                 status="success",
                 plan=action,
-                message="Conversation mode ended",
+                message="Tryb rozmowy zakończony",
             )
 
         # Step 3: Execute service call
@@ -154,7 +160,7 @@ async def ask(
             return AskResponse(
                 status="error",
                 plan=action,
-                message="Failed to execute Home Assistant service call",
+                message="Nie udało się wykonać polecenia",
             )
 
         # Step 4: Success!
@@ -162,7 +168,7 @@ async def ask(
         return AskResponse(
             status="success",
             plan=action,
-            message="Action executed successfully",
+            message="Gotowe",
             ha_response=ha_response,
         )
 
@@ -183,10 +189,22 @@ def get_stt_client_dependency(config: Config = Depends(get_config)) -> STTClient
     return get_stt_client(config)
 
 
+def get_stt_pipeline_dependency(config: Config = Depends(get_config)) -> STTPipeline:
+    """Dependency to get STT pipeline (Vosk -> Whisper).
+
+    Args:
+        config: Application configuration
+
+    Returns:
+        Initialized STT pipeline
+    """
+    return get_stt_pipeline(config)
+
+
 @router.post("/voice", response_model=AskResponse)
 async def voice(
     audio: UploadFile = File(..., description="Audio file in WAV format"),
-    stt_client: STTClient = Depends(get_stt_client_dependency),
+    stt_pipeline: STTPipeline = Depends(get_stt_pipeline_dependency),
     intent_matcher: IntentMatcher = Depends(get_intent_matcher),
     llm_client: LLMClient = Depends(get_llm_client_dependency),
     ha_client: HomeAssistantClient = Depends(get_ha_client),
@@ -222,21 +240,26 @@ async def voice(
         audio_bytes = await audio.read()
         logger.info(f"[{correlation_id}] Audio size: {len(audio_bytes)} bytes")
 
-        # Step 2: Transcribe audio to text
+        # Step 2: Transcribe audio using STT pipeline (Vosk -> Whisper)
         try:
-            text = await stt_client.transcribe(audio_bytes)
+            stt_result = await stt_pipeline.transcribe(audio_bytes)
+            text = stt_result.text
+            logger.info(
+                f"[{correlation_id}] STT result: source={stt_result.source}, "
+                f"confidence={stt_result.confidence:.2f}, latency={stt_result.latency_ms:.0f}ms"
+            )
         except Exception as e:
             logger.error(f"[{correlation_id}] Transcription failed: {e}")
             return AskResponse(
                 status="error",
-                message=f"Failed to transcribe audio: {e}",
+                message=f"Błąd transkrypcji: {e}",
             )
 
         if not text or not text.strip():
             logger.warning(f"[{correlation_id}] Empty transcription")
             return AskResponse(
                 status="error",
-                message="Could not understand audio - no speech detected",
+                message="Nie wykryto mowy",
             )
 
         logger.info(f"[{correlation_id}] Transcribed text: {text}")
@@ -254,7 +277,7 @@ async def voice(
             logger.warning(f"[{correlation_id}] Failed to translate command")
             return AskResponse(
                 status="error",
-                message="Failed to translate command to action plan",
+                message="Nie udało się przetłumaczyć polecenia",
             )
 
         # Step 5: Handle special actions
@@ -263,7 +286,7 @@ async def voice(
             return AskResponse(
                 status="success",
                 plan=action,
-                message=f"Understood: '{text}' but no action available",
+                message="Polecenie zrozumiane, ale brak dostępnej akcji",
             )
 
         if action.action == "conversation_start":
@@ -271,7 +294,7 @@ async def voice(
             return AskResponse(
                 status="success",
                 plan=action,
-                message="Conversation mode started",
+                message="Tryb rozmowy rozpoczęty",
             )
 
         if action.action == "conversation_end":
@@ -279,7 +302,7 @@ async def voice(
             return AskResponse(
                 status="success",
                 plan=action,
-                message="Conversation mode ended",
+                message="Tryb rozmowy zakończony",
             )
 
         # Step 6: Execute service call
@@ -290,7 +313,7 @@ async def voice(
             return AskResponse(
                 status="error",
                 plan=action,
-                message="Failed to execute Home Assistant service call",
+                message="Nie udało się wykonać polecenia",
             )
 
         # Step 7: Success!
@@ -298,7 +321,7 @@ async def voice(
         return AskResponse(
             status="success",
             plan=action,
-            message=f"Action executed successfully for: '{text}'",
+            message="Gotowe",
             ha_response=ha_response,
         )
 

@@ -94,44 +94,41 @@ MEDIA PLAYERS:
 - "bedroom tv" → media_player.telewizor_w_sypialni_2
 
 SUPPORTED ACTIONS:
-- Turn on lights: {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{}}
-- Turn off lights: {"action":"call_service","service":"light.turn_off","entity_id":"<entity>","data":{}}
-- Set brightness: {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{"brightness":255}}
-- Say/speak text (TTS): {"action":"call_service","service":"tts.speak","entity_id":"tts.google_translate_en_com","data":{"media_player_entity_id":"media_player.living_room_display","message":"<text to speak>"}}
-- Unknown/unsupported: {"action":"none"}
+- Turn on lights: {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{},"confidence":0.95}
+- Turn off lights: {"action":"call_service","service":"light.turn_off","entity_id":"<entity>","data":{},"confidence":0.95}
+- Set brightness: {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{"brightness":255},"confidence":0.9}
+- Say/speak text (TTS): {"action":"call_service","service":"tts.speak","entity_id":"tts.google_translate_en_com","data":{"media_player_entity_id":"media_player.living_room_display","message":"<text>"},"confidence":0.85}
+- Unknown/unsupported: {"action":"none","confidence":0.0}
 
-RESPONSE FORMAT (STRICTLY JSON ONLY):
-{"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80156a9","data":{}}
+CONFIDENCE SCORING (0.0 to 1.0):
+- 0.95-1.0: Very clear command, exact entity match
+- 0.8-0.94: Clear command, good entity match
+- 0.6-0.79: Ambiguous command or uncertain entity
+- Below 0.6: Low confidence, likely wrong interpretation
+
+RESPONSE FORMAT (STRICTLY JSON ONLY - must include confidence):
+{"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80156a9","data":{},"confidence":0.95}
 
 EXAMPLES:
 Input: "Turn on living room lights"
-Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80156a9","data":{}}
+Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80156a9","data":{},"confidence":0.95}
 
 Input: "Turn on the lights"
-Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80156a9","data":{}}
+Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80156a9","data":{},"confidence":0.85}
 
 Input: "Wyłącz światło w kuchni"
-Output: {"action":"call_service","service":"light.turn_off","entity_id":"light.yeelight_color_0x49c27e1","data":{}}
+Output: {"action":"call_service","service":"light.turn_off","entity_id":"light.yeelight_color_0x49c27e1","data":{},"confidence":0.95}
 
 Input: "Set bedroom to 50% brightness"
-Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80147dd","data":{"brightness":128}}
+Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80147dd","data":{"brightness":128},"confidence":0.9}
 
 Input: "What's the weather?"
-Output: {"action":"none"}
-
-Input: "Say hello"
-Output: {"action":"call_service","service":"tts.speak","entity_id":"tts.google_translate_en_com","data":{"media_player_entity_id":"media_player.living_room_display","message":"Hello"}}
-
-Input: "Powiedz cześć"
-Output: {"action":"call_service","service":"tts.speak","entity_id":"tts.google_translate_en_com","data":{"media_player_entity_id":"media_player.living_room_display","message":"Cześć"}}
-
-Input: "Turn on the desk lamp"
-Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_lamp15_0x1b37d19d","data":{}}
+Output: {"action":"none","confidence":0.0}
 
 Input: "Zapal lampkę"
-Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_lamp15_0x1b37d19d","data":{}}
+Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_lamp15_0x1b37d19d","data":{},"confidence":0.95}
 
-Remember: ONLY return the JSON object, nothing else."""
+Remember: ONLY return the JSON object with confidence, nothing else."""
 
 
 class LLMClient(ABC):
@@ -148,6 +145,20 @@ class LLMClient(ABC):
             Validated HAAction plan, or None if translation fails
         """
         pass
+
+    async def translate_command_with_confidence(self, command: str) -> tuple[HAAction | None, float]:
+        """Translate command and return confidence score.
+
+        Args:
+            command: Natural language command from user
+
+        Returns:
+            Tuple of (HAAction or None, confidence 0.0-1.0)
+        """
+        # Default implementation - subclasses can override
+        action = await self.translate_command(command)
+        # If action exists, return medium confidence; subclasses can extract from JSON
+        return (action, 0.7 if action else 0.0)
 
 
 def get_llm_client(config: Config) -> LLMClient:
