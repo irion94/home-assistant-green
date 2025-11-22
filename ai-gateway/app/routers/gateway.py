@@ -21,7 +21,9 @@ from app.services.conversation_client import ConversationClient, get_conversatio
 from app.services.entity_discovery import EntityDiscovery, get_entity_discovery
 from app.services.ha_client import HomeAssistantClient
 from app.services.intent_matcher import IntentMatcher, get_intent_matcher
+from app.services.llm_cache import LLMCache, get_llm_cache
 from app.services.llm_client import LLMClient, get_llm_client
+from app.services.pattern_learner import PatternLearner, get_pattern_learner
 from app.services.pipeline import IntentPipeline, IntentResult, STTPipeline
 from app.services.stt_client import STTClient, get_stt_client, get_stt_pipeline
 
@@ -114,6 +116,24 @@ def get_entity_discovery_dependency(
     return get_entity_discovery(ha_client)
 
 
+def get_llm_cache_dependency() -> LLMCache:
+    """Dependency to get LLM cache.
+
+    Returns:
+        LLMCache singleton instance
+    """
+    return get_llm_cache()
+
+
+def get_pattern_learner_dependency() -> PatternLearner:
+    """Dependency to get pattern learner.
+
+    Returns:
+        PatternLearner singleton instance
+    """
+    return get_pattern_learner()
+
+
 @router.post("/ask", response_model=AskResponse)
 async def ask(
     request: AskRequest,
@@ -121,6 +141,8 @@ async def ask(
     llm_client: LLMClient = Depends(get_llm_client_dependency),
     ha_client: HomeAssistantClient = Depends(get_ha_client),
     entity_discovery: EntityDiscovery = Depends(get_entity_discovery_dependency),
+    llm_cache: LLMCache = Depends(get_llm_cache_dependency),
+    pattern_learner: PatternLearner = Depends(get_pattern_learner_dependency),
 ) -> AskResponse:
     """Process natural language command and execute Home Assistant action.
 
@@ -148,12 +170,14 @@ async def ask(
     logger.info(f"[{correlation_id}] Processing request: {request.text}")
 
     try:
-        # Create and run intent pipeline with dynamic entity discovery
+        # Create and run intent pipeline with dynamic entity discovery and optimizations
         pipeline = IntentPipeline(
             intent_matcher=intent_matcher,
             llm_client=llm_client,
             confidence_threshold=0.8,
             entity_discovery=entity_discovery,
+            llm_cache=llm_cache,
+            pattern_learner=pattern_learner,
         )
         result = await pipeline.process(request.text)
 
