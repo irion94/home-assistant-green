@@ -75,6 +75,65 @@ Smart fallback + actions in conversation.
 - [x] Continue conversation after action
 - [x] Natural flow: "Turn on lights" → executes → "Gotowe. ..."
 
+### Phase 5: Input Validation & Personality ✅
+Smart input validation + refined Jarvis personality.
+
+**Goal**: Filter gibberish before AI, define consistent Jarvis character.
+
+#### 5.1 Text Validator
+- [x] Validate transcribed text before AI fallback
+- [x] Check minimum word count (≥2 words)
+- [x] Detect gibberish/noise (single chars, no real words)
+- [x] Short Polish responses: "Nie rozumiem"
+
+#### 5.2 Jarvis Personality
+- [x] Friendly but minimalist responses
+- [x] Always respond in Polish (unless asked in English)
+- [x] Short acknowledgments for simple actions
+- [x] Natural, conversational tone
+
+#### Files to modify:
+
+**gateway.py** - Add text validator:
+```python
+def is_valid_input(text: str) -> bool:
+    """Check if text is meaningful enough for AI."""
+    words = text.split()
+    if len(words) < 2:
+        return False
+    # Check for actual words (not just noise)
+    if all(len(w) <= 2 for w in words):
+        return False
+    return True
+
+# In /voice endpoint, before AI fallback:
+if action.action == "none":
+    if not is_valid_input(text):
+        return AskResponse(
+            status="success",
+            message="Nie rozumiem",
+        )
+    # Fall back to AI...
+```
+
+**conversation_client.py** - Update system prompt:
+```python
+CONVERSATION_SYSTEM_PROMPT = """Jesteś Jarvis - przyjazny asystent domowy.
+
+Zasady:
+1. ZAWSZE odpowiadaj po polsku (chyba że użytkownik pyta po angielsku)
+2. Bądź zwięzły - krótkie odpowiedzi dla prostych pytań
+3. Bądź przyjazny i naturalny, nie robotyczny
+4. Dla potwierdzeń akcji: tylko "Gotowe" lub krótka odpowiedź
+5. Dla pytań: 1-3 zdania, konkretnie i na temat
+
+Przykłady dobrych odpowiedzi:
+- "Jaka jest pogoda?" → "Nie mam dostępu do pogody, ale mogę pomóc skonfigurować czujnik."
+- "Opowiedz żart" → "Dlaczego programista nosi okulary? Bo nie widzi C#!"
+- "Dziękuję" → "Nie ma za co!"
+"""
+```
+
 ## Code Structure
 
 ```
@@ -118,6 +177,8 @@ WHISPER_MODEL=small
 | 2025-01-XX | Phase 3 | Done | Smart TTS (VITS → XTTS) |
 | 2025-11-22 | Phase 4.1 | Done | Smart fallback to AI |
 | 2025-11-22 | Phase 4.2 | Done | Actions in conversation |
+| 2025-11-22 | Phase 5.1 | Done | Text validator |
+| 2025-11-22 | Phase 5.2 | Done | Jarvis personality |
 
 ### Phase 1-3 Details (Completed)
 

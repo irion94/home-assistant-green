@@ -40,6 +40,29 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def is_valid_input(text: str) -> bool:
+    """Check if text is meaningful enough for AI processing.
+
+    Filters out gibberish, noise, and invalid transcriptions before
+    sending to AI fallback. Returns False for:
+    - Less than 2 words
+    - Only single-character words (noise)
+
+    Args:
+        text: Transcribed text to validate
+
+    Returns:
+        True if text is valid for AI processing
+    """
+    words = text.split()
+    if len(words) < 2:
+        return False
+    # Check for actual words (not just noise like "a b c")
+    if all(len(w) <= 2 for w in words):
+        return False
+    return True
+
+
 def get_config() -> Config:
     """Dependency to get application configuration.
 
@@ -129,6 +152,15 @@ async def ask(
 
         # Step 2: Handle special actions - fall back to AI for questions
         if action.action == "none":
+            # Validate input before sending to AI
+            if not is_valid_input(request.text):
+                logger.info(f"[{correlation_id}] Invalid input for AI fallback: '{request.text}'")
+                return AskResponse(
+                    status="success",
+                    plan=None,
+                    message="Nie rozumiem",
+                )
+
             logger.info(f"[{correlation_id}] No HA action - falling back to AI conversation")
             try:
                 # Import conversation client here to avoid circular imports
@@ -309,6 +341,15 @@ async def voice(
 
         # Step 5: Handle special actions - fall back to AI for questions
         if action.action == "none":
+            # Validate input before sending to AI
+            if not is_valid_input(text):
+                logger.info(f"[{correlation_id}] Invalid input for AI fallback: '{text}'")
+                return AskResponse(
+                    status="success",
+                    plan=None,
+                    message="Nie rozumiem",
+                )
+
             logger.info(f"[{correlation_id}] No HA action - falling back to AI conversation")
             try:
                 # Treat as a question and get AI response
