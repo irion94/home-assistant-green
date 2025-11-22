@@ -136,19 +136,95 @@ User Command → AI Gateway → Ollama (LLM) → JSON Plan → Home Assistant �
      |         HAClient (HA service calls)
 ```
 
+#### Fallback Pipeline Architecture
+
+The AI Gateway uses a cascading recognition system for intelligent voice processing:
+
+```
+Voice Input → STT Pipeline → Intent Pipeline → Action found?
+                                                    ↓
+                                         yes ←──────┴──────→ no
+                                          ↓                   ↓
+                                     Execute HA           Ask AI
+                                          ↓                   ↓
+                                      "Gotowe"          AI response
+                                                              ↓
+                                                         TTS speak
+```
+
+**STT Pipeline** (Speech-to-Text):
+- Tier 1: Vosk (~100ms) - Clear speech, known phrases
+- Tier 2: Whisper (~1s) - Fallback when Vosk confidence < 0.7
+
+**Intent Pipeline**:
+- Tier 1: Pattern matcher (~10ms) - Exact command matches
+- Tier 2: Ollama LLM (~500ms) - Pattern fails
+- Tier 3: AI fallback (~1s) - No HA action → treat as conversation
+
+**TTS Pipeline** (Text-to-Speech):
+- Tier 1: VITS Polish (~200ms) - Short responses (≤15 words)
+- Tier 2: XTTS v2 (~10s) - Long responses (>15 words)
+
+**Streaming TTS**: Responses stream sentence-by-sentence via SSE for reduced latency (0.5-1s to first audio vs 2-4s for full response).
+
+See `ai-gateway/docs/FALLBACK_PIPELINE.md` for detailed implementation.
+
+#### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/ask` | POST | Single command processing (JSON) |
+| `/voice` | POST | Voice command with audio file |
+| `/voice/stream` | POST | Streaming voice response (SSE) |
+| `/conversation` | POST | Multi-turn text conversation |
+| `/conversation/voice` | POST | Multi-turn voice conversation |
+| `/health` | GET | Service health check |
+
 **Key Files**:
 - `ai-gateway/app/main.py` — FastAPI application entry point
-- `ai-gateway/app/routers/gateway.py` — `/ask` endpoint for NL processing
+- `ai-gateway/app/routers/gateway.py` — Voice/conversation endpoints
 - `ai-gateway/app/services/ollama_client.py` — Ollama LLM integration with JSON validation
 - `ai-gateway/app/services/ha_client.py` — Home Assistant REST API client
-- `ai-gateway/docker-compose.yml` — HA + MQTT + AI Gateway orchestration
-- `ai-gateway/pyproject.toml` — AI Gateway dependencies and configuration
+- `ai-gateway/app/services/intent_matcher.py` — Pattern matching for commands
+- `ai-gateway/app/services/conversation_client.py` — OpenAI streaming + session memory
+- `ai-gateway/app/services/pipeline/` — STT and intent pipeline executors
+- `ai-gateway/config/PERSONALITY.md` — Roco personality configuration
+- `ai-gateway/docker-compose.yml` — HA + MQTT + AI Gateway + Wake-word orchestration
+- `ai-gateway/docs/FALLBACK_PIPELINE.md` — Pipeline architecture documentation
 
 **Service Dependencies**:
 1. **Home Assistant** (container, port 8123) - Via `network_mode: host`
 2. **MQTT Broker** (Mosquitto, ports 1883/9001) - For IoT devices
 3. **AI Gateway** (container, port 8080) - Depends on HA health
-4. **Ollama** (host, port 11434) - Accessed via `host.docker.internal`
+4. **Wake-Word Service** (container) - Depends on AI Gateway
+5. **Ollama** (host, port 11434) - Accessed via `host.docker.internal`
+
+### Wake-Word Service Architecture
+
+**Location**: `wake-word-service/` (separate from ai-gateway)
+
+The wake-word service handles voice input and streaming TTS playback:
+
+```
+Microphone → Wake-word detection → Audio recording → AI Gateway → TTS Queue → Speaker
+     ↓                                                    ↓
+ReSpeaker 4-mic                                   Streaming SSE
+     ↓                                                    ↓
+OpenWakeWord                                      Sentence-by-sentence
+```
+
+**Key Files**:
+- `wake-word-service/app/main.py` — Detection loop + TTSQueue
+- `wake-word-service/app/detector.py` — OpenWakeWord TFLite/ONNX
+- `wake-word-service/app/audio_capture.py` — Recording with VAD
+- `wake-word-service/app/tts_service.py` — Coqui TTS playback
+
+**Features**:
+- Wake-word: "Hey Jarvis" (OpenWakeWord)
+- Audio: 16kHz mono via ReSpeaker 4-mic array
+- Streaming playback: TTSQueue processes sentences as they arrive
+- Conversation mode: Multi-turn dialogue with interrupt support
+- Detection threshold: 0.35 (35% confidence)
 
 **Persistent Storage** (SSD-backed):
 - `/mnt/data-ssd/ha-data/ha-config` → Home Assistant configuration
@@ -316,6 +392,33 @@ Use Conventional Commits format:
 - **Performance**: First request ~2-3s (model load), subsequent ~500ms-1s
 - **Health checks**: Use `/health` endpoint to verify Ollama and HA connectivity
 - **Interactive docs**: Available at `http://localhost:8080/docs` (Swagger UI)
+
+**Configuration** (environment variables):
+```bash
+# LLM Provider (ollama or openai)
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+OLLAMA_MODEL=qwen2.5:3b
+# For OpenAI (conversation mode)
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL=gpt-4o-mini
+
+# STT Provider (vosk or whisper)
+STT_PROVIDER=vosk
+WHISPER_MODEL=small
+
+# Confidence thresholds
+STT_CONFIDENCE_THRESHOLD=0.7
+INTENT_CONFIDENCE_THRESHOLD=0.8
+
+# TTS routing
+TTS_SHORT_RESPONSE_LIMIT=15
+```
+
+**Personality Configuration**:
+- Edit `ai-gateway/config/PERSONALITY.md` to customize Roco's character
+- Supports markdown format with sections for identity, language rules, response style
+- Loaded at startup, change requires ai-gateway restart
 
 ### Storage and Performance (Raspberry Pi 5)
 - **SSD paths**: All persistent data on `/mnt/data-ssd/ha-data/`
