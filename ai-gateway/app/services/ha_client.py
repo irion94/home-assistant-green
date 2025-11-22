@@ -120,3 +120,28 @@ class HomeAssistantClient:
         except Exception as e:
             logger.error(f"Unexpected error in health check: {e}")
             return False
+
+    async def get_states(self) -> list[dict[str, Any]]:
+        """Get all entity states from Home Assistant.
+
+        Returns:
+            List of entity state dictionaries
+        """
+        url = f"{self.base_url}/api/states"
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(url, headers=self._get_headers())
+                response.raise_for_status()
+
+            states: list[dict[str, Any]] = response.json()
+            logger.info(f"Fetched {len(states)} entity states from Home Assistant")
+            return states
+
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error fetching states: {e}")
+            return []
+
+        except Exception as e:
+            logger.error(f"Unexpected error in get_states: {e}")
+            return []

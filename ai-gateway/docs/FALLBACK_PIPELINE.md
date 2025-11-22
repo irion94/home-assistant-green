@@ -319,6 +319,169 @@ async with httpx.AsyncClient() as client:
 | 2025-11-22 | Phase 5.1 | Done | Text validator |
 | 2025-11-22 | Phase 5.2 | Done | Jarvis personality |
 | 2025-11-22 | Phase 6 | Done | Streaming TTS |
+| 2025-11-22 | Phase 7 | Done | Dynamic entity discovery (OpenAI + Ollama) |
+
+### Phase 7: Dynamic Entity Discovery ✅
+Automatic entity mapping using AI semantic matching.
+
+**Goal**: No more manual entity mapping - AI discovers and matches entities dynamically from Home Assistant.
+
+**Current Problem**:
+- Entity mappings hardcoded in `intent_matcher.py` and `llm_client.py`
+- Adding new HA devices requires code changes
+- Speech recognition errors may not match exact keywords
+
+**Target Architecture**:
+```
+User: "Zapal światło na biurku"
+         ↓
+1. IntentMatcher (fast pattern) → Not found
+         ↓
+2. EntityDiscovery.get_entities() → Fetch from HA API
+   [
+     {"entity_id": "light.yeelight_lamp15_0x1b37d19d_ambilight", "name": "Biurko"},
+     {"entity_id": "light.yeelight_color_0x80156a9", "name": "Salon"},
+     ...
+   ]
+         ↓
+3. LLM Semantic Match: "Which entity matches 'światło na biurku'?"
+         ↓
+4. Returns: light.yeelight_lamp15_0x1b37d19d_ambilight (confidence: 0.95)
+```
+
+#### 7.1 Entity Discovery Service
+- [x] Create `entity_discovery.py` service
+- [x] Fetch entities from HA `/api/states` endpoint
+- [x] Cache entities (refresh every 5 minutes or on demand)
+- [x] Filter actionable domains (light, switch, climate, media_player, etc.)
+- [x] Extract friendly names and entity IDs
+
+#### 7.2 Dynamic LLM Prompt
+- [x] Generate entity list dynamically for LLM prompt
+- [x] Include entity_id + friendly_name for each device
+- [x] Support domain-specific actions (lights, media, climate)
+- [x] Handle "all" entities per domain
+
+#### 7.3 Semantic Entity Matching
+- [x] If pattern matcher fails, use LLM for semantic match (Ollama)
+- [x] Pass user text + available entities to LLM
+- [x] LLM returns best matching entity_id
+- [x] Confidence scoring for match quality
+- [x] Add OpenAI support for dynamic matching
+
+#### 7.4 Fast Path Optimization
+- [x] Keep pattern matcher for common commands (speed)
+- [x] Use LLM only when pattern fails
+- [ ] Cache recent LLM matches for repeated commands
+- [ ] Optional: Learn from LLM matches to improve pattern matcher
+
+#### Files to create/modify:
+
+**entity_discovery.py** (new):
+```python
+class EntityDiscovery:
+    def __init__(self, ha_client):
+        self.ha_client = ha_client
+        self._cache = {}
+        self._cache_time = None
+        self._cache_ttl = 300  # 5 minutes
+
+    async def get_entities(self, domain: str = None) -> list[dict]:
+        """Get entities from HA, with caching."""
+        if self._is_cache_valid():
+            entities = self._cache
+        else:
+            entities = await self._fetch_entities()
+            self._cache = entities
+            self._cache_time = time.time()
+
+        if domain:
+            return [e for e in entities if e['domain'] == domain]
+        return entities
+
+    async def _fetch_entities(self) -> list[dict]:
+        """Fetch all entities from HA API."""
+        states = await self.ha_client.get_states()
+        actionable_domains = ['light', 'switch', 'climate', 'media_player',
+                              'cover', 'fan', 'vacuum', 'scene', 'script']
+
+        entities = []
+        for state in states:
+            domain = state['entity_id'].split('.')[0]
+            if domain in actionable_domains:
+                entities.append({
+                    'entity_id': state['entity_id'],
+                    'domain': domain,
+                    'name': state['attributes'].get('friendly_name', state['entity_id']),
+                    'state': state['state'],
+                })
+        return entities
+```
+
+**llm_client.py** - Dynamic prompt generation:
+```python
+def _build_entity_prompt(self, entities: list[dict]) -> str:
+    """Build dynamic entity list for LLM prompt."""
+    by_domain = {}
+    for e in entities:
+        domain = e['domain']
+        if domain not in by_domain:
+            by_domain[domain] = []
+        by_domain[domain].append(f"- \"{e['name']}\" → {e['entity_id']}")
+
+    prompt_parts = []
+    for domain, items in by_domain.items():
+        prompt_parts.append(f"{domain.upper()}S:")
+        prompt_parts.extend(items)
+        prompt_parts.append("")
+
+    return "\n".join(prompt_parts)
+
+async def translate_command_dynamic(self, command: str, entities: list[dict]) -> HAAction:
+    """Translate command using dynamic entity list."""
+    entity_prompt = self._build_entity_prompt(entities)
+
+    prompt = f"""Match this command to an entity:
+Command: "{command}"
+
+Available entities:
+{entity_prompt}
+
+Return JSON with entity_id and confidence."""
+
+    # Call LLM with dynamic prompt
+    ...
+```
+
+**intent_matcher.py** - Fallback to dynamic matching:
+```python
+async def match_with_fallback(self, text: str, entity_discovery) -> tuple[HAAction | None, float]:
+    """Match with pattern first, then dynamic LLM fallback."""
+    # Try fast pattern match
+    action, confidence = self.match_with_confidence(text)
+    if action and confidence >= 0.7:
+        return action, confidence
+
+    # Fallback to dynamic LLM matching
+    entities = await entity_discovery.get_entities()
+    return await self.llm_client.translate_command_dynamic(text, entities)
+```
+
+#### Expected Benefits:
+- **Zero-config device support**: New HA devices work automatically
+- **Better speech recognition tolerance**: AI understands context
+- **Multilingual support**: AI handles any language
+- **Semantic matching**: "lamp on desk" matches "Biurko"
+
+#### Risks:
+- LLM latency for non-cached entities (~500ms-1s)
+- LLM may hallucinate non-existent entities (mitigate with validation)
+- Cache invalidation when HA entities change
+
+#### Performance Targets:
+- Pattern match: <10ms (unchanged)
+- Cached LLM match: <100ms
+- Full LLM match: <1s
 
 ### Phase 1-3 Details (Completed)
 

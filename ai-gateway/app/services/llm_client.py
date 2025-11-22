@@ -17,6 +17,14 @@ logger = logging.getLogger(__name__)
 
 # Entity mapping: friendly names -> Home Assistant entity IDs
 ENTITY_MAPPING = {
+    # All lights
+    "all lights": "all",
+    "all": "all",
+    "everything": "all",
+    "wszystko": "all",
+    "wszystkie": "all",
+    "wszystkie światła": "all",
+    "wszędzie": "all",
     # Living room / Salon
     "living room": "light.yeelight_color_0x80156a9",
     "living room lights": "light.yeelight_color_0x80156a9",
@@ -44,24 +52,29 @@ ENTITY_MAPPING = {
     "lamp 2": "light.yeelight_color_0x8015154",
     "lampa 2": "light.yeelight_color_0x8015154",
     "lampę 2": "light.yeelight_color_0x8015154",  # Polish accusative
-    # Yeelight Lamp15 (desk lamp / lampka biurkowa)
-    "desk lamp": "light.yeelight_lamp15_0x1b37d19d",
-    "lamp 15": "light.yeelight_lamp15_0x1b37d19d",
-    "lampa 15": "light.yeelight_lamp15_0x1b37d19d",
-    "lampka": "light.yeelight_lamp15_0x1b37d19d",
-    "lampka biurkowa": "light.yeelight_lamp15_0x1b37d19d",
-    # Yeelight Lamp15 Ambilight
-    "ambilight": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    "ambient light": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    "ambient": "light.yeelight_lamp15_0x1b37d19d_ambilight",
+    # Desk / Biurko (main light is _ambilight entity in HA)
+    "desk": "light.yeelight_lamp15_0x1b37d19d_ambilight",
+    "desk lamp": "light.yeelight_lamp15_0x1b37d19d_ambilight",
+    "biurko": "light.yeelight_lamp15_0x1b37d19d_ambilight",
+    "biurku": "light.yeelight_lamp15_0x1b37d19d_ambilight",  # Polish locative
+    "lampka": "light.yeelight_lamp15_0x1b37d19d_ambilight",
+    "lampkę": "light.yeelight_lamp15_0x1b37d19d_ambilight",  # Polish accusative
+    # Desk Ambient (background light)
+    "ambient": "light.yeelight_lamp15_0x1b37d19d",
+    "ambilight": "light.yeelight_lamp15_0x1b37d19d",
+    "biurko ambient": "light.yeelight_lamp15_0x1b37d19d",
     # Media players
     "nest hub": "media_player.living_room_display",
     "speaker": "media_player.living_room_display",
     "głośnik": "media_player.living_room_display",  # Polish: speaker
     "living room tv": "media_player.telewizor_w_salonie",
     "telewizor": "media_player.telewizor_w_salonie",
+    "telewizor salon": "media_player.telewizor_w_salonie",
+    "tv salon": "media_player.telewizor_w_salonie",
     "tv": "media_player.telewizor_w_salonie",
-    "bedroom tv": "media_player.telewizor_w_sypialni_2",
+    "bedroom tv": "media_player.telewizor_w_sypialni",
+    "telewizor sypialnia": "media_player.telewizor_w_sypialni",
+    "tv sypialnia": "media_player.telewizor_w_sypialni",
 }
 
 # System prompt for LLMs - forces JSON-only responses
@@ -80,18 +93,19 @@ CRITICAL RULES:
 
 ENTITY MAPPING:
 LIGHTS:
+- "all" / "all lights" / "everything" / "wszystko" / "wszystkie" / "wszędzie" → all
 - "living room" / "salon" / "lights" / "światło" → light.yeelight_color_0x80156a9
 - "kitchen" / "kuchnia" → light.yeelight_color_0x49c27e1
 - "bedroom" / "sypialnia" → light.yeelight_color_0x80147dd
 - "lamp 1" / "lampa 1" → light.yeelight_color_0x801498b
 - "lamp 2" / "lampa 2" → light.yeelight_color_0x8015154
-- "desk lamp" / "lampka" / "lamp 15" → light.yeelight_lamp15_0x1b37d19d
-- "ambilight" / "ambient" → light.yeelight_lamp15_0x1b37d19d_ambilight
+- "desk" / "biurko" / "lampka" → light.yeelight_lamp15_0x1b37d19d_ambilight
+- "ambient" / "ambilight" / "biurko ambient" → light.yeelight_lamp15_0x1b37d19d
 
 MEDIA PLAYERS:
 - "nest hub" / "speaker" / "głośnik" → media_player.living_room_display
-- "tv" / "telewizor" → media_player.telewizor_w_salonie
-- "bedroom tv" → media_player.telewizor_w_sypialni_2
+- "tv" / "telewizor" / "tv salon" → media_player.telewizor_w_salonie
+- "bedroom tv" / "tv sypialnia" / "telewizor sypialnia" → media_player.telewizor_w_sypialni
 
 SUPPORTED ACTIONS:
 - Turn on lights: {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{},"confidence":0.95}
@@ -126,7 +140,13 @@ Input: "What's the weather?"
 Output: {"action":"none","confidence":0.0}
 
 Input: "Zapal lampkę"
-Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_lamp15_0x1b37d19d","data":{},"confidence":0.95}
+Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_lamp15_0x1b37d19d_ambilight","data":{},"confidence":0.95}
+
+Input: "Turn off all lights"
+Output: {"action":"call_service","service":"light.turn_off","entity_id":"all","data":{},"confidence":0.95}
+
+Input: "Zgaś wszystko"
+Output: {"action":"call_service","service":"light.turn_off","entity_id":"all","data":{},"confidence":0.95}
 
 Remember: ONLY return the JSON object with confidence, nothing else."""
 

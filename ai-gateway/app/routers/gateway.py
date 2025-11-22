@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from app.models import AskRequest, AskResponse, Config
 from app.services.conversation_client import ConversationClient, get_conversation_client
+from app.services.entity_discovery import EntityDiscovery, get_entity_discovery
 from app.services.ha_client import HomeAssistantClient
 from app.services.intent_matcher import IntentMatcher, get_intent_matcher
 from app.services.llm_client import LLMClient, get_llm_client
@@ -99,12 +100,27 @@ def get_ha_client(config: Config = Depends(get_config)) -> HomeAssistantClient:
     return HomeAssistantClient(config)
 
 
+def get_entity_discovery_dependency(
+    ha_client: HomeAssistantClient = Depends(get_ha_client),
+) -> EntityDiscovery:
+    """Dependency to get entity discovery service.
+
+    Args:
+        ha_client: Home Assistant client
+
+    Returns:
+        EntityDiscovery service instance
+    """
+    return get_entity_discovery(ha_client)
+
+
 @router.post("/ask", response_model=AskResponse)
 async def ask(
     request: AskRequest,
     intent_matcher: IntentMatcher = Depends(get_intent_matcher),
     llm_client: LLMClient = Depends(get_llm_client_dependency),
     ha_client: HomeAssistantClient = Depends(get_ha_client),
+    entity_discovery: EntityDiscovery = Depends(get_entity_discovery_dependency),
 ) -> AskResponse:
     """Process natural language command and execute Home Assistant action.
 
@@ -132,11 +148,12 @@ async def ask(
     logger.info(f"[{correlation_id}] Processing request: {request.text}")
 
     try:
-        # Create and run intent pipeline
+        # Create and run intent pipeline with dynamic entity discovery
         pipeline = IntentPipeline(
             intent_matcher=intent_matcher,
             llm_client=llm_client,
             confidence_threshold=0.8,
+            entity_discovery=entity_discovery,
         )
         result = await pipeline.process(request.text)
 

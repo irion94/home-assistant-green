@@ -14,11 +14,21 @@ from rapidfuzz import fuzz, process
 
 if TYPE_CHECKING:
     from app.models import HAAction
+    from app.services.entity_discovery import EntityDiscovery
+    from app.services.ollama_client import OllamaClient
 
 logger = logging.getLogger(__name__)
 
 # Entity mappings for rooms/devices
 ROOM_ENTITIES = {
+    # All lights
+    "all lights": "all",
+    "all": "all",
+    "everything": "all",
+    "wszystko": "all",
+    "wszystkie": "all",
+    "wszystkie światła": "all",
+    "wszędzie": "all",
     # Living room / Salon
     "salon": "light.yeelight_color_0x80156a9",
     "salonie": "light.yeelight_color_0x80156a9",
@@ -41,14 +51,28 @@ ROOM_ENTITIES = {
     "lampa 2": "light.yeelight_color_0x8015154",
     "lampę 2": "light.yeelight_color_0x8015154",
     "lamp 2": "light.yeelight_color_0x8015154",
-    # Desk lamp
-    "lampka": "light.yeelight_lamp15_0x1b37d19d",
-    "lampkę": "light.yeelight_lamp15_0x1b37d19d",
-    "desk lamp": "light.yeelight_lamp15_0x1b37d19d",
-    "lampa 15": "light.yeelight_lamp15_0x1b37d19d",
-    # Ambilight
-    "ambilight": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    "ambient": "light.yeelight_lamp15_0x1b37d19d_ambilight",
+    # Desk / Biurko (main light is _ambilight entity in HA)
+    "biurko": "light.yeelight_lamp15_0x1b37d19d_ambilight",
+    "biurku": "light.yeelight_lamp15_0x1b37d19d_ambilight",
+    "desk": "light.yeelight_lamp15_0x1b37d19d_ambilight",
+    "desk lamp": "light.yeelight_lamp15_0x1b37d19d_ambilight",
+    "lampka": "light.yeelight_lamp15_0x1b37d19d_ambilight",
+    "lampkę": "light.yeelight_lamp15_0x1b37d19d_ambilight",
+    # Desk Ambient (background light)
+    "ambient": "light.yeelight_lamp15_0x1b37d19d",
+    "ambilight": "light.yeelight_lamp15_0x1b37d19d",
+    "biurko ambient": "light.yeelight_lamp15_0x1b37d19d",
+    # Media players
+    "nest hub": "media_player.living_room_display",
+    "speaker": "media_player.living_room_display",
+    "głośnik": "media_player.living_room_display",
+    "telewizor": "media_player.telewizor_w_salonie",
+    "telewizor salon": "media_player.telewizor_w_salonie",
+    "tv salon": "media_player.telewizor_w_salonie",
+    "tv": "media_player.telewizor_w_salonie",
+    "telewizor sypialnia": "media_player.telewizor_w_sypialni",
+    "tv sypialnia": "media_player.telewizor_w_sypialni",
+    "bedroom tv": "media_player.telewizor_w_sypialni",
 }
 
 # Action keywords
@@ -184,6 +208,68 @@ class IntentMatcher:
         logger.debug(f"No intent match for: {text}")
         return (None, 0.0)
 
+    async def match_with_fallback(
+        self,
+        text: str,
+        entity_discovery: EntityDiscovery,
+        llm_client: OllamaClient,
+        min_pattern_confidence: float = 0.7,
+    ) -> tuple[HAAction | None, float]:
+        """Match with pattern first, then fallback to dynamic LLM.
+
+        Args:
+            text: Transcribed command text
+            entity_discovery: Entity discovery service for fetching HA entities
+            llm_client: LLM client for dynamic matching
+            min_pattern_confidence: Minimum confidence to accept pattern match
+
+        Returns:
+            Tuple of (HAAction or None, confidence 0.0-1.0)
+        """
+        # Try fast pattern match first
+        action, confidence = self.match_with_confidence(text)
+
+        if action and confidence >= min_pattern_confidence:
+            logger.info(f"Pattern match accepted: {action.service} (conf={confidence:.2f})")
+            return (action, confidence)
+
+        if action:
+            logger.info(f"Pattern match low confidence ({confidence:.2f}), trying LLM fallback")
+        else:
+            logger.info(f"No pattern match, trying LLM fallback for: {text}")
+
+        # Fallback to dynamic LLM matching
+        try:
+            entities = await entity_discovery.get_entities()
+            if not entities:
+                logger.warning("No entities available for dynamic matching")
+                # Return pattern match if we had one, even with low confidence
+                if action:
+                    return (action, confidence)
+                return (None, 0.0)
+
+            llm_action, llm_confidence = await llm_client.translate_command_dynamic(
+                text, entities
+            )
+
+            if llm_action and llm_action.action != "none":
+                logger.info(f"LLM fallback matched: {llm_action.service} -> {llm_action.entity_id} (conf={llm_confidence:.2f})")
+                return (llm_action, llm_confidence)
+
+            # If LLM failed but we had a pattern match, use it
+            if action:
+                logger.info(f"LLM fallback failed, using pattern match with low confidence")
+                return (action, confidence)
+
+            return (None, 0.0)
+
+        except Exception as e:
+            logger.error(f"LLM fallback error: {e}")
+            # Return pattern match if we had one
+            if action:
+                return (action, confidence)
+            return (None, 0.0)
+
     def _detect_conversation(self, text: str) -> str | None:
         """Detect if text contains conversation start/end trigger.
 
@@ -283,26 +369,47 @@ class IntentMatcher:
         """
         # Check specific room names first (exact match = 1.0)
         specific_rooms = [
+            # All lights (check first - most specific)
+            ("wszystkie światła", "all"),
+            ("wszystkie", "all"),
+            ("wszystko", "all"),
+            ("wszędzie", "all"),
+            ("all lights", "all"),
+            ("everything", "all"),
             # Polish locative forms (most specific)
             ("sypialni", "light.yeelight_color_0x80147dd"),
             ("kuchni", "light.yeelight_color_0x49c27e1"),
             ("salonie", "light.yeelight_color_0x80156a9"),
+            ("biurku", "light.yeelight_lamp15_0x1b37d19d_ambilight"),
             # Polish nominative
             ("sypialnia", "light.yeelight_color_0x80147dd"),
             ("kuchnia", "light.yeelight_color_0x49c27e1"),
             ("salon", "light.yeelight_color_0x80156a9"),
+            ("biurko", "light.yeelight_lamp15_0x1b37d19d_ambilight"),
             # English
             ("bedroom", "light.yeelight_color_0x80147dd"),
             ("kitchen", "light.yeelight_color_0x49c27e1"),
             ("living room", "light.yeelight_color_0x80156a9"),
+            ("desk", "light.yeelight_lamp15_0x1b37d19d_ambilight"),
             # Lamps
-            ("lampka", "light.yeelight_lamp15_0x1b37d19d"),
-            ("lampkę", "light.yeelight_lamp15_0x1b37d19d"),
+            ("lampka", "light.yeelight_lamp15_0x1b37d19d_ambilight"),
+            ("lampkę", "light.yeelight_lamp15_0x1b37d19d_ambilight"),
             ("lamp 1", "light.yeelight_color_0x801498b"),
             ("lampa 1", "light.yeelight_color_0x801498b"),
             ("lamp 2", "light.yeelight_color_0x8015154"),
             ("lampa 2", "light.yeelight_color_0x8015154"),
-            ("ambilight", "light.yeelight_lamp15_0x1b37d19d_ambilight"),
+            # Ambient
+            ("ambient", "light.yeelight_lamp15_0x1b37d19d"),
+            ("ambilight", "light.yeelight_lamp15_0x1b37d19d"),
+            ("biurko ambient", "light.yeelight_lamp15_0x1b37d19d"),
+            # Media players
+            ("nest hub", "media_player.living_room_display"),
+            ("głośnik", "media_player.living_room_display"),
+            ("telewizor", "media_player.telewizor_w_salonie"),
+            ("tv", "media_player.telewizor_w_salonie"),
+            ("telewizor sypialnia", "media_player.telewizor_w_sypialni"),
+            ("tv sypialnia", "media_player.telewizor_w_sypialni"),
+            ("bedroom tv", "media_player.telewizor_w_sypialni"),
         ]
 
         for room_name, entity_id in specific_rooms:
