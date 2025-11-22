@@ -168,6 +168,145 @@ OLLAMA_MODEL=qwen2.5:3b
 WHISPER_MODEL=small
 ```
 
+### Phase 6: Streaming TTS ✅
+Stream AI responses to TTS for reduced latency.
+
+**Goal**: Start speaking while AI is still generating, reducing perceived wait time.
+
+**Current flow** (~2-4s total wait):
+```
+User speaks → STT → AI (wait 1-3s) → Full response → TTS synthesis → Play
+```
+
+**Target flow** (~0.5-1s to first audio):
+```
+User speaks → STT → AI streams → First sentence ready → TTS plays
+                              → Second sentence ready → Queue TTS
+                              → ...continues...
+```
+
+#### 6.1 Sentence-based Streaming
+- [x] Stream AI response chunks
+- [x] Buffer until sentence boundary (. ! ?)
+- [x] Send complete sentence to TTS immediately
+- [x] Queue subsequent sentences
+
+#### 6.2 TTS Queue Management
+- [x] Implement TTS queue in wake-word service
+- [x] Play sentences sequentially without gaps
+- [x] Handle interrupts (stop current + clear queue)
+- [x] Fallback to full response if streaming fails
+
+#### 6.3 Gateway Streaming Endpoint
+- [x] Create `/voice/stream` endpoint with SSE
+- [x] Stream sentence chunks as they complete
+- [x] Include sentence index for ordering
+- [x] Handle connection drops gracefully
+
+#### Files to modify:
+
+**conversation_client.py** - Sentence streaming:
+```python
+async def chat_stream_sentences(self, text: str, session_id: str) -> AsyncIterator[str]:
+    """Stream response sentence by sentence."""
+    buffer = ""
+    sentence_endings = {'.', '!', '?'}
+
+    async for chunk in self.chat_stream(text, session_id):
+        buffer += chunk
+
+        # Check for complete sentence
+        for i, char in enumerate(buffer):
+            if char in sentence_endings:
+                # Check if it's really end of sentence (not abbreviation)
+                if i + 1 < len(buffer) and buffer[i + 1] == ' ':
+                    sentence = buffer[:i + 1].strip()
+                    buffer = buffer[i + 2:]
+                    if sentence:
+                        yield sentence
+                    break
+
+    # Yield remaining buffer
+    if buffer.strip():
+        yield buffer.strip()
+```
+
+**gateway.py** - SSE streaming endpoint:
+```python
+from fastapi.responses import StreamingResponse
+
+@router.post("/voice/stream")
+async def voice_stream(
+    audio: UploadFile = File(...),
+    # ... dependencies
+):
+    async def generate():
+        # Transcribe audio
+        text = await stt_pipeline.transcribe(audio_bytes)
+
+        # Stream sentences
+        async for sentence in conversation_client.chat_stream_sentences(text, session_id):
+            yield f"data: {json.dumps({'sentence': sentence})}\\n\\n"
+
+        yield "data: [DONE]\\n\\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+```
+
+**wake-word main.py** - TTS queue:
+```python
+import queue
+import threading
+
+class TTSQueue:
+    def __init__(self, tts_service):
+        self.tts_service = tts_service
+        self.queue = queue.Queue()
+        self.playing = False
+        self.worker = threading.Thread(target=self._worker, daemon=True)
+        self.worker.start()
+
+    def _worker(self):
+        while True:
+            sentence = self.queue.get()
+            if sentence is None:
+                break
+            self.playing = True
+            self.tts_service.speak(sentence)
+            self.playing = False
+
+    def add(self, sentence: str):
+        self.queue.put(sentence)
+
+    def clear(self):
+        while not self.queue.empty():
+            try:
+                self.queue.get_nowait()
+            except queue.Empty:
+                break
+
+# In process_wake_word_detection:
+async with httpx.AsyncClient() as client:
+    async with client.stream("POST", f"{url}/voice/stream", files=files) as response:
+        async for line in response.aiter_lines():
+            if line.startswith("data: "):
+                data = line[6:]
+                if data == "[DONE]":
+                    break
+                sentence = json.loads(data)["sentence"]
+                tts_queue.add(sentence)
+```
+
+#### Expected Improvements:
+- **First word latency**: 2-4s → 0.5-1s
+- **Perceived responsiveness**: Much better
+- **User can interrupt**: Yes (clear queue)
+
+#### Risks:
+- Sentence detection edge cases (abbreviations, numbers)
+- TTS gaps between sentences
+- Network issues during streaming
+
 ## Progress Log
 
 | Date | Component | Status | Notes |
@@ -179,6 +318,7 @@ WHISPER_MODEL=small
 | 2025-11-22 | Phase 4.2 | Done | Actions in conversation |
 | 2025-11-22 | Phase 5.1 | Done | Text validator |
 | 2025-11-22 | Phase 5.2 | Done | Jarvis personality |
+| 2025-11-22 | Phase 6 | Done | Streaming TTS |
 
 ### Phase 1-3 Details (Completed)
 

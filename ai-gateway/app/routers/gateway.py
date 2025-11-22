@@ -9,7 +9,10 @@ from __future__ import annotations
 import logging
 import uuid
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 
 from pydantic import BaseModel, Field
 
@@ -408,6 +411,122 @@ async def voice(
     except Exception as e:
         logger.error(f"[{correlation_id}] Unexpected error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+
+
+@router.post("/voice/stream")
+async def voice_stream(
+    audio: UploadFile = File(..., description="Audio file in WAV format"),
+    stt_pipeline: STTPipeline = Depends(get_stt_pipeline_dependency),
+    intent_matcher: IntentMatcher = Depends(get_intent_matcher),
+    llm_client: LLMClient = Depends(get_llm_client_dependency),
+    ha_client: HomeAssistantClient = Depends(get_ha_client),
+    conversation_client: ConversationClient = Depends(get_conversation_client_dependency),
+) -> StreamingResponse:
+    """Process voice command and stream AI response sentence by sentence.
+
+    Uses Server-Sent Events (SSE) to stream sentences as they become available,
+    enabling the client to start TTS playback before the full response is ready.
+
+    Flow:
+    1. Receive audio file (WAV format)
+    2. Transcribe audio to text
+    3. Check for HA action first
+    4. If no action, stream AI response sentence by sentence
+    5. Client receives sentences via SSE for immediate TTS
+
+    Args:
+        audio: Audio file upload
+        stt_pipeline: STT pipeline for transcription
+        intent_matcher: Fast pattern matcher
+        llm_client: LLM client for intent translation
+        ha_client: Home Assistant client
+        conversation_client: Conversation client for streaming
+
+    Returns:
+        StreamingResponse with SSE data
+    """
+    correlation_id = str(uuid.uuid4())
+    logger.info(f"[{correlation_id}] Streaming voice command: {audio.filename}")
+
+    async def generate():
+        try:
+            # Step 1: Read and transcribe audio
+            audio_bytes = await audio.read()
+            logger.info(f"[{correlation_id}] Audio size: {len(audio_bytes)} bytes")
+
+            try:
+                stt_result = await stt_pipeline.transcribe(audio_bytes)
+                text = stt_result.text
+                logger.info(
+                    f"[{correlation_id}] STT result: source={stt_result.source}, "
+                    f"confidence={stt_result.confidence:.2f}"
+                )
+            except Exception as e:
+                logger.error(f"[{correlation_id}] Transcription failed: {e}")
+                yield f"data: {json.dumps({'error': f'Transcription failed: {e}'})}\n\n"
+                return
+
+            if not text or not text.strip():
+                yield f"data: {json.dumps({'error': 'No speech detected'})}\n\n"
+                return
+
+            # Send transcribed text first
+            yield f"data: {json.dumps({'transcription': text})}\n\n"
+
+            # Step 2: Check for HA action
+            action = intent_matcher.match(text)
+            if not action:
+                action = await llm_client.translate_command(text)
+
+            # Step 3: Handle HA actions (non-streaming)
+            if action and action.action not in ("none", "conversation_start", "conversation_end"):
+                ha_response = await ha_client.call_service(action)
+                if ha_response is not None:
+                    yield f"data: {json.dumps({'sentence': 'Gotowe', 'index': 0, 'action': action.action})}\n\n"
+                else:
+                    yield f"data: {json.dumps({'sentence': 'Nie udało się wykonać polecenia', 'index': 0})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            # Handle conversation mode triggers
+            if action and action.action == "conversation_start":
+                yield f"data: {json.dumps({'sentence': 'Tryb rozmowy rozpoczęty', 'index': 0, 'action': 'conversation_start'})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            if action and action.action == "conversation_end":
+                yield f"data: {json.dumps({'sentence': 'Tryb rozmowy zakończony', 'index': 0, 'action': 'conversation_end'})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            # Step 4: Validate input for AI fallback
+            if not is_valid_input(text):
+                yield f"data: {json.dumps({'sentence': 'Nie rozumiem', 'index': 0})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            # Step 5: Stream AI response sentence by sentence
+            logger.info(f"[{correlation_id}] Streaming AI response...")
+            sentence_index = 0
+            async for sentence in conversation_client.chat_stream_sentences(text, "voice_stream"):
+                yield f"data: {json.dumps({'sentence': sentence, 'index': sentence_index})}\n\n"
+                sentence_index += 1
+
+            yield "data: [DONE]\n\n"
+            logger.info(f"[{correlation_id}] Streaming complete: {sentence_index} sentences")
+
+        except Exception as e:
+            logger.error(f"[{correlation_id}] Streaming error: {e}", exc_info=True)
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
 
 
 @router.get("/health")

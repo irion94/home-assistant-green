@@ -10,8 +10,13 @@ import time
 import logging
 import signal
 import uuid
+import queue
+import threading
+import json
 from typing import Optional
 from pathlib import Path
+
+import httpx
 
 from detector import WakeWordDetector
 from audio_capture import AudioCapture
@@ -27,6 +32,79 @@ logging.basicConfig(
     stream=sys.stdout
 )
 logger = logging.getLogger(__name__)
+
+
+class TTSQueue:
+    """Queue for managing TTS sentence playback.
+
+    Plays sentences sequentially without gaps, allowing streaming
+    responses to start playing while still receiving more sentences.
+    """
+
+    def __init__(self, tts_service):
+        """Initialize TTS queue.
+
+        Args:
+            tts_service: TTSService instance for audio playback
+        """
+        self.tts_service = tts_service
+        self.queue = queue.Queue()
+        self.playing = False
+        self.should_stop = False
+        self.worker = threading.Thread(target=self._worker, daemon=True)
+        self.worker.start()
+        logger.info("TTS queue initialized")
+
+    def _worker(self):
+        """Worker thread that processes sentences from queue."""
+        while True:
+            try:
+                sentence = self.queue.get(timeout=1.0)
+                if sentence is None:
+                    break
+                if self.should_stop:
+                    self.queue.task_done()
+                    continue
+                self.playing = True
+                logger.info(f"TTS playing: {sentence[:50]}...")
+                self.tts_service.speak(sentence)
+                self.playing = False
+                self.queue.task_done()
+            except queue.Empty:
+                continue
+            except Exception as e:
+                logger.error(f"TTS queue error: {e}")
+                self.playing = False
+
+    def add(self, sentence: str):
+        """Add sentence to playback queue.
+
+        Args:
+            sentence: Text to speak
+        """
+        if not self.should_stop:
+            self.queue.put(sentence)
+
+    def clear(self):
+        """Clear all pending sentences from queue."""
+        self.should_stop = True
+        while not self.queue.empty():
+            try:
+                self.queue.get_nowait()
+                self.queue.task_done()
+            except queue.Empty:
+                break
+        self.should_stop = False
+        logger.info("TTS queue cleared")
+
+    def wait_completion(self):
+        """Wait for all queued sentences to finish playing."""
+        self.queue.join()
+
+    def stop(self):
+        """Stop the worker thread."""
+        self.queue.put(None)
+        self.worker.join(timeout=2.0)
 
 
 def setup_model_symlinks():
@@ -103,6 +181,7 @@ class WakeWordService:
         self.feedback: Optional[AudioFeedback] = None
         self.transcriber: Optional[Transcriber] = None
         self.tts_service: Optional[TTSService] = None
+        self.tts_queue: Optional[TTSQueue] = None
 
         # Configuration from environment
         self.audio_device = os.getenv("AUDIO_DEVICE", "hw:2,0")
@@ -158,6 +237,10 @@ class WakeWordService:
             # Initialize TTS service for local text-to-speech
             self.tts_service = TTSService()
             logger.info("TTS service initialized for local speech output")
+
+            # Initialize TTS queue for streaming playback
+            self.tts_queue = TTSQueue(self.tts_service)
+            logger.info("TTS queue initialized for streaming playback")
 
         except Exception as e:
             logger.error(f"Failed to initialize service: {e}")
@@ -250,7 +333,7 @@ class WakeWordService:
             self.feedback.idle()
 
     def process_wake_word_detection(self):
-        """Handle wake-word detection event"""
+        """Handle wake-word detection event with streaming TTS"""
         logger.info("Wake word detected!")
 
         # Play wake-word detected beep and show LED
@@ -268,53 +351,115 @@ class WakeWordService:
             # Show processing LED
             self.feedback.processing()
 
-            # Transcribe locally
-            text = self.transcriber.transcribe(audio_data, self.sample_rate)
-            if not text:
-                logger.info("No speech detected in recording")
+            # Save audio to temp file for streaming upload
+            import tempfile
+            import wave
+            import numpy as np
+
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
+                temp_path = temp_file.name
+                # Convert audio frames to WAV
+                audio_array = np.array(audio_data, dtype=np.int16)
+                with wave.open(temp_path, 'wb') as wav_file:
+                    wav_file.setnchannels(1)
+                    wav_file.setsampwidth(2)
+                    wav_file.setframerate(self.sample_rate)
+                    wav_file.writeframes(audio_array.tobytes())
+
+            logger.info(f"Saved audio to temp file: {temp_path}")
+
+            # Send to streaming endpoint
+            ai_gateway_url = os.getenv("AI_GATEWAY_URL", "http://host.docker.internal:8080")
+            stream_url = f"{ai_gateway_url}/voice/stream"
+            logger.info(f"Streaming request to {stream_url}")
+
+            conversation_start = False
+            sentence_count = 0
+            transcription = None
+
+            try:
+                with open(temp_path, 'rb') as audio_file:
+                    files = {'audio': ('recording.wav', audio_file, 'audio/wav')}
+
+                    with httpx.Client(timeout=60.0) as client:
+                        with client.stream('POST', stream_url, files=files) as response:
+                            response.raise_for_status()
+
+                            for line in response.iter_lines():
+                                if not line:
+                                    continue
+
+                                if line.startswith('data: '):
+                                    data_str = line[6:]  # Remove 'data: ' prefix
+
+                                    if data_str == '[DONE]':
+                                        logger.info(f"Streaming complete: {sentence_count} sentences")
+                                        break
+
+                                    try:
+                                        data = json.loads(data_str)
+
+                                        # Handle transcription
+                                        if 'transcription' in data:
+                                            transcription = data['transcription']
+                                            logger.info(f"Transcribed: '{transcription}'")
+
+                                        # Handle errors
+                                        if 'error' in data:
+                                            logger.warning(f"Stream error: {data['error']}")
+                                            self.tts_queue.add(data['error'])
+                                            break
+
+                                        # Handle sentences
+                                        if 'sentence' in data:
+                                            sentence = data['sentence']
+                                            sentence_count += 1
+
+                                            # Check for conversation mode
+                                            if data.get('action') == 'conversation_start':
+                                                conversation_start = True
+
+                                            # Queue sentence for immediate TTS playback
+                                            logger.info(f"Queueing sentence {sentence_count}: {sentence[:50]}...")
+                                            self.tts_queue.add(sentence)
+
+                                            # Play success on first sentence
+                                            if sentence_count == 1:
+                                                self.feedback.play_success()
+
+                                    except json.JSONDecodeError as e:
+                                        logger.warning(f"JSON decode error: {e}, data: {data_str}")
+                                        continue
+
+            except httpx.HTTPError as e:
+                logger.error(f"HTTP error during streaming: {e}")
                 self.feedback.play_error()
-                return
+                self.tts_service.speak("Błąd połączenia z serwerem")
+            finally:
+                # Clean up temp file
+                try:
+                    os.unlink(temp_path)
+                except Exception:
+                    pass
 
-            logger.info(f"Transcribed: '{text}'")
+            # Wait for all sentences to finish playing
+            logger.info("Waiting for TTS queue to complete...")
+            self.tts_queue.wait_completion()
+            logger.info("TTS playback complete")
 
-            # Send text to AI Gateway for processing
-            logger.info("Sending text to AI Gateway...")
-            response = self.ai_client.process_text_command(text=text)
+            # Handle conversation mode
+            if conversation_start:
+                logger.info("Entering conversation mode...")
 
-            if response and response.get("status") == "success":
-                logger.info(f"Command processed successfully: {response.get('message')}")
+                # Reset audio stream for conversation
+                self.audio_capture.stop()
+                time.sleep(0.5)
+                self.audio_capture._initialize()
+                self.audio_capture.start()
 
-                # Check if conversation mode was requested
-                plan = response.get("plan", {})
-                action = plan.get("action") if plan else None
-
-                if action == "conversation_start":
-                    logger.info("Entering conversation mode...")
-                    self.feedback.play_success()
-
-                    # Reset audio stream for conversation
-                    self.audio_capture.stop()
-                    time.sleep(0.5)
-                    self.audio_capture._initialize()
-                    self.audio_capture.start()
-
-                    # Run conversation loop
-                    session_id = str(uuid.uuid4())
-                    self.run_conversation_loop(session_id)
-                else:
-                    self.feedback.play_success()
-                    # Speak the response - prefer 'text' (AI response) over 'message'
-                    # This handles both HA action responses and AI fallback responses
-                    response_text = response.get("text") or response.get("message", "")
-                    if response_text:
-                        logger.info(f"Speaking response: '{response_text[:50]}...'")
-                        self.tts_service.speak(response_text)
-            else:
-                error_msg = response.get("message", "Unknown error") if response else "No response"
-                logger.warning(f"Command processing failed: {error_msg}")
-                self.feedback.play_error()
-                # Speak error message
-                self.tts_service.speak(f"Błąd: {error_msg}" if "error" not in error_msg.lower() else error_msg)
+                # Run conversation loop
+                session_id = str(uuid.uuid4())
+                self.run_conversation_loop(session_id)
 
         except Exception as e:
             logger.error(f"Error processing voice command: {e}")
@@ -393,6 +538,9 @@ class WakeWordService:
         """Clean shutdown"""
         logger.info("Shutting down Wake-Word Detection Service")
         self.running = False
+
+        if self.tts_queue:
+            self.tts_queue.stop()
 
         if self.audio_capture:
             self.audio_capture.stop()
