@@ -81,7 +81,8 @@ class AskResponse(BaseModel):
 
     status: Literal["success", "error"] = Field(..., description="Request status")
     plan: HAAction | None = Field(None, description="Generated action plan")
-    message: str | None = Field(None, description="Error or status message")
+    message: str | None = Field(None, description="Error or status message (Polish for TTS)")
+    text: str | None = Field(None, description="AI response text for conversation fallback")
     ha_response: dict[str, Any] | list[Any] | None = Field(
         None, description="Response from Home Assistant API"
     )

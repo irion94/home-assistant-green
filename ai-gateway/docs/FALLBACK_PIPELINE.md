@@ -1,14 +1,19 @@
 # Fallback Pipeline Architecture
 
-Cascading recognition system - run parallel, use fastest confident result.
+Cascading recognition system with unified voice assistant.
 
 ## Overview
 
 ```
-Input → [Tier 1] → [Tier 2] → [Tier 3]
-         fast       medium     slow/best
-
-Return first result with confidence > threshold
+Voice Input → STT → Intent Pipeline → Action found?
+                                         ↓
+                              yes ←──────┴──────→ no
+                               ↓                   ↓
+                          Execute HA           Ask AI
+                               ↓                   ↓
+                           "Gotowe"          AI response
+                                                   ↓
+                                              TTS speak
 ```
 
 ## Pipelines
@@ -18,98 +23,166 @@ Return first result with confidence > threshold
 | Tier | Engine | Speed | When to use |
 |------|--------|-------|-------------|
 | 1 | Vosk | ~100ms | Clear speech, known phrases |
-| 2 | Whisper small | ~1s | Vosk confidence < 0.7 |
-| 3 | Whisper large | ~3s | Complex/noisy audio |
-
-**Confidence**: Word-level scores from Vosk, perplexity from Whisper
+| 2 | Whisper | ~1s | Vosk confidence < 0.7 |
 
 ### 2. Intent Recognition
 
 | Tier | Method | Speed | When to use |
 |------|--------|-------|-------------|
 | 1 | Pattern matcher | ~10ms | Exact command matches |
-| 2 | Ollama (qwen2.5:3b) | ~500ms | Pattern fails |
-| 3 | OpenAI/Claude API | ~2s | Ollama uncertain |
-
-**Confidence**: Pattern = 1.0, LLM returns confidence in JSON
+| 2 | Ollama LLM | ~500ms | Pattern fails |
+| 3 | AI fallback | ~1s | No HA action → treat as question |
 
 ### 3. TTS (Text-to-Speech)
 
 | Tier | Engine | Speed | When to use |
 |------|--------|-------|-------------|
-| 1 | VITS (Polish) | ~200ms | Short responses (<20 words) |
-| 2 | XTTS v2 | ~10s | Long/conversational responses |
+| 1 | VITS (Polish) | ~200ms | Short responses (≤15 words) |
+| 2 | XTTS v2 | ~10s | Long responses (>15 words) |
 
-**Routing**: Based on response length and conversation mode
+## Implementation Phases
 
-## Implementation
+### Phase 1: Intent Pipeline ✅
+- [x] Add confidence to pattern matcher
+- [x] Add confidence to Ollama responses
+- [x] Create parallel executor
+- [x] Polish TTS messages
 
-### Phase 1: Intent Pipeline
-- [ ] Add confidence to pattern matcher
-- [ ] Add confidence to Ollama responses
-- [ ] Create parallel executor
-- [ ] Add OpenAI fallback (optional)
+### Phase 2: STT Pipeline ✅
+- [x] Vosk → Whisper cascade
+- [x] Confidence threshold (0.7)
+- [x] Pipeline integration
 
-### Phase 2: STT Pipeline
-- [ ] Add Whisper to wake-word service
-- [ ] Vosk confidence threshold
-- [ ] Parallel Vosk + Whisper execution
+### Phase 3: Smart TTS ✅
+- [x] VITS for short responses
+- [x] XTTS v2 for long responses
+- [x] Word count routing (15 words)
 
-### Phase 3: Smart TTS
-- [ ] Install XTTS v2
-- [ ] Response length router
-- [ ] Conversation mode detection
+### Phase 4: Unified Assistant ✅
+Smart fallback + actions in conversation.
+
+**Goal**: No more "no action available" - always respond intelligently.
+
+#### 4.1 Smart Fallback (voice commands)
+- [x] Detect when no HA action matches
+- [x] Fall back to conversation AI
+- [x] Return AI response for TTS
+- [x] Update response model for hybrid results
+
+#### 4.2 Actions in Conversation
+- [x] Check each conversation message for HA actions
+- [x] If action found → execute + acknowledge
+- [x] Continue conversation after action
+- [x] Natural flow: "Turn on lights" → executes → "Gotowe. ..."
 
 ## Code Structure
 
 ```
-ai-gateway/app/services/
-├── pipeline/
-│   ├── executor.py      # Parallel execution, early termination
-│   ├── stt_pipeline.py  # Vosk → Whisper cascade
-│   ├── intent_pipeline.py # Pattern → Ollama → Cloud
-│   └── tts_router.py    # VITS vs XTTS selection
+ai-gateway/app/
+├── services/
+│   ├── pipeline/
+│   │   ├── executor.py      # Intent pipeline
+│   │   └── stt_pipeline.py  # STT pipeline
+│   ├── conversation_client.py  # AI conversation
+│   └── ha_client.py         # HA service calls
+├── routers/
+│   └── gateway.py           # /voice, /conversation endpoints
+└── models.py                # Response models
+
+wake-word-service/app/
+├── main.py                  # Detection loop
+└── tts_service.py           # Smart TTS routing
 ```
 
 ## Config
 
 ```yaml
-# docker-compose.yml environment
-- STT_CONFIDENCE_THRESHOLD=0.7
-- INTENT_CONFIDENCE_THRESHOLD=0.8
-- TTS_SHORT_RESPONSE_LIMIT=20
-- OPENAI_API_KEY=${OPENAI_API_KEY:-}  # Optional cloud fallback
+# Confidence thresholds
+STT_CONFIDENCE_THRESHOLD=0.7
+INTENT_CONFIDENCE_THRESHOLD=0.8
+
+# TTS routing
+TTS_SHORT_RESPONSE_LIMIT=15
+
+# Models
+OLLAMA_MODEL=qwen2.5:3b
+WHISPER_MODEL=small
 ```
 
 ## Progress Log
 
 | Date | Component | Status | Notes |
 |------|-----------|--------|-------|
-| 2025-01-XX | Design | Done | This document |
-| 2025-01-XX | Phase 1 | Done | Intent pipeline with confidence scores |
+| 2025-01-XX | Phase 1 | Done | Intent pipeline with confidence |
 | 2025-01-XX | Phase 2 | Done | STT pipeline (Vosk → Whisper) |
-| 2025-01-XX | Phase 3 | Done | Smart TTS routing (VITS → XTTS) |
+| 2025-01-XX | Phase 3 | Done | Smart TTS (VITS → XTTS) |
+| 2025-11-22 | Phase 4.1 | Done | Smart fallback to AI |
+| 2025-11-22 | Phase 4.2 | Done | Actions in conversation |
 
-### Phase 1 Details (Completed)
-- `intent_matcher.py`: Added `match_with_confidence()` returning (action, confidence)
-- `ollama_client.py`: Added `translate_command_with_confidence()` extracting confidence from JSON
-- `llm_client.py`: Updated system prompt to require confidence (0.0-1.0) in responses
-- `json_validator.py`: Added `parse_ollama_response_with_confidence()`
-- `pipeline/executor.py`: IntentPipeline runs pattern + LLM in parallel, picks best result
-- `gateway.py`: /ask endpoint now uses IntentPipeline with 0.8 confidence threshold
+### Phase 1-3 Details (Completed)
 
-### Phase 2 Details (Completed)
-- `stt_client.py`: Added `transcribe_with_confidence()` to base class and `get_stt_pipeline()` factory
-- `vosk_client.py`: Extracts word-level confidence from Vosk results, averages them
-- `whisper_client.py`: Uses segment avg_logprob converted to probability
-- `pipeline/stt_pipeline.py`: STTPipeline tries Vosk first (fast), falls back to Whisper if confidence < 0.7
-- `gateway.py`: /voice endpoint now uses STTPipeline with confidence logging
+**Intent Pipeline**:
+- `intent_matcher.py`: `match_with_confidence()` with fuzzy matching
+- `ollama_client.py`: `translate_command_with_confidence()`
+- `pipeline/executor.py`: IntentPipeline parallel execution
 
-### Phase 3 Details (Completed)
-- `wake-word-service/app/tts_service.py`: Smart TTS routing based on response length
-  - Short responses (≤15 words) → VITS Polish model (fast, ~200ms)
-  - Long responses (>15 words) → XTTS v2 (quality, ~10-30s on CPU)
-  - Automatic fallback to VITS if XTTS fails or disabled
-  - Configurable threshold via `TTS_SHORT_RESPONSE_LIMIT` env var
-  - Lazy model loading (XTTS downloads ~5GB on first use)
-  - Language auto-detection for Polish/English
+**STT Pipeline**:
+- `vosk_client.py`: Word-level confidence extraction
+- `whisper_client.py`: Segment log probability
+- `pipeline/stt_pipeline.py`: Vosk-first with Whisper fallback
+
+**Smart TTS**:
+- `tts_service.py`: VITS (≤15 words) / XTTS (>15 words)
+- Polish response messages ("Gotowe", "Nie wykryto mowy")
+- Auto language detection
+
+### Phase 4 Implementation Plan
+
+#### Files to modify:
+
+**gateway.py**:
+```python
+# /voice endpoint - add AI fallback
+if action.action == "none" or not action:
+    # Fall back to conversation AI
+    response_text = await conversation_client.chat(text, "voice_fallback")
+    return AskResponse(
+        status="success",
+        message=response_text,  # AI response for TTS
+        plan=None,
+    )
+```
+
+**conversation_client.py**:
+```python
+# Check for HA actions in conversation
+async def chat(self, message: str, session_id: str):
+    # First check if this is an HA command
+    action = intent_matcher.match(message)
+    if action and action.action != "none":
+        # Execute action
+        await ha_client.call_service(action)
+        # Acknowledge and continue
+        return f"Gotowe. {await self._get_ai_response(message)}"
+
+    # Normal conversation
+    return await self._get_ai_response(message)
+```
+
+**models.py**:
+```python
+class AskResponse(BaseModel):
+    status: str
+    message: str | None = None      # For TTS (Polish)
+    text: str | None = None         # AI response text
+    plan: HAAction | None = None
+    ha_response: dict | None = None
+```
+
+**main.py (wake-word)**:
+```python
+# Handle hybrid response
+response_text = response.get("text") or response.get("message")
+if response_text:
+    self.tts_service.speak(response_text)
+```

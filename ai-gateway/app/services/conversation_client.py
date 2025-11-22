@@ -2,6 +2,9 @@
 
 This module handles conversational AI responses using OpenAI GPT
 with session memory and streaming output for TTS.
+
+Supports action detection during conversation - if user says "turn on lights",
+it will execute the HA action and continue the conversation.
 """
 
 from __future__ import annotations
@@ -16,6 +19,10 @@ if TYPE_CHECKING:
     from app.models import Config
 
 logger = logging.getLogger(__name__)
+
+# Optional: HA client and intent matcher for action detection during conversation
+_ha_client = None
+_intent_matcher = None
 
 # Session storage for conversation history
 _sessions: dict[str, list[dict[str, str]]] = defaultdict(list)
@@ -47,6 +54,7 @@ class ConversationClient:
         Args:
             config: Application configuration
         """
+        self.config = config
         self.api_key = config.openai_api_key
         self.model = config.openai_model
         self.base_url = "https://api.openai.com/v1"
@@ -55,7 +63,31 @@ class ConversationClient:
         if not self.api_key:
             raise ValueError("OpenAI API key required for conversation mode")
 
+        # Initialize action detection components (lazy loaded)
+        self._ha_client = None
+        self._intent_matcher = None
+
         logger.info(f"ConversationClient initialized with model={self.model}")
+
+    def _get_action_handlers(self):
+        """Lazy load HA client and intent matcher for action detection.
+
+        Returns:
+            Tuple of (intent_matcher, ha_client) or (None, None) if not available
+        """
+        if self._intent_matcher is None:
+            try:
+                from app.services.intent_matcher import get_intent_matcher
+                from app.services.ha_client import HomeAssistantClient
+
+                self._intent_matcher = get_intent_matcher()
+                self._ha_client = HomeAssistantClient(self.config)
+                logger.info("Action detection handlers initialized")
+            except Exception as e:
+                logger.warning(f"Could not initialize action handlers: {e}")
+                return None, None
+
+        return self._intent_matcher, self._ha_client
 
     def get_session(self, session_id: str) -> list[dict[str, str]]:
         """Get conversation history for a session.
@@ -81,13 +113,38 @@ class ConversationClient:
     async def chat(self, text: str, session_id: str) -> str:
         """Send message and get response (non-streaming).
 
+        Checks for HA actions in the message first. If found, executes action
+        and acknowledges, then optionally continues with AI response.
+
         Args:
             text: User message
             session_id: Session identifier for memory
 
         Returns:
-            AI response text
+            AI response text (or action acknowledgment + response)
         """
+        # Check for HA actions in message
+        intent_matcher, ha_client = self._get_action_handlers()
+
+        if intent_matcher and ha_client:
+            try:
+                action = intent_matcher.match(text)
+                if action and action.action not in ("none", "conversation_start", "conversation_end"):
+                    logger.info(f"Detected HA action in conversation: {action.action}")
+                    # Execute the action
+                    result = await ha_client.call_service(action)
+                    if result is not None:
+                        logger.info(f"Executed HA action during conversation: {action.service}")
+                        # Just acknowledge the action, don't ask AI for commentary
+                        _sessions[session_id].append({"role": "user", "content": text})
+                        _sessions[session_id].append({"role": "assistant", "content": "Gotowe"})
+                        return "Gotowe"
+                    else:
+                        logger.warning(f"HA action failed: {action.service}")
+                        return "Nie udało się wykonać polecenia"
+            except Exception as e:
+                logger.error(f"Error checking for HA action: {e}")
+
         # Add user message to history
         _sessions[session_id].append({"role": "user", "content": text})
 

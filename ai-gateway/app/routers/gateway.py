@@ -127,14 +127,28 @@ async def ask(
                 message="Nie udało się przetłumaczyć polecenia",
             )
 
-        # Step 2: Handle special actions
+        # Step 2: Handle special actions - fall back to AI for questions
         if action.action == "none":
-            logger.info(f"[{correlation_id}] Command not supported: {request.text}")
-            return AskResponse(
-                status="success",
-                plan=action,
-                message="Polecenie zrozumiane, ale brak dostępnej akcji",
-            )
+            logger.info(f"[{correlation_id}] No HA action - falling back to AI conversation")
+            try:
+                # Import conversation client here to avoid circular imports
+                from app.services.conversation_client import get_conversation_client
+                conv_client = get_conversation_client(Config())
+                ai_response = await conv_client.chat(request.text, "ask_fallback")
+                logger.info(f"[{correlation_id}] AI fallback response: {len(ai_response)} chars")
+                return AskResponse(
+                    status="success",
+                    plan=None,
+                    message=ai_response,
+                    text=ai_response,
+                )
+            except Exception as e:
+                logger.error(f"[{correlation_id}] AI fallback failed: {e}")
+                return AskResponse(
+                    status="success",
+                    plan=action,
+                    message="Polecenie zrozumiane, ale brak dostępnej akcji",
+                )
 
         if action.action == "conversation_start":
             logger.info(f"[{correlation_id}] Conversation mode requested")
@@ -201,6 +215,18 @@ def get_stt_pipeline_dependency(config: Config = Depends(get_config)) -> STTPipe
     return get_stt_pipeline(config)
 
 
+def get_conversation_client_dependency(config: Config = Depends(get_config)) -> ConversationClient:
+    """Dependency to get conversation client.
+
+    Args:
+        config: Application configuration
+
+    Returns:
+        Initialized conversation client
+    """
+    return get_conversation_client(config)
+
+
 @router.post("/voice", response_model=AskResponse)
 async def voice(
     audio: UploadFile = File(..., description="Audio file in WAV format"),
@@ -208,6 +234,7 @@ async def voice(
     intent_matcher: IntentMatcher = Depends(get_intent_matcher),
     llm_client: LLMClient = Depends(get_llm_client_dependency),
     ha_client: HomeAssistantClient = Depends(get_ha_client),
+    conversation_client: ConversationClient = Depends(get_conversation_client_dependency),
 ) -> AskResponse:
     """Process voice command audio and execute Home Assistant action.
 
@@ -280,14 +307,26 @@ async def voice(
                 message="Nie udało się przetłumaczyć polecenia",
             )
 
-        # Step 5: Handle special actions
+        # Step 5: Handle special actions - fall back to AI for questions
         if action.action == "none":
-            logger.info(f"[{correlation_id}] Command not supported: {text}")
-            return AskResponse(
-                status="success",
-                plan=action,
-                message="Polecenie zrozumiane, ale brak dostępnej akcji",
-            )
+            logger.info(f"[{correlation_id}] No HA action - falling back to AI conversation")
+            try:
+                # Treat as a question and get AI response
+                ai_response = await conversation_client.chat(text, "voice_fallback")
+                logger.info(f"[{correlation_id}] AI fallback response: {len(ai_response)} chars")
+                return AskResponse(
+                    status="success",
+                    plan=None,
+                    message=ai_response,  # AI response for TTS
+                    text=ai_response,  # Also in text field for clarity
+                )
+            except Exception as e:
+                logger.error(f"[{correlation_id}] AI fallback failed: {e}")
+                return AskResponse(
+                    status="success",
+                    plan=action,
+                    message="Polecenie zrozumiane, ale brak dostępnej akcji",
+                )
 
         if action.action == "conversation_start":
             logger.info(f"[{correlation_id}] Conversation mode requested via voice")
@@ -357,18 +396,6 @@ async def health(ha_client: HomeAssistantClient = Depends(get_ha_client)) -> dic
         "status": "healthy",
         "home_assistant": "connected",
     }
-
-
-def get_conversation_client_dependency(config: Config = Depends(get_config)) -> ConversationClient:
-    """Dependency to get conversation client.
-
-    Args:
-        config: Application configuration
-
-    Returns:
-        Initialized conversation client
-    """
-    return get_conversation_client(config)
 
 
 @router.post("/conversation", response_model=ConversationResponse)

@@ -303,11 +303,12 @@ class WakeWordService:
                     self.run_conversation_loop(session_id)
                 else:
                     self.feedback.play_success()
-                    # Speak the response message locally
-                    response_msg = response.get("message", "")
-                    if response_msg:
-                        logger.info(f"Speaking response: '{response_msg[:50]}...'")
-                        self.tts_service.speak(response_msg)
+                    # Speak the response - prefer 'text' (AI response) over 'message'
+                    # This handles both HA action responses and AI fallback responses
+                    response_text = response.get("text") or response.get("message", "")
+                    if response_text:
+                        logger.info(f"Speaking response: '{response_text[:50]}...'")
+                        self.tts_service.speak(response_text)
             else:
                 error_msg = response.get("message", "Unknown error") if response else "No response"
                 logger.warning(f"Command processing failed: {error_msg}")
