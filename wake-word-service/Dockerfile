@@ -13,7 +13,12 @@ RUN apt-get update && apt-get install -y \
     g++ \
     make \
     libusb-1.0-0 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Rust (required for Coqui TTS dependencies)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Create app directory
 WORKDIR /app
@@ -33,7 +38,7 @@ RUN mkdir -p /usr/local/lib/python3.11/site-packages/openwakeword/resources/mode
 COPY app/ ./app/
 
 # Create directories for models and sounds
-RUN mkdir -p ./models ./sounds
+RUN mkdir -p ./models ./sounds ./models/vosk
 
 # Copy sounds (required)
 COPY sounds/ ./sounds/

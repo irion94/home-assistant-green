@@ -17,6 +17,8 @@ from detector import WakeWordDetector
 from audio_capture import AudioCapture
 from ai_gateway_client import AIGatewayClient
 from feedback import AudioFeedback
+from transcriber import Transcriber
+from tts_service import TTSService
 
 # Configure logging
 logging.basicConfig(
@@ -99,6 +101,8 @@ class WakeWordService:
         self.detector: Optional[WakeWordDetector] = None
         self.ai_client: Optional[AIGatewayClient] = None
         self.feedback: Optional[AudioFeedback] = None
+        self.transcriber: Optional[Transcriber] = None
+        self.tts_service: Optional[TTSService] = None
 
         # Configuration from environment
         self.audio_device = os.getenv("AUDIO_DEVICE", "hw:2,0")
@@ -146,6 +150,15 @@ class WakeWordService:
             self.feedback = AudioFeedback(enabled=enable_beep)
             logger.info(f"Audio feedback initialized (enabled: {enable_beep})")
 
+            # Initialize transcriber for local speech-to-text
+            vosk_model_path = os.getenv("VOSK_MODEL_PATH")
+            self.transcriber = Transcriber(model_path=vosk_model_path)
+            logger.info("Transcriber initialized for local STT")
+
+            # Initialize TTS service for local text-to-speech
+            self.tts_service = TTSService()
+            logger.info("TTS service initialized for local speech output")
+
         except Exception as e:
             logger.error(f"Failed to initialize service: {e}")
             raise
@@ -177,10 +190,27 @@ class WakeWordService:
                 # Show processing LED
                 self.feedback.processing()
 
-                # Send to conversation endpoint
-                response = self.ai_client.send_conversation_voice(
-                    audio_data=audio_data,
-                    sample_rate=self.sample_rate,
+                # Transcribe locally
+                text = self.transcriber.transcribe(audio_data, self.sample_rate)
+                if not text:
+                    logger.info("No speech detected, continuing conversation...")
+                    continue
+
+                logger.info(f"Transcribed: '{text}'")
+
+                # Check for conversation end keywords in user's speech BEFORE sending
+                text_lower = text.lower()
+                end_keywords = ["stop", "koniec", "wystarczy", "to wszystko", "bye", "goodbye", "end conversation", "zakończ"]
+                should_end = any(keyword in text_lower for keyword in end_keywords)
+
+                if should_end:
+                    logger.info(f"Conversation end keyword detected in user speech: '{text}'")
+                    self.feedback.play_success()
+                    break
+
+                # Send text to conversation endpoint
+                response = self.ai_client.send_conversation_text(
+                    text=text,
                     session_id=session_id
                 )
 
@@ -196,67 +226,20 @@ class WakeWordService:
                 message = response.get("message", "")
 
                 if status == "error":
-                    # Check if it's a silence/no speech error
-                    if "could not understand" in message.lower():
-                        logger.info("No speech detected, continuing conversation...")
-                        continue
-                    else:
-                        logger.warning(f"Conversation error: {message}")
-                        self.feedback.play_error()
-                        continue
+                    logger.warning(f"Conversation error: {message}")
+                    self.feedback.play_error()
+                    continue
 
-                # Check for conversation end keywords in the message
-                # Message format is "Response to: 'transcribed text'"
-                message_lower = message.lower()
-                end_keywords = ["stop", "koniec", "wystarczy", "to wszystko", "bye", "goodbye", "end conversation"]
-                should_end = any(keyword in message_lower for keyword in end_keywords)
-
-                if should_end:
-                    logger.info("Conversation end keyword detected")
-                    self.feedback.play_success()
-                    break
-
-                # Success - response was sent to TTS
-                logger.info(f"Conversation response sent to TTS")
+                # Success - play response locally via TTS
+                logger.info(f"Playing response via local TTS")
                 self.feedback.play_success()
 
-                # Wait for TTS to finish, but listen for interrupt commands
-                # TTS speed is 1.2x, so adjust duration: ~180 words per minute = ~3 words per second
+                # Get response text and play locally
                 response_text = response.get("text", "")
-                word_count = len(response_text.split()) if response_text else 0
-                tts_duration = max(2.0, word_count / 3.0 + 0.5)  # Faster TTS = shorter wait
-                logger.info(f"TTS playing ({word_count} words, ~{tts_duration:.1f}s). Listening for interrupt...")
-
-                # Listen for interrupt during TTS playback
-                interrupt_keywords = ["przerwij", "stop", "cancel", "anuluj", "czekaj", "wait"]
-                interrupt_detected = False
-                start_time = time.time()
-
-                while time.time() - start_time < tts_duration:
-                    # Record short audio for interrupt detection (2 seconds)
-                    try:
-                        short_audio = self.audio_capture.record(duration=2)
-                        # Send for quick transcription
-                        interrupt_response = self.ai_client.send_conversation_voice(
-                            audio_data=short_audio,
-                            sample_rate=self.sample_rate,
-                            session_id=f"{session_id}_interrupt"
-                        )
-                        if interrupt_response:
-                            interrupt_text = interrupt_response.get("message", "").lower()
-                            if any(kw in interrupt_text for kw in interrupt_keywords):
-                                logger.info(f"Interrupt detected: {interrupt_text}")
-                                interrupt_detected = True
-                                # Stop media playback
-                                self.ai_client.stop_media()
-                                break
-                    except Exception as e:
-                        logger.debug(f"Interrupt check failed: {e}")
-                        time.sleep(1.0)
-
-                if interrupt_detected:
-                    logger.info("Conversation interrupted - ready for new input")
-                    self.feedback.play_listening()
+                if response_text:
+                    logger.info(f"Speaking: '{response_text[:50]}...'")
+                    self.tts_service.speak(response_text)
+                    logger.info("TTS playback complete")
 
         except Exception as e:
             logger.error(f"Error in conversation loop: {e}")
@@ -285,12 +268,18 @@ class WakeWordService:
             # Show processing LED
             self.feedback.processing()
 
-            # Send to AI Gateway for processing
-            logger.info("Sending audio to AI Gateway...")
-            response = self.ai_client.process_voice_command(
-                audio_data=audio_data,
-                sample_rate=self.sample_rate
-            )
+            # Transcribe locally
+            text = self.transcriber.transcribe(audio_data, self.sample_rate)
+            if not text:
+                logger.info("No speech detected in recording")
+                self.feedback.play_error()
+                return
+
+            logger.info(f"Transcribed: '{text}'")
+
+            # Send text to AI Gateway for processing
+            logger.info("Sending text to AI Gateway...")
+            response = self.ai_client.process_text_command(text=text)
 
             if response and response.get("status") == "success":
                 logger.info(f"Command processed successfully: {response.get('message')}")
@@ -314,10 +303,17 @@ class WakeWordService:
                     self.run_conversation_loop(session_id)
                 else:
                     self.feedback.play_success()
+                    # Speak the response message locally
+                    response_msg = response.get("message", "")
+                    if response_msg:
+                        logger.info(f"Speaking response: '{response_msg[:50]}...'")
+                        self.tts_service.speak(response_msg)
             else:
                 error_msg = response.get("message", "Unknown error") if response else "No response"
                 logger.warning(f"Command processing failed: {error_msg}")
                 self.feedback.play_error()
+                # Speak error message
+                self.tts_service.speak(f"Błąd: {error_msg}" if "error" not in error_msg.lower() else error_msg)
 
         except Exception as e:
             logger.error(f"Error processing voice command: {e}")

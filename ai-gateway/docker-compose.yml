@@ -100,6 +100,8 @@ services:
       - ENABLE_BEEP=true
       - BEEP_VOLUME=0.8
       - LOG_LEVEL=INFO
+      # Vosk local transcription (only Polish model available, 50MB on SSD)
+      - VOSK_MODEL_PATH=/app/models/vosk/vosk-model-small-pl-0.22
     depends_on:
       - ai-gateway
     restart: unless-stopped

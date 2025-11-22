@@ -151,8 +151,8 @@ class AudioCapture:
             audio_mono = audio[:, 0]  # Channel 0
 
             # Apply software gain boost (ReSpeaker has low output levels)
-            # Note: 16x caused clipping distortion, reduced to 8x
-            gain = 8.0  # Boost by 8x for better sensitivity without clipping
+            # Note: Reduced from 8x to 2x to avoid clipping distortion
+            gain = 2.0  # Boost by 2x - higher values cause severe clipping
             audio_mono = np.clip(audio_mono.astype(np.float32) * gain, -32768, 32767).astype(np.int16)
 
             # Debug: log audio stats periodically

@@ -59,6 +59,19 @@ class AIGatewayClient:
             logger.error(f"Error processing voice command: {e}")
             return None
 
+    def process_text_command(self, text: str) -> Optional[Dict[str, Any]]:
+        """
+        Send text command to AI Gateway for processing
+
+        Args:
+            text: Transcribed command text
+
+        Returns:
+            Response dict or None on error
+        """
+        logger.info(f"Sending text command to AI Gateway: '{text[:50]}...'")
+        return self._send_text_command(text)
+
     def _send_voice_command(self, wav_bytes: bytes) -> Optional[Dict[str, Any]]:
         """
         Send audio file to AI Gateway /voice endpoint
@@ -146,6 +159,47 @@ class AIGatewayClient:
                     f"{self.base_url}/conversation/voice",
                     files={"audio": ("conversation.wav", wav_bytes, "audio/wav")},
                     params={"session_id": session_id}
+                )
+
+                response.raise_for_status()
+                result = response.json()
+
+                logger.info(f"Conversation response: status={result.get('status')}")
+                return result
+
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error in conversation: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error in conversation: {e}")
+            return None
+
+    def send_conversation_text(
+        self,
+        text: str,
+        session_id: str = "default"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Send text to conversation endpoint
+
+        Args:
+            text: Transcribed text
+            session_id: Conversation session ID
+
+        Returns:
+            Response dict or None on error
+        """
+        try:
+            logger.info(f"Sending conversation text (session={session_id}): '{text[:50]}...'")
+
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.post(
+                    f"{self.base_url}/conversation",
+                    json={
+                        "text": text,
+                        "session_id": session_id
+                    },
+                    headers={"Content-Type": "application/json"}
                 )
 
                 response.raise_for_status()
@@ -250,4 +304,35 @@ class AIGatewayClient:
 
         except Exception as e:
             logger.error(f"Failed to stop media: {e}")
+            return False
+
+    def play_tts_audio(self, wav_bytes: bytes, entity_id: str = "media_player.living_room_display") -> bool:
+        """
+        Play TTS audio on media player via AI Gateway
+
+        Args:
+            wav_bytes: Audio data in WAV format
+            entity_id: Media player entity ID
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            logger.info(f"Sending TTS audio ({len(wav_bytes)} bytes) to {entity_id}")
+
+            with httpx.Client(timeout=30) as client:
+                response = client.post(
+                    f"{self.base_url}/play_audio",
+                    files={"audio": ("tts.wav", wav_bytes, "audio/wav")},
+                    params={"entity_id": entity_id}
+                )
+                response.raise_for_status()
+                logger.info("TTS audio sent for playback")
+                return True
+
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error playing TTS: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to play TTS audio: {e}")
             return False
