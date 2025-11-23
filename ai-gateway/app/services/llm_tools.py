@@ -10,6 +10,7 @@ from typing import Any
 
 from app.services.web_search import get_web_search_client
 from app.services.ha_client import HomeAssistantClient
+from app.services.entities import ROOM_ENTITIES, ROOM_NAMES, SENSOR_ENTITIES
 
 logger = logging.getLogger(__name__)
 
@@ -87,40 +88,6 @@ TOOLS = [
         }
     }
 ]
-
-
-# Room to entity mapping
-ROOM_ENTITIES = {
-    "salon": "light.yeelight_color_0x80156a9",
-    "kuchnia": "light.yeelight_color_0x49c27e1",
-    "sypialnia": "light.yeelight_color_0x80147dd",
-    "biurko": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    "all": "all",
-}
-
-# Sensor entity mappings - adjust these to match your HA setup
-SENSOR_ENTITIES = {
-    "temperature_outside": [
-        "sensor.outside_temperature",
-        "sensor.outdoor_temperature",
-        "sensor.weather_temperature",
-        "weather.home",  # Weather integration
-    ],
-    "temperature_inside": [
-        "sensor.indoor_temperature",
-        "sensor.living_room_temperature",
-        "sensor.temperature",
-    ],
-    "humidity": [
-        "sensor.outdoor_humidity",
-        "sensor.humidity",
-        "sensor.living_room_humidity",
-    ],
-    "weather": [
-        "weather.home",
-        "weather.forecast_home",
-    ],
-}
 
 
 class ToolExecutor:
@@ -218,14 +185,7 @@ class ToolExecutor:
 
         # call_service returns None on failure, empty list [] on success
         if result is not None:
-            room_names = {
-                "salon": "living room",
-                "kuchnia": "kitchen",
-                "sypialnia": "bedroom",
-                "biurko": "desk",
-                "all": "all lights"
-            }
-            return f"Successfully turned {action} {room_names.get(room, room)}"
+            return f"Successfully turned {action} {ROOM_NAMES.get(room, room)}"
         else:
             return f"Failed to control {room} lights"
 

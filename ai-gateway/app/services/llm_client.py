@@ -13,69 +13,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from app.models import Config, HAAction
 
-logger = logging.getLogger(__name__)
+from app.services.entities import ENTITY_MAPPING  # noqa: E402
 
-# Entity mapping: friendly names -> Home Assistant entity IDs
-ENTITY_MAPPING = {
-    # All lights
-    "all lights": "all",
-    "all": "all",
-    "everything": "all",
-    "wszystko": "all",
-    "wszystkie": "all",
-    "wszystkie światła": "all",
-    "wszędzie": "all",
-    # Living room / Salon
-    "living room": "light.yeelight_color_0x80156a9",
-    "living room lights": "light.yeelight_color_0x80156a9",
-    "salon": "light.yeelight_color_0x80156a9",
-    "salonie": "light.yeelight_color_0x80156a9",  # Polish locative
-    "lights": "light.yeelight_color_0x80156a9",  # Default to living room
-    "the lights": "light.yeelight_color_0x80156a9",
-    "światło": "light.yeelight_color_0x80156a9",  # Polish: light
-    "światła": "light.yeelight_color_0x80156a9",  # Polish: lights
-    # Kitchen / Kuchnia
-    "kitchen": "light.yeelight_color_0x49c27e1",
-    "kitchen lights": "light.yeelight_color_0x49c27e1",
-    "kuchnia": "light.yeelight_color_0x49c27e1",
-    "kuchni": "light.yeelight_color_0x49c27e1",  # Polish locative
-    # Bedroom / Sypialnia
-    "bedroom": "light.yeelight_color_0x80147dd",
-    "bedroom lights": "light.yeelight_color_0x80147dd",
-    "sypialnia": "light.yeelight_color_0x80147dd",
-    "sypialni": "light.yeelight_color_0x80147dd",  # Polish locative
-    # Lamp 1 / Lampa 1
-    "lamp 1": "light.yeelight_color_0x801498b",
-    "lampa 1": "light.yeelight_color_0x801498b",
-    "lampę 1": "light.yeelight_color_0x801498b",  # Polish accusative
-    # Lamp 2 / Lampa 2
-    "lamp 2": "light.yeelight_color_0x8015154",
-    "lampa 2": "light.yeelight_color_0x8015154",
-    "lampę 2": "light.yeelight_color_0x8015154",  # Polish accusative
-    # Desk / Biurko (main light is _ambilight entity in HA)
-    "desk": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    "desk lamp": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    "biurko": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    "biurku": "light.yeelight_lamp15_0x1b37d19d_ambilight",  # Polish locative
-    "lampka": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    "lampkę": "light.yeelight_lamp15_0x1b37d19d_ambilight",  # Polish accusative
-    # Desk Ambient (background light)
-    "ambient": "light.yeelight_lamp15_0x1b37d19d",
-    "ambilight": "light.yeelight_lamp15_0x1b37d19d",
-    "biurko ambient": "light.yeelight_lamp15_0x1b37d19d",
-    # Media players
-    "nest hub": "media_player.living_room_display",
-    "speaker": "media_player.living_room_display",
-    "głośnik": "media_player.living_room_display",  # Polish: speaker
-    "living room tv": "media_player.telewizor_w_salonie",
-    "telewizor": "media_player.telewizor_w_salonie",
-    "telewizor salon": "media_player.telewizor_w_salonie",
-    "tv salon": "media_player.telewizor_w_salonie",
-    "tv": "media_player.telewizor_w_salonie",
-    "bedroom tv": "media_player.telewizor_w_sypialni",
-    "telewizor sypialnia": "media_player.telewizor_w_sypialni",
-    "tv sypialnia": "media_player.telewizor_w_sypialni",
-}
+logger = logging.getLogger(__name__)
 
 # System prompt for LLMs - forces JSON-only responses
 SYSTEM_PROMPT = """You are a Home Assistant command translator. Your ONLY job is to convert natural language commands into JSON action plans.

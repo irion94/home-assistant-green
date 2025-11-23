@@ -17,90 +17,18 @@ if TYPE_CHECKING:
     from app.services.entity_discovery import EntityDiscovery
     from app.services.ollama_client import OllamaClient
 
+from app.services.entities import (
+    ENTITY_MAPPING,
+    TURN_ON_KEYWORDS,
+    TURN_OFF_KEYWORDS,
+    CONVERSATION_START_KEYWORDS,
+    CONVERSATION_END_KEYWORDS,
+)
+
 logger = logging.getLogger(__name__)
 
-# Entity mappings for rooms/devices
-ROOM_ENTITIES = {
-    # All lights
-    "all lights": "all",
-    "all": "all",
-    "everything": "all",
-    "wszystko": "all",
-    "wszystkie": "all",
-    "wszystkie światła": "all",
-    "wszędzie": "all",
-    # Living room / Salon
-    "salon": "light.yeelight_color_0x80156a9",
-    "salonie": "light.yeelight_color_0x80156a9",
-    "living room": "light.yeelight_color_0x80156a9",
-    "światło": "light.yeelight_color_0x80156a9",
-    "światła": "light.yeelight_color_0x80156a9",
-    "lights": "light.yeelight_color_0x80156a9",
-    # Kitchen / Kuchnia
-    "kuchnia": "light.yeelight_color_0x49c27e1",
-    "kuchni": "light.yeelight_color_0x49c27e1",
-    "kitchen": "light.yeelight_color_0x49c27e1",
-    # Bedroom / Sypialnia
-    "sypialnia": "light.yeelight_color_0x80147dd",
-    "sypialni": "light.yeelight_color_0x80147dd",
-    "bedroom": "light.yeelight_color_0x80147dd",
-    # Lamps
-    "lampa 1": "light.yeelight_color_0x801498b",
-    "lampę 1": "light.yeelight_color_0x801498b",
-    "lamp 1": "light.yeelight_color_0x801498b",
-    "lampa 2": "light.yeelight_color_0x8015154",
-    "lampę 2": "light.yeelight_color_0x8015154",
-    "lamp 2": "light.yeelight_color_0x8015154",
-    # Desk / Biurko (main light is _ambilight entity in HA)
-    "biurko": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    "biurku": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    "desk": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    "desk lamp": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    "lampka": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    "lampkę": "light.yeelight_lamp15_0x1b37d19d_ambilight",
-    # Desk Ambient (background light)
-    "ambient": "light.yeelight_lamp15_0x1b37d19d",
-    "ambilight": "light.yeelight_lamp15_0x1b37d19d",
-    "biurko ambient": "light.yeelight_lamp15_0x1b37d19d",
-    # Media players
-    "nest hub": "media_player.living_room_display",
-    "speaker": "media_player.living_room_display",
-    "głośnik": "media_player.living_room_display",
-    "telewizor": "media_player.telewizor_w_salonie",
-    "telewizor salon": "media_player.telewizor_w_salonie",
-    "tv salon": "media_player.telewizor_w_salonie",
-    "tv": "media_player.telewizor_w_salonie",
-    "telewizor sypialnia": "media_player.telewizor_w_sypialni",
-    "tv sypialnia": "media_player.telewizor_w_sypialni",
-    "bedroom tv": "media_player.telewizor_w_sypialni",
-}
-
-# Action keywords
-TURN_ON_KEYWORDS = [
-    "zapal", "włącz", "włacz", "wlacz", "zaświeć", "włącz się",
-    "turn on", "switch on", "light up",
-    # Common misrecognitions
-    "zapadł", "zaball", "zaopal", "za pal", "za pan",
-]
-
-TURN_OFF_KEYWORDS = [
-    "zgaś", "wyłącz", "wylacz", "gaś", "wyłącz się",
-    "turn off", "switch off",
-    # Common misrecognitions
-    "zgaść", "sgas", "z gaś",
-]
-
-# Conversation mode triggers
-CONVERSATION_START_KEYWORDS = [
-    "let's talk", "lets talk", "talk to me", "let's chat", "lets chat",
-    "pogadajmy", "porozmawiajmy", "porozmawiaj ze mną", "pogadaj ze mną",
-    "chcę porozmawiać", "chce porozmawiać",
-]
-
-CONVERSATION_END_KEYWORDS = [
-    "stop", "enough", "that's all", "thats all", "bye", "goodbye", "end conversation",
-    "koniec", "wystarczy", "to wszystko", "koniec rozmowy", "pa pa", "do widzenia",
-]
+# Use ENTITY_MAPPING as ROOM_ENTITIES for backwards compatibility
+ROOM_ENTITIES = ENTITY_MAPPING
 
 # Web search triggers
 SEARCH_KEYWORDS = [
