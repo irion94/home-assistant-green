@@ -12,6 +12,7 @@ import httpx
 from app.models import Config, HAAction, OllamaRequest
 from app.services.llm_client import LLMClient, SYSTEM_PROMPT
 from app.utils.json_validator import parse_ollama_response, parse_ollama_response_with_confidence
+from app.utils.text import build_entity_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +175,7 @@ class OllamaClient(LLMClient):
         logger.info(f"Translating with dynamic entities: {command}")
 
         # Build dynamic entity prompt
-        entity_prompt = self._build_entity_prompt(entities)
+        entity_prompt = build_entity_prompt(entities)
 
         dynamic_prompt = f"""You are a Home Assistant command translator. Convert natural language to JSON actions.
 
@@ -290,42 +291,3 @@ Return ONLY the JSON object."""
         except Exception as e:
             logger.error(f"Unexpected error in translate_command_dynamic: {e}")
             return (None, 0.0)
-
-    def _build_entity_prompt(self, entities: list[dict]) -> str:
-        """Build entity list formatted for LLM prompt.
-
-        Args:
-            entities: List of entity dicts
-
-        Returns:
-            Formatted string for prompt
-        """
-        if not entities:
-            return "No entities available."
-
-        # Group by domain
-        by_domain: dict[str, list[str]] = {}
-        for e in entities:
-            domain = e.get("domain", "unknown")
-            if domain not in by_domain:
-                by_domain[domain] = []
-            by_domain[domain].append(f'- "{e.get("name", "")}" → {e.get("entity_id", "")}')
-
-        # Build sections
-        lines = []
-        domain_order = ["light", "switch", "media_player", "climate", "cover", "fan"]
-
-        for domain in domain_order:
-            if domain in by_domain:
-                lines.append(f"{domain.upper()}S:")
-                lines.extend(by_domain[domain])
-                lines.append("")
-                del by_domain[domain]
-
-        # Remaining domains
-        for domain, items in sorted(by_domain.items()):
-            lines.append(f"{domain.upper()}S:")
-            lines.extend(items)
-            lines.append("")
-
-        return "\n".join(lines)

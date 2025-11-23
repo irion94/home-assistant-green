@@ -22,6 +22,7 @@ from app.routers.dependencies import (
     get_ha_client,
     get_stt_client_dependency,
 )
+from app.utils.text import detect_language
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -40,19 +41,6 @@ class ConversationResponse(BaseModel):
     text: str | None = Field(None, description="AI response text")
     session_id: str = Field(..., description="Session ID")
     message: str | None = Field(None, description="Status message")
-
-
-def detect_language(text: str) -> str:
-    """Detect language from text based on Polish characters.
-
-    Args:
-        text: Text to analyze
-
-    Returns:
-        Language code ('pl' or 'en')
-    """
-    polish_chars = set('ąćęłńóśźżĄĆĘŁŃÓŚŹŻ')
-    return "pl" if any(char in polish_chars for char in text) else "en"
 
 
 @router.post("/conversation", response_model=ConversationResponse)
