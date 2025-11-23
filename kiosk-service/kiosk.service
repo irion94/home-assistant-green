@@ -1,0 +1,43 @@
+[Unit]
+Description=Home Assistant Kiosk Display
+After=graphical-session.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=irion94
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/irion94/.Xauthority
+
+# Disable screen blanking before starting browser
+ExecStartPre=/usr/bin/xset -display :0 s off
+ExecStartPre=/usr/bin/xset -display :0 -dpms
+ExecStartPre=/usr/bin/xset -display :0 s noblank
+
+# Use chromium on Debian/RPi OS, chromium-browser on Ubuntu
+# The install script will update this path if needed
+ExecStart=/usr/bin/chromium \
+    --kiosk \
+    --noerrdialogs \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --disable-restore-session-state \
+    --disable-component-update \
+    --disable-background-networking \
+    --disable-sync \
+    --disable-translate \
+    --disable-features=TranslateUI \
+    --no-first-run \
+    --fast \
+    --fast-start \
+    --check-for-update-interval=31536000 \
+    --disable-pinch \
+    --overscroll-history-navigation=0 \
+    --autoplay-policy=no-user-gesture-required \
+    http://localhost:8123/lovelace/kiosk
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
