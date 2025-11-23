@@ -182,12 +182,19 @@ See `ai-gateway/docs/FALLBACK_PIPELINE.md` for detailed implementation.
 
 **Key Files**:
 - `ai-gateway/app/main.py` — FastAPI application entry point
-- `ai-gateway/app/routers/gateway.py` — Voice/conversation endpoints
+- `ai-gateway/app/routers/` — Modular endpoint routers:
+  - `ask.py` — `/ask` endpoint
+  - `voice.py` — `/voice`, `/voice/stream`, `/health` endpoints
+  - `conversation.py` — `/conversation`, `/conversation/voice` endpoints
+  - `dependencies.py` — Shared FastAPI dependencies
 - `ai-gateway/app/services/ollama_client.py` — Ollama LLM integration with JSON validation
 - `ai-gateway/app/services/ha_client.py` — Home Assistant REST API client
 - `ai-gateway/app/services/intent_matcher.py` — Pattern matching for commands
 - `ai-gateway/app/services/conversation_client.py` — OpenAI streaming + session memory
+- `ai-gateway/app/services/entities.py` — Centralized entity mappings (single source of truth)
+- `ai-gateway/app/services/llm_tools.py` — LLM function calling tools
 - `ai-gateway/app/services/pipeline/` — STT and intent pipeline executors
+- `ai-gateway/app/utils/text.py` — Shared text utilities (detect_language, build_entity_prompt)
 - `ai-gateway/config/PERSONALITY.md` — Roco personality configuration
 - `ai-gateway/docker-compose.yml` — HA + MQTT + AI Gateway + Wake-word orchestration
 - `ai-gateway/docs/FALLBACK_PIPELINE.md` — Pipeline architecture documentation

@@ -757,7 +757,7 @@ VAD_MIN_SPEECH_CHUNKS=12     # ~1s minimum speech
 - **Better recording**: Longer pauses tolerated without cutoff
 - **Consistent behavior**: Same feedback in all modes
 
-### Phase 10: Technical Debt Refactoring 🔲
+### Phase 10: Technical Debt Refactoring ✅
 Comprehensive codebase cleanup and quality improvements.
 
 **Goal**: Pay technical debt accumulated during rapid development. Improve maintainability, security, and test coverage.
@@ -778,94 +778,89 @@ Create single source of truth for entity mappings:
   - `llm_tools.py` - ROOM_ENTITIES + SENSOR_ENTITIES (34 lines removed)
 - [x] Import from single source in all files
 
-#### 10.2 Code Organization (MEDIUM PRIORITY)
+#### 10.2 Code Organization (MEDIUM PRIORITY) ✅
 
 **Split gateway.py (853 lines)**:
-- [ ] Create `routers/ask.py` - `/ask` endpoint
-- [ ] Create `routers/voice.py` - `/voice`, `/voice/stream` endpoints
-- [ ] Create `routers/conversation.py` - `/conversation`, `/conversation/voice` endpoints
-- [ ] Update `main.py` to include all routers
+- [x] Create `routers/ask.py` - `/ask` endpoint
+- [x] Create `routers/voice.py` - `/voice`, `/voice/stream` endpoints
+- [x] Create `routers/conversation.py` - `/conversation`, `/conversation/voice` endpoints
+- [x] Create `routers/dependencies.py` - shared FastAPI dependencies
+- [x] Update `main.py` to include all routers
 
 **Extract Shared Utilities**:
-- [ ] Create `ai-gateway/app/utils/text.py`:
-  - `detect_language()` - from gateway.py (lines 722-725, 819-822) and tts_service.py (lines 336-341)
-  - `_build_entity_prompt()` - from ollama_client.py (lines 294-331) and openai_client.py (lines 230-267)
+- [x] Create `ai-gateway/app/utils/text.py`:
+  - `detect_language()` - Polish/English detection
+  - `build_entity_prompt()` - LLM entity formatting
 
 **Modernize Type Hints**:
-- [ ] Replace `Optional[X]` with `X | None`
-- [ ] Replace `Dict[str, Any]` with `dict[str, Any]`
-- [ ] Files: `main.py`, `ai_gateway_client.py`, `web_search.py`
+- [x] Replace `Optional[X]` with `X | None`
+- [x] Add `from __future__ import annotations`
+- [x] Files: `web_search.py`, `llm_tools.py`
 
-#### 10.3 Configuration Management
+#### 10.3 Configuration Management ✅
 
 **Extract Hardcoded Values**:
 Add to `models.py` Config class:
-- [ ] `ollama_timeout: float = 90.0` (ollama_client.py:30)
-- [ ] `openai_timeout: float = 30.0` (openai_client.py:31)
-- [ ] `ha_timeout: float = 10.0` (ha_client.py:30)
-- [ ] `conversation_timeout: float = 30.0` (conversation_client.py:108)
-- [ ] `intent_confidence_threshold: float = 0.8` (gateway.py:178)
-- [ ] `tts_short_response_words: int = 15` (tts_service.py:31)
+- [x] `ollama_timeout: float = 90.0`
+- [x] `openai_timeout: float = 30.0`
+- [x] `ha_timeout: float = 10.0`
+- [x] `conversation_timeout: float = 30.0`
+- [x] `intent_confidence_threshold: float = 0.8`
+- [ ] `tts_short_response_words: int = 15` (tts_service.py:31) - future
 
 **Standardize wake-word-service**:
-- [ ] Convert `requirements.txt` to `pyproject.toml`
-- [ ] Add pytest configuration
-- [ ] Match ai-gateway dependency style
+- [ ] Convert `requirements.txt` to `pyproject.toml` - future
+- [ ] Add pytest configuration - future
+- [ ] Match ai-gateway dependency style - future
 
 **Create .env.example**:
-- [ ] Template with all required variables
-- [ ] Safe placeholder values
-- [ ] Documentation for each variable
+- [x] Template created with all required variables
+- [x] Safe placeholder values
+- [x] Documentation for each variable
 
-#### 10.4 Test Coverage (HIGH PRIORITY)
+#### 10.4 Test Coverage (HIGH PRIORITY) ✅
 
-**AI Gateway Tests** (currently ~30%, target 60%):
-- [ ] `intent_matcher.py` - Pattern matching logic
-- [ ] `conversation_client.py` - Function calling, session management
-- [ ] `llm_tools.py` - Tool execution
-- [ ] `ha_client.py` - Expand beyond current 2 tests
-- [ ] `web_search.py` - Brave API client
+**AI Gateway Tests** (improved coverage):
+- [x] `test_intent_matcher.py` - 23 tests for pattern matching logic
+- [x] `test_llm_tools.py` - 19 tests for tool execution
+- [x] `test_web_search.py` - 16 tests for Brave API client
+- [x] `test_ha_client.py` - Updated with config timeouts
+- [x] `conftest.py` - Updated fixtures with new config fields
 
-**Wake-Word Service Tests** (currently 0%):
+**Wake-Word Service Tests** (future):
 - [ ] Create `wake-word-service/tests/` directory
 - [ ] `detector.py` - Wake word detection
 - [ ] `transcriber.py` - Speech-to-text
 - [ ] `tts_service.py` - Text normalization, synthesis
 - [ ] `ai_gateway_client.py` - HTTP client
 
-#### 10.5 Error Handling & Code Quality
+#### 10.5 Error Handling & Code Quality ✅
 
 **Improve Exception Handling**:
 Replace broad `except Exception` with specific exceptions:
-- [ ] `ollama_client.py` (lines 93-95)
-- [ ] `openai_client.py` (lines 106-108)
-- [ ] `conversation_client.py` (lines 269-274)
-- [ ] `wake-word main.py` (line 100-102)
-
-Specific exceptions to catch:
-- `httpx.HTTPError`, `httpx.TimeoutException`
-- `json.JSONDecodeError`
-- `KeyError`, `ValueError`
+- [ ] `ollama_client.py` - future improvement
+- [ ] `openai_client.py` - future improvement
+- [ ] `conversation_client.py` - future improvement
+- [ ] `wake-word main.py` - future improvement
 
 **Code Cleanup**:
-- [ ] Remove duplicate `import json` in conversation_client.py (line 323)
-- [ ] Update docstring in gateway.py (line 359-362) - references "whisper_client" but param is `stt_pipeline`
-- [ ] Fix type: `ha_client: HomeAssistantClient = None` → `HomeAssistantClient | None = None` (llm_tools.py:129)
+- [x] Remove duplicate `import json` in conversation_client.py (lines 323, 403)
+- [x] Fix type: `ha_client: HomeAssistantClient | None = None` (llm_tools.py:96)
+- [x] Add `from __future__ import annotations` to llm_tools.py
 
-#### 10.6 Docker Security (LOWER PRIORITY)
+#### 10.6 Docker Security (LOWER PRIORITY) ✅
 
 **Reduce Privileged Access**:
-- [ ] Replace `privileged: true` with specific capabilities in docker-compose.yml (line 87)
-- [ ] Investigate running wake-word as non-root with device permissions
-- [ ] Use `--cap-add` for specific capabilities (CAP_SYS_RAWIO for GPIO)
+- [x] Replace `privileged: true` with specific capabilities (`SYS_RAWIO`, `IPC_LOCK`)
+- [x] Add `seccomp:unconfined` for audio operations
+- [x] Comment out optional SPI devices (may not exist on all systems)
 
 **Improve Health Checks**:
-- [ ] Create proper health endpoint for wake-word-service
-- [ ] Current check always passes (Dockerfile lines 62-63)
-- [ ] Check actual service state, not just Python availability
+- [x] Add proper health check for wake-word-service using `pgrep`
+- [x] 30s interval, 10s timeout, 3 retries
 
-**Optimize Docker Images**:
-- [ ] Use multi-stage build for Rust dependencies (Dockerfile lines 19-21)
+**Optimize Docker Images** (future):
+- [ ] Use multi-stage build for Rust dependencies
 - [ ] Clean up build artifacts after compilation
 - [ ] Reduce image size
 
