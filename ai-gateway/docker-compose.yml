@@ -84,7 +84,12 @@ services:
       context: ../wake-word-service
       dockerfile: Dockerfile
     container_name: wake-word
-    privileged: true
+    # Security: Replace privileged mode with specific capabilities
+    cap_add:
+      - SYS_RAWIO     # Required for GPIO access
+      - IPC_LOCK      # Required for audio device access
+    security_opt:
+      - seccomp:unconfined  # Required for some audio operations
     devices:
       - /dev/snd:/dev/snd
       - /dev/bus/usb:/dev/bus/usb
@@ -121,6 +126,12 @@ services:
       - /mnt/data-ssd/ha-data/tts-cache:/app/tts-cache
     group_add:
       - audio
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python.*main.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 # Volumes are now using SSD paths directly
 # /mnt/data-ssd/ha-data/ha-config
