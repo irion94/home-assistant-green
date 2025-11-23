@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from pythonjsonlogger import jsonlogger
 
 from app.models import Config
-from app.routers import gateway
+from app.routers import ask, voice, conversation
 
 
 def setup_logging(log_level: str = "INFO") -> None:
@@ -86,7 +86,9 @@ app = FastAPI(
 )
 
 # Include routers
-app.include_router(gateway.router, tags=["gateway"])
+app.include_router(ask.router, tags=["ask"])
+app.include_router(voice.router, tags=["voice"])
+app.include_router(conversation.router, tags=["conversation"])
 
 
 @app.get("/")
