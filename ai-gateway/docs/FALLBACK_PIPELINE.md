@@ -939,3 +939,155 @@ User hears response with current news
 - Stream buffering complexity
 - Latency increase during tool execution
 - Error handling in streaming context
+
+### Phase 12: Kiosk Display UI 🔲
+Dedicated visual interface for Home Assistant dashboards and voice interaction feedback.
+
+**Goal**: Create kiosk display on RPi5 to replace interim Nest Hub solution, providing real-time feedback for voice interactions and HA dashboard display.
+
+**Technology**: Chromium Kiosk Mode + Home Assistant Lovelace (simplest approach)
+
+**Current State**:
+- Nest Hub used as interim display solution
+- Transcriptions sent via notify entity
+- TTS playback via HA media_player service
+- YAML-based dashboard already configured
+
+**Target Architecture**:
+```
+Wake-word detected → Visual indicator on kiosk
+         ↓
+Recording → Show "Listening..." state
+         ↓
+Transcription → Display text in real-time
+         ↓
+AI Processing → Show thinking indicator
+         ↓
+Response streaming → Display sentences as they arrive
+         ↓
+TTS playback → Sync audio with displayed text
+```
+
+#### 12.1 Basic Kiosk Setup
+- [ ] Configure Chromium/Cage kiosk mode on Raspberry Pi 5
+- [ ] Create systemd service for auto-start on boot
+- [ ] Configure display output (HDMI or touchscreen)
+- [ ] Load Home Assistant dashboard in fullscreen
+- [ ] Handle screen timeout/power management
+- [ ] Test with official Raspberry Pi 7" touchscreen
+
+#### 12.2 Voice Feedback Panel
+- [ ] Create custom Lovelace card for voice interaction status
+- [ ] Display wake-word detection indicator (listening/idle state)
+- [ ] Show real-time transcription text
+- [ ] Add processing/thinking indicator animation
+- [ ] Display AI response text before/during TTS playback
+- [ ] Handle conversation history in multi-turn mode
+
+#### 12.3 AI Gateway Integration
+- [ ] Connect to `/voice/stream` SSE endpoint for streaming responses
+- [ ] Display sentences as they arrive (sentence-by-sentence)
+- [ ] Show tool execution status (web_search, control_light, get_home_data)
+- [ ] Add WebSocket connection for real-time HA state updates
+- [ ] Create notification endpoint for display updates from wake-word service
+- [ ] Sync displayed text with TTS audio playback
+
+#### 12.4 Advanced Features
+- [ ] Touch interaction support for manual control
+- [ ] Custom themes/animations for voice states
+- [ ] Context-based dashboard view switching
+- [ ] Idle screen/screensaver mode
+- [ ] Integration with existing dashboard cards (mushroom, button-card)
+- [ ] Support for multiple kiosk displays (future)
+
+#### Hardware Options
+
+| Option | Display | Touch | Notes |
+|--------|---------|-------|-------|
+| Official RPi 7" | 800x480 | Yes | Easy setup, DSI connector |
+| HDMI Monitor | Various | Optional | More flexibility, needs USB touch |
+| Third-party 10" | 1024x600+ | Yes | Better for dashboards |
+
+#### Files to create:
+
+**kiosk-service/** (new directory):
+```
+kiosk-service/
+├── install.sh              # Systemd service installation
+├── kiosk.service           # Systemd unit file
+├── kiosk-config.json       # Display configuration
+└── README.md               # Setup instructions
+```
+
+**Custom Lovelace card** (in HA config):
+```yaml
+# Voice feedback panel card
+type: custom:voice-assistant-card
+entity: sensor.voice_assistant_status
+show_transcription: true
+show_response: true
+animation: pulse
+```
+
+**Systemd service** (kiosk.service):
+```ini
+[Unit]
+Description=Kiosk Display
+After=graphical.target
+
+[Service]
+User=pi
+Environment=DISPLAY=:0
+ExecStart=/usr/bin/chromium-browser --kiosk --noerrdialogs \
+  --disable-infobars --disable-session-crashed-bubble \
+  http://localhost:8123/lovelace/kiosk
+Restart=always
+
+[Install]
+WantedBy=graphical.target
+```
+
+#### Files to modify:
+
+**docker-compose.yml** - Optional kiosk service:
+```yaml
+# Not containerized - runs on host for display access
+# See kiosk-service/ for systemd setup
+```
+
+**Home Assistant configuration**:
+- Add voice feedback sensor
+- Create kiosk-specific dashboard view
+- Configure display-specific automations
+
+**CLAUDE.md**:
+- Update project status (kiosk no longer missing)
+- Add kiosk-service to file structure
+
+#### Integration Points
+
+| Component | Integration Method |
+|-----------|-------------------|
+| Wake-word service | HTTP notification to update display state |
+| AI Gateway | SSE streaming for sentence-by-sentence display |
+| Home Assistant | WebSocket API for real-time entity states |
+| TTS service | Sync displayed text with audio timing |
+
+#### Expected Benefits:
+- **Dedicated display**: No dependency on external devices (Nest Hub)
+- **Real-time feedback**: Visual confirmation of all voice interactions
+- **Better UX**: Users see transcription and response text
+- **Dashboard integration**: Quick access to HA controls
+- **Touch support**: Manual control alongside voice
+
+#### Performance Targets:
+- Boot to kiosk: <30s
+- Dashboard load: <3s
+- Voice state update: <100ms
+- SSE sentence display: Real-time (as received)
+
+#### Risks:
+- Display driver compatibility on RPi5
+- Chromium memory usage (~300-400MB)
+- Touch calibration for non-official screens
+- Power management conflicts with always-on display
