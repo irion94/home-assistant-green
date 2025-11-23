@@ -23,4 +23,4 @@ class TestHomeAssistantClient:
 
         assert client.base_url == "http://test-ha:8123"
         assert client.token == "test_token_123"
-        assert client.timeout == 10.0
+        assert client.timeout == mock_config.ha_timeout

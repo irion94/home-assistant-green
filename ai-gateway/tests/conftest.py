@@ -19,6 +19,12 @@ def mock_config() -> Config:
         ha_base_url="http://test-ha:8123",
         ollama_base_url="http://test-ollama:11434",
         ollama_model="test-model",
+        openai_api_key="test-openai-key",
+        ollama_timeout=90.0,
+        openai_timeout=30.0,
+        ha_timeout=10.0,
+        conversation_timeout=30.0,
+        intent_confidence_threshold=0.8,
         log_level="DEBUG",
     )
 
