@@ -93,9 +93,10 @@ services:
     devices:
       - /dev/snd:/dev/snd
       - /dev/bus/usb:/dev/bus/usb
-      - /dev/spidev0.0:/dev/spidev0.0
-      - /dev/spidev0.1:/dev/spidev0.1
-      - /dev/gpiomem:/dev/gpiomem
+      # SPI devices for ReSpeaker LED control (optional, may not exist on all systems)
+      # - /dev/spidev0.0:/dev/spidev0.0
+      # - /dev/spidev0.1:/dev/spidev0.1
+      # - /dev/gpiomem:/dev/gpiomem
     environment:
       - AUDIO_DEVICE=hw:2,0
       - CHANNELS=6
