@@ -756,3 +756,191 @@ VAD_MIN_SPEECH_CHUNKS=12     # ~1s minimum speech
 - **Interruptible**: Say wake-word during TTS to stop
 - **Better recording**: Longer pauses tolerated without cutoff
 - **Consistent behavior**: Same feedback in all modes
+
+### Phase 10: Technical Debt Refactoring 🔲
+Comprehensive codebase cleanup and quality improvements.
+
+**Goal**: Pay technical debt accumulated during rapid development. Improve maintainability, security, and test coverage.
+
+#### 10.1 Security & Critical Issues (HIGH PRIORITY)
+
+**Secrets Management**:
+- [ ] Verify `.env` is in `.gitignore` (not committed)
+- [ ] Create `.env.example` template with placeholder values
+- [ ] Rotate exposed API keys (HA_TOKEN, OPENAI_API_KEY, BRAVE_API_KEY)
+
+**Consolidate Entity Mappings**:
+Create single source of truth for entity mappings:
+- [ ] Create `ai-gateway/app/services/entities.py`
+- [ ] Remove duplicates from:
+  - `llm_client.py` (lines 19-78) - ENTITY_MAPPING
+  - `intent_matcher.py` (lines 23-76) - ROOM_ENTITIES
+  - `llm_tools.py` (lines 93-99) - ROOM_ENTITIES
+- [ ] Import from single source in all files
+
+#### 10.2 Code Organization (MEDIUM PRIORITY)
+
+**Split gateway.py (853 lines)**:
+- [ ] Create `routers/ask.py` - `/ask` endpoint
+- [ ] Create `routers/voice.py` - `/voice`, `/voice/stream` endpoints
+- [ ] Create `routers/conversation.py` - `/conversation`, `/conversation/voice` endpoints
+- [ ] Update `main.py` to include all routers
+
+**Extract Shared Utilities**:
+- [ ] Create `ai-gateway/app/utils/text.py`:
+  - `detect_language()` - from gateway.py (lines 722-725, 819-822) and tts_service.py (lines 336-341)
+  - `_build_entity_prompt()` - from ollama_client.py (lines 294-331) and openai_client.py (lines 230-267)
+
+**Modernize Type Hints**:
+- [ ] Replace `Optional[X]` with `X | None`
+- [ ] Replace `Dict[str, Any]` with `dict[str, Any]`
+- [ ] Files: `main.py`, `ai_gateway_client.py`, `web_search.py`
+
+#### 10.3 Configuration Management
+
+**Extract Hardcoded Values**:
+Add to `models.py` Config class:
+- [ ] `ollama_timeout: float = 90.0` (ollama_client.py:30)
+- [ ] `openai_timeout: float = 30.0` (openai_client.py:31)
+- [ ] `ha_timeout: float = 10.0` (ha_client.py:30)
+- [ ] `conversation_timeout: float = 30.0` (conversation_client.py:108)
+- [ ] `intent_confidence_threshold: float = 0.8` (gateway.py:178)
+- [ ] `tts_short_response_words: int = 15` (tts_service.py:31)
+
+**Standardize wake-word-service**:
+- [ ] Convert `requirements.txt` to `pyproject.toml`
+- [ ] Add pytest configuration
+- [ ] Match ai-gateway dependency style
+
+**Create .env.example**:
+- [ ] Template with all required variables
+- [ ] Safe placeholder values
+- [ ] Documentation for each variable
+
+#### 10.4 Test Coverage (HIGH PRIORITY)
+
+**AI Gateway Tests** (currently ~30%, target 60%):
+- [ ] `intent_matcher.py` - Pattern matching logic
+- [ ] `conversation_client.py` - Function calling, session management
+- [ ] `llm_tools.py` - Tool execution
+- [ ] `ha_client.py` - Expand beyond current 2 tests
+- [ ] `web_search.py` - Brave API client
+
+**Wake-Word Service Tests** (currently 0%):
+- [ ] Create `wake-word-service/tests/` directory
+- [ ] `detector.py` - Wake word detection
+- [ ] `transcriber.py` - Speech-to-text
+- [ ] `tts_service.py` - Text normalization, synthesis
+- [ ] `ai_gateway_client.py` - HTTP client
+
+#### 10.5 Error Handling & Code Quality
+
+**Improve Exception Handling**:
+Replace broad `except Exception` with specific exceptions:
+- [ ] `ollama_client.py` (lines 93-95)
+- [ ] `openai_client.py` (lines 106-108)
+- [ ] `conversation_client.py` (lines 269-274)
+- [ ] `wake-word main.py` (line 100-102)
+
+Specific exceptions to catch:
+- `httpx.HTTPError`, `httpx.TimeoutException`
+- `json.JSONDecodeError`
+- `KeyError`, `ValueError`
+
+**Code Cleanup**:
+- [ ] Remove duplicate `import json` in conversation_client.py (line 323)
+- [ ] Update docstring in gateway.py (line 359-362) - references "whisper_client" but param is `stt_pipeline`
+- [ ] Fix type: `ha_client: HomeAssistantClient = None` → `HomeAssistantClient | None = None` (llm_tools.py:129)
+
+#### 10.6 Docker Security (LOWER PRIORITY)
+
+**Reduce Privileged Access**:
+- [ ] Replace `privileged: true` with specific capabilities in docker-compose.yml (line 87)
+- [ ] Investigate running wake-word as non-root with device permissions
+- [ ] Use `--cap-add` for specific capabilities (CAP_SYS_RAWIO for GPIO)
+
+**Improve Health Checks**:
+- [ ] Create proper health endpoint for wake-word-service
+- [ ] Current check always passes (Dockerfile lines 62-63)
+- [ ] Check actual service state, not just Python availability
+
+**Optimize Docker Images**:
+- [ ] Use multi-stage build for Rust dependencies (Dockerfile lines 19-21)
+- [ ] Clean up build artifacts after compilation
+- [ ] Reduce image size
+
+#### Files Summary
+
+| Issue | Files | Priority |
+|-------|-------|----------|
+| Entity duplication | llm_client.py, intent_matcher.py, llm_tools.py | High |
+| Large router file | gateway.py (853 lines) | Medium |
+| Duplicate functions | ollama_client.py, openai_client.py | Medium |
+| Language detection | gateway.py, tts_service.py | Medium |
+| Missing tests | Most services | High |
+| Hardcoded timeouts | Multiple clients | Medium |
+| Broad exceptions | Multiple files | Medium |
+| Docker security | docker-compose.yml, Dockerfile | Low |
+
+#### Execution Order
+
+1. **Phase 10.1** - Security issues first (rotate keys!)
+2. **Phase 10.2** - Extract shared utilities (reduces duplication immediately)
+3. **Phase 10.2** - Split gateway.py (improves maintainability)
+4. **Phase 10.3** - Configuration (enables easier testing)
+5. **Phase 10.4** - Tests (with better structure in place)
+6. **Phase 10.5** - Error handling cleanup
+7. **Phase 10.6** - Docker improvements
+
+#### Expected Benefits
+
+- **Security**: No exposed secrets, proper isolation
+- **Maintainability**: Single source of truth for entities, smaller files
+- **Testability**: Better structure enables comprehensive testing
+- **Reliability**: Specific error handling, proper health checks
+- **Performance**: Optimized Docker images
+
+### Phase 11: Streaming with Function Calling 🔲
+Enable tool calling in streaming SSE responses.
+
+**Goal**: Allow LLM to use tools (web_search, control_light, etc.) during streaming responses in `/voice/stream` endpoint.
+
+**Current State**:
+- `/voice/stream` uses `chat_stream_sentences()` method
+- Streaming works for pure text responses
+- No tool calling support in streaming mode
+
+**Target**:
+```
+User: "What's the news in Poland?"
+         ↓
+SSE Stream starts
+         ↓
+LLM returns tool_call (web_search)
+         ↓
+Execute tool, get results
+         ↓
+Continue streaming with tool results
+         ↓
+User hears response with current news
+```
+
+#### 11.1 Streaming Tool Detection
+- [ ] Modify `chat_stream_sentences()` to detect tool calls in stream
+- [ ] Buffer stream until tool_call or text content determined
+- [ ] Handle tool calls within SSE streaming response
+
+#### 11.2 Tool Execution in Stream
+- [ ] Execute tools when detected mid-stream
+- [ ] Append tool results to conversation
+- [ ] Resume streaming with updated context
+
+#### 11.3 Client Handling
+- [ ] Update wake-word service to handle tool execution events in SSE
+- [ ] Maintain sentence queue during tool execution
+- [ ] Show feedback (LED) during tool execution
+
+#### Risks:
+- Stream buffering complexity
+- Latency increase during tool execution
+- Error handling in streaming context
