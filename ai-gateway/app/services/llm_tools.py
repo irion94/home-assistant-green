@@ -4,6 +4,8 @@ Defines tools (functions) that the LLM can call to perform actions.
 Supports OpenAI function calling format.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from typing import Any
@@ -93,7 +95,7 @@ TOOLS = [
 class ToolExecutor:
     """Executes tools called by the LLM."""
 
-    def __init__(self, ha_client: HomeAssistantClient = None):
+    def __init__(self, ha_client: HomeAssistantClient | None = None):
         self.ha_client = ha_client
         self.web_search = get_web_search_client()
 

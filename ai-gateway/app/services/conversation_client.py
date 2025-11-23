@@ -320,7 +320,6 @@ class ConversationClient:
                                 break
 
                             try:
-                                import json
                                 chunk = json.loads(data)
                                 delta = chunk["choices"][0].get("delta", {})
                                 content = delta.get("content", "")
@@ -400,7 +399,6 @@ class ConversationClient:
                                 break
 
                             try:
-                                import json
                                 chunk = json.loads(data)
                                 delta = chunk["choices"][0].get("delta", {})
                                 content = delta.get("content", "")
