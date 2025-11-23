@@ -1,6 +1,25 @@
 version: '3.8'
 
 services:
+  # PostgreSQL with pgvector for AI memory
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ai_assistant
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ai_assistant
+    volumes:
+      - /mnt/data-ssd/postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_assistant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Home Assistant
   homeassistant:
     image: ghcr.io/home-assistant/home-assistant:2024.11.3
@@ -64,10 +83,24 @@ services:
       - SEARCH_RESULTS_LIMIT=${SEARCH_RESULTS_LIMIT:-5}
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Database configuration
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=ai_assistant
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_DB=ai_assistant
+      # Embeddings
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-384}
+      # Cache
+      - CACHE_TTL_SECONDS=${CACHE_TTL_SECONDS:-3600}
     volumes:
       - ./config:/app/config:ro
     depends_on:
-      - homeassistant
+      postgres:
+        condition: service_healthy
+      homeassistant:
+        condition: service_healthy
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

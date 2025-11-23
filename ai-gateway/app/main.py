@@ -15,7 +15,9 @@ from fastapi import FastAPI
 from pythonjsonlogger import jsonlogger
 
 from app.models import Config
-from app.routers import ask, voice, conversation
+from app.routers import ask, voice, conversation, memory
+from app.services.database import db_service
+from app.services.embeddings import embedding_service
 
 
 def setup_logging(log_level: str = "INFO") -> None:
@@ -71,10 +73,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if config.stt_provider.lower() == "whisper":
         logger.info(f"Whisper Model: {config.whisper_model}")
 
+    # Connect to database
+    try:
+        await db_service.connect()
+        logger.info("Database connected successfully")
+    except Exception as e:
+        logger.warning(f"Database connection failed: {e}. Memory features disabled.")
+
     yield
 
     # Shutdown
     logger.info("AI Gateway shutting down")
+
+    # Close database connection
+    await db_service.disconnect()
+    await embedding_service.close()
+    logger.info("Database disconnected")
 
 
 # Create FastAPI application
@@ -89,6 +103,7 @@ app = FastAPI(
 app.include_router(ask.router, tags=["ask"])
 app.include_router(voice.router, tags=["voice"])
 app.include_router(conversation.router, tags=["conversation"])
+app.include_router(memory.router)
 
 
 @app.get("/")
