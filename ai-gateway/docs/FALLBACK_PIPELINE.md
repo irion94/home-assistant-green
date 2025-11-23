@@ -762,21 +762,21 @@ Comprehensive codebase cleanup and quality improvements.
 
 **Goal**: Pay technical debt accumulated during rapid development. Improve maintainability, security, and test coverage.
 
-#### 10.1 Security & Critical Issues (HIGH PRIORITY)
+#### 10.1 Security & Critical Issues (HIGH PRIORITY) ✅
 
 **Secrets Management**:
-- [ ] Verify `.env` is in `.gitignore` (not committed)
-- [ ] Create `.env.example` template with placeholder values
-- [ ] Rotate exposed API keys (HA_TOKEN, OPENAI_API_KEY, BRAVE_API_KEY)
+- [x] Verify `.env` is in `.gitignore` (not committed)
+- [x] Create `.env.example` template with placeholder values
+- [ ] Rotate exposed API keys (HA_TOKEN, OPENAI_API_KEY, BRAVE_API_KEY) ⚠️ **Manual action required**
 
 **Consolidate Entity Mappings**:
 Create single source of truth for entity mappings:
-- [ ] Create `ai-gateway/app/services/entities.py`
-- [ ] Remove duplicates from:
-  - `llm_client.py` (lines 19-78) - ENTITY_MAPPING
-  - `intent_matcher.py` (lines 23-76) - ROOM_ENTITIES
-  - `llm_tools.py` (lines 93-99) - ROOM_ENTITIES
-- [ ] Import from single source in all files
+- [x] Create `ai-gateway/app/services/entities.py`
+- [x] Remove duplicates from:
+  - `llm_client.py` - ENTITY_MAPPING (60 lines removed)
+  - `intent_matcher.py` - ROOM_ENTITIES + keywords (82 lines removed)
+  - `llm_tools.py` - ROOM_ENTITIES + SENSOR_ENTITIES (34 lines removed)
+- [x] Import from single source in all files
 
 #### 10.2 Code Organization (MEDIUM PRIORITY)
 
