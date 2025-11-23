@@ -28,7 +28,7 @@ class OllamaClient(LLMClient):
         """
         self.base_url = config.ollama_base_url
         self.model = config.ollama_model
-        self.timeout = 90.0  # 90 second timeout for LLM requests (RPi5 can be slow)
+        self.timeout = config.ollama_timeout
 
     async def translate_command(self, command: str) -> HAAction | None:
         """Translate natural language command to Home Assistant action plan.

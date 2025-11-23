@@ -47,6 +47,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def get_config() -> Config:
+    """Dependency to get application configuration.
+
+    Returns:
+        Config instance from environment
+    """
+    return Config()
+
+
 def is_valid_input(text: str) -> bool:
     """Check if text is meaningful enough for AI processing.
 
@@ -138,6 +147,7 @@ def get_pattern_learner_dependency() -> PatternLearner:
 @router.post("/ask", response_model=AskResponse)
 async def ask(
     request: AskRequest,
+    config: Config = Depends(get_config),
     intent_matcher: IntentMatcher = Depends(get_intent_matcher),
     llm_client: LLMClient = Depends(get_llm_client_dependency),
     ha_client: HomeAssistantClient = Depends(get_ha_client),
@@ -175,7 +185,7 @@ async def ask(
         pipeline = IntentPipeline(
             intent_matcher=intent_matcher,
             llm_client=llm_client,
-            confidence_threshold=0.8,
+            confidence_threshold=config.intent_confidence_threshold,
             entity_discovery=entity_discovery,
             llm_cache=llm_cache,
             pattern_learner=pattern_learner,

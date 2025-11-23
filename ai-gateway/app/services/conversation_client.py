@@ -105,7 +105,7 @@ class ConversationClient:
         self.api_key = config.openai_api_key
         self.model = config.openai_model
         self.base_url = "https://api.openai.com/v1"
-        self.timeout = 30.0
+        self.timeout = config.conversation_timeout
 
         if not self.api_key:
             raise ValueError("OpenAI API key required for conversation mode")

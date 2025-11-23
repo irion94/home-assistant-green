@@ -54,6 +54,25 @@ class Config(BaseSettings):
         default=None, description="Path to Vosk model directory (auto-downloads if not set)"
     )
 
+    # Timeout configuration
+    ollama_timeout: float = Field(
+        default=90.0, description="Timeout for Ollama API requests in seconds"
+    )
+    openai_timeout: float = Field(
+        default=30.0, description="Timeout for OpenAI API requests in seconds"
+    )
+    ha_timeout: float = Field(
+        default=10.0, description="Timeout for Home Assistant API requests in seconds"
+    )
+    conversation_timeout: float = Field(
+        default=30.0, description="Timeout for conversation API requests in seconds"
+    )
+
+    # Pipeline configuration
+    intent_confidence_threshold: float = Field(
+        default=0.8, description="Minimum confidence threshold for intent matching"
+    )
+
     log_level: str = Field(default="INFO", description="Logging level")
 
 

@@ -27,7 +27,7 @@ class HomeAssistantClient:
         """
         self.base_url = config.ha_base_url
         self.token = config.ha_token
-        self.timeout = 10.0  # 10 second timeout for HA API calls
+        self.timeout = config.ha_timeout
 
     def _get_headers(self) -> dict[str, str]:
         """Get authorization headers for HA API.
