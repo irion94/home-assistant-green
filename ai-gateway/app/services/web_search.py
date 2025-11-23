@@ -3,9 +3,11 @@ Web Search Service using Brave Search API
 Provides real-time web search capabilities for the AI Gateway
 """
 
+from __future__ import annotations
+
 import logging
 import os
-from typing import Optional
+
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -28,7 +30,7 @@ class WebSearchClient:
         """Check if web search is configured"""
         return bool(self.api_key)
 
-    async def search(self, query: str, count: Optional[int] = None) -> dict:
+    async def search(self, query: str, count: int | None = None) -> dict:
         """
         Perform web search using Brave Search API
 
@@ -178,7 +180,7 @@ class WebSearchClient:
 
 
 # Singleton instance
-_web_search_client: Optional[WebSearchClient] = None
+_web_search_client: WebSearchClient | None = None
 
 
 def get_web_search_client() -> WebSearchClient:
