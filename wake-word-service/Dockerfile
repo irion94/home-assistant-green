@@ -29,6 +29,10 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Note: TTS models (VITS, XTTS v2) are downloaded at first use and cached
+# on the SSD volume via TTS_HOME=/app/tts-cache (see docker-compose.yml)
+# This avoids ~2GB of model downloads during every rebuild
+
 # Create OpenWakeWord models directory and set permissions
 # This allows the wakeword user to copy models at runtime
 RUN mkdir -p /usr/local/lib/python3.11/site-packages/openwakeword/resources/models && \

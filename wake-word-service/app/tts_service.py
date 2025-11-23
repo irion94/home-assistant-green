@@ -9,6 +9,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import re
 import subprocess
 import tempfile
 import wave
@@ -58,6 +59,100 @@ class TTSService:
             f"xtts_enabled={enable_xtts}, threshold={self.short_threshold} words, "
             f"output={self.output_device}"
         )
+
+    def _normalize_text_for_tts(self, text: str, language: str = "pl") -> str:
+        """Normalize text for better TTS pronunciation.
+
+        Converts units, symbols, and abbreviations to spoken forms.
+
+        Args:
+            text: Text to normalize
+            language: Language code ('pl' or 'en')
+
+        Returns:
+            Normalized text ready for TTS
+        """
+        if language == "pl":
+            # Polish unit replacements
+            replacements = [
+                # Temperature
+                (r'(\d+)\s*°C', r'\1 stopni Celsjusza'),
+                (r'(\d+)\s*°F', r'\1 stopni Fahrenheita'),
+                (r'(\d+)\s*°', r'\1 stopni'),
+                # Speed
+                (r'(\d+)\s*km/h', r'\1 kilometrów na godzinę'),
+                (r'(\d+)\s*m/s', r'\1 metrów na sekundę'),
+                (r'(\d+)\s*mph', r'\1 mil na godzinę'),
+                # Distance
+                (r'(\d+)\s*km', r'\1 kilometrów'),
+                (r'(\d+)\s*m\b', r'\1 metrów'),
+                (r'(\d+)\s*cm', r'\1 centymetrów'),
+                (r'(\d+)\s*mm', r'\1 milimetrów'),
+                # Weight
+                (r'(\d+)\s*kg', r'\1 kilogramów'),
+                (r'(\d+)\s*g\b', r'\1 gramów'),
+                (r'(\d+)\s*mg', r'\1 miligramów'),
+                # Pressure
+                (r'(\d+)\s*hPa', r'\1 hektopaskali'),
+                (r'(\d+)\s*Pa', r'\1 paskali'),
+                # Percentage
+                (r'(\d+)\s*%', r'\1 procent'),
+                # Time
+                (r'(\d+)\s*h\b', r'\1 godzin'),
+                (r'(\d+)\s*min', r'\1 minut'),
+                (r'(\d+)\s*s\b', r'\1 sekund'),
+                # Other symbols
+                (r'&', ' i '),
+                (r'\+', ' plus '),
+                (r'=', ' równa się '),
+            ]
+        else:
+            # English unit replacements
+            replacements = [
+                # Temperature
+                (r'(\d+)\s*°C', r'\1 degrees Celsius'),
+                (r'(\d+)\s*°F', r'\1 degrees Fahrenheit'),
+                (r'(\d+)\s*°', r'\1 degrees'),
+                # Speed
+                (r'(\d+)\s*km/h', r'\1 kilometers per hour'),
+                (r'(\d+)\s*m/s', r'\1 meters per second'),
+                (r'(\d+)\s*mph', r'\1 miles per hour'),
+                # Distance
+                (r'(\d+)\s*km', r'\1 kilometers'),
+                (r'(\d+)\s*m\b', r'\1 meters'),
+                (r'(\d+)\s*cm', r'\1 centimeters'),
+                (r'(\d+)\s*mm', r'\1 millimeters'),
+                # Weight
+                (r'(\d+)\s*kg', r'\1 kilograms'),
+                (r'(\d+)\s*g\b', r'\1 grams'),
+                (r'(\d+)\s*mg', r'\1 milligrams'),
+                # Pressure
+                (r'(\d+)\s*hPa', r'\1 hectopascals'),
+                (r'(\d+)\s*Pa', r'\1 pascals'),
+                # Percentage
+                (r'(\d+)\s*%', r'\1 percent'),
+                # Time
+                (r'(\d+)\s*h\b', r'\1 hours'),
+                (r'(\d+)\s*min', r'\1 minutes'),
+                (r'(\d+)\s*s\b', r'\1 seconds'),
+                # Other symbols
+                (r'&', ' and '),
+                (r'\+', ' plus '),
+                (r'=', ' equals '),
+            ]
+
+        # Apply all replacements
+        result = text
+        for pattern, replacement in replacements:
+            result = re.sub(pattern, replacement, result)
+
+        # Clean up multiple spaces
+        result = re.sub(r'\s+', ' ', result).strip()
+
+        if result != text:
+            logger.debug(f"Text normalized: '{text[:50]}...' -> '{result[:50]}...'")
+
+        return result
 
     # Backwards compatibility
     @property
@@ -165,14 +260,17 @@ class TTSService:
         try:
             tts = self._get_tts()
 
+            # Normalize text for better pronunciation
+            normalized_text = self._normalize_text_for_tts(text, language)
+
             # Generate to temp file
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
                 tmp_path = tmp_file.name
 
             try:
                 # Generate speech
-                logger.info(f"Synthesizing: '{text[:50]}...' ({language})")
-                tts.tts_to_file(text=text, file_path=tmp_path)
+                logger.info(f"Synthesizing: '{normalized_text[:50]}...' ({language})")
+                tts.tts_to_file(text=normalized_text, file_path=tmp_path)
 
                 # Read generated audio
                 with open(tmp_path, "rb") as f:
@@ -321,17 +419,20 @@ class TTSService:
                 logger.warning("XTTS not available, falling back to VITS")
                 return self.synthesize(text, language)
 
+            # Normalize text for better pronunciation
+            normalized_text = self._normalize_text_for_tts(text, language)
+
             # Generate to temp file
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
                 tmp_path = tmp_file.name
 
             try:
-                logger.info(f"XTTS synthesizing: '{text[:50]}...' ({language})")
+                logger.info(f"XTTS synthesizing: '{normalized_text[:50]}...' ({language})")
 
                 # XTTS requires speaker_wav for voice cloning
                 # For now, use default speaker if available
                 tts.tts_to_file(
-                    text=text,
+                    text=normalized_text,
                     file_path=tmp_path,
                     language=language,
                 )

@@ -96,6 +96,14 @@ class AudioFeedback:
             except Exception as e:
                 logger.error(f"LED error (processing): {e}")
 
+    def speaking(self):
+        """Show LED for TTS speaking state"""
+        if self.led_enabled:
+            try:
+                pixel_ring.speak()  # Blue pulsing animation
+            except Exception as e:
+                logger.error(f"LED error (speaking): {e}")
+
     def play_success(self):
         """Play sound and show LED when command succeeds"""
         # LED feedback - green flash then off

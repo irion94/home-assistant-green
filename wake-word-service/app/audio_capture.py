@@ -4,6 +4,7 @@ Handles audio input from ReSpeaker 4 Mic Array
 """
 
 import logging
+import os
 import numpy as np
 import pyaudio
 from typing import Optional
@@ -187,10 +188,13 @@ class AudioCapture:
         max_chunks = int(duration * self.sample_rate / self.chunk_size)
         recorded_chunks = []
 
-        # VAD parameters - tuned for faster cutoff
-        silence_threshold = 1000  # Audio level below this is considered silence (lowered for sensitivity)
-        silence_chunks_to_stop = 10  # ~0.8 seconds of silence to stop (reduced from 15)
-        min_speech_chunks = 5  # Minimum ~0.4 seconds of speech before allowing stop
+        # VAD parameters - configurable via environment variables
+        # Balanced defaults: responsive for short commands, handles natural pauses
+        silence_threshold = int(os.getenv("VAD_SILENCE_THRESHOLD", "1000"))  # Audio level below this is silence
+        silence_chunks_to_stop = int(os.getenv("VAD_SILENCE_CHUNKS", "12"))  # ~1s of silence to stop
+        min_speech_chunks = int(os.getenv("VAD_MIN_SPEECH_CHUNKS", "8"))  # Minimum ~0.7s of speech before stopping
+
+        logger.debug(f"VAD params: threshold={silence_threshold}, silence_chunks={silence_chunks_to_stop}, min_speech={min_speech_chunks}")
 
         consecutive_silence = 0
         speech_detected = False

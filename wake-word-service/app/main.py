@@ -34,6 +34,74 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class InterruptListener:
+    """Background listener for interrupt detection during TTS playback.
+
+    Listens for wake-word or interrupt keywords while TTS is playing,
+    allowing user to stop the current response.
+    """
+
+    def __init__(self, audio_capture, detector, threshold: float = 0.3):
+        """Initialize interrupt listener.
+
+        Args:
+            audio_capture: AudioCapture instance
+            detector: WakeWordDetector instance
+            threshold: Detection threshold (lower than normal for interrupts)
+        """
+        self.audio_capture = audio_capture
+        self.detector = detector
+        self.threshold = threshold
+        self.listening = False
+        self.interrupted = False
+        self.worker = None
+        logger.info(f"Interrupt listener initialized (threshold: {threshold})")
+
+    def start(self):
+        """Start listening for interrupts in background."""
+        if self.listening:
+            return
+        self.listening = True
+        self.interrupted = False
+        self.worker = threading.Thread(target=self._listen_loop, daemon=True)
+        self.worker.start()
+        logger.info("Interrupt listener started")
+
+    def stop(self):
+        """Stop listening for interrupts."""
+        self.listening = False
+        if self.worker:
+            self.worker.join(timeout=1.0)
+            self.worker = None
+        logger.info("Interrupt listener stopped")
+
+    def was_interrupted(self) -> bool:
+        """Check if interrupt was detected."""
+        return self.interrupted
+
+    def _listen_loop(self):
+        """Background loop that listens for wake-word during TTS."""
+        while self.listening:
+            try:
+                # Get audio chunk (non-blocking)
+                audio_chunk = self.audio_capture.get_chunk()
+                if audio_chunk is None:
+                    time.sleep(0.05)
+                    continue
+
+                # Check for wake-word (with lower threshold)
+                prediction = self.detector.predict(audio_chunk)
+                if prediction >= self.threshold:
+                    logger.info(f"Interrupt detected! (confidence: {prediction:.2f})")
+                    self.interrupted = True
+                    self.listening = False
+                    break
+
+            except Exception as e:
+                logger.debug(f"Interrupt listener error: {e}")
+                time.sleep(0.1)
+
+
 class TTSQueue:
     """Queue for managing TTS sentence playback.
 
@@ -182,6 +250,7 @@ class WakeWordService:
         self.transcriber: Optional[Transcriber] = None
         self.tts_service: Optional[TTSService] = None
         self.tts_queue: Optional[TTSQueue] = None
+        self.interrupt_listener: Optional[InterruptListener] = None
 
         # Configuration from environment
         self.audio_device = os.getenv("AUDIO_DEVICE", "hw:2,0")
@@ -241,6 +310,15 @@ class WakeWordService:
             # Initialize TTS queue for streaming playback
             self.tts_queue = TTSQueue(self.tts_service)
             logger.info("TTS queue initialized for streaming playback")
+
+            # Initialize interrupt listener for TTS interruption
+            interrupt_threshold = float(os.getenv("INTERRUPT_THRESHOLD", "0.3"))
+            self.interrupt_listener = InterruptListener(
+                self.audio_capture,
+                self.detector,
+                threshold=interrupt_threshold
+            )
+            logger.info(f"Interrupt listener initialized (threshold: {interrupt_threshold})")
 
         except Exception as e:
             logger.error(f"Failed to initialize service: {e}")
@@ -315,7 +393,7 @@ class WakeWordService:
 
                 # Success - play response locally via TTS
                 logger.info(f"Playing response via local TTS")
-                self.feedback.play_success()
+                self.feedback.speaking()
 
                 # Get response text and play locally
                 response_text = response.get("text", "")
@@ -323,6 +401,7 @@ class WakeWordService:
                     logger.info(f"Speaking: '{response_text[:50]}...'")
                     self.tts_service.speak(response_text)
                     logger.info("TTS playback complete")
+                    self.feedback.play_success()
 
         except Exception as e:
             logger.error(f"Error in conversation loop: {e}")
@@ -423,9 +502,9 @@ class WakeWordService:
                                             logger.info(f"Queueing sentence {sentence_count}: {sentence[:50]}...")
                                             self.tts_queue.add(sentence)
 
-                                            # Play success on first sentence
+                                            # Show speaking LED on first sentence
                                             if sentence_count == 1:
-                                                self.feedback.play_success()
+                                                self.feedback.speaking()
 
                                     except json.JSONDecodeError as e:
                                         logger.warning(f"JSON decode error: {e}, data: {data_str}")
@@ -442,10 +521,28 @@ class WakeWordService:
                 except Exception:
                     pass
 
-            # Wait for all sentences to finish playing
-            logger.info("Waiting for TTS queue to complete...")
-            self.tts_queue.wait_completion()
+            # Start interrupt listener while TTS plays
+            if sentence_count > 0:
+                self.interrupt_listener.start()
+
+            # Wait for TTS with interrupt checking
+            logger.info("Waiting for TTS queue to complete (interrupt enabled)...")
+            while not self.tts_queue.queue.empty() or self.tts_queue.playing:
+                # Check for interrupt
+                if self.interrupt_listener.was_interrupted():
+                    logger.info("User interrupted TTS playback")
+                    self.tts_queue.clear()
+                    self.feedback.idle()
+                    break
+                time.sleep(0.1)
+
+            # Stop interrupt listener
+            self.interrupt_listener.stop()
             logger.info("TTS playback complete")
+
+            # Show success LED after all TTS completes (unless interrupted)
+            if sentence_count > 0 and not self.interrupt_listener.was_interrupted():
+                self.feedback.play_success()
 
             # Handle conversation mode
             if conversation_start:
