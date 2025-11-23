@@ -187,11 +187,22 @@ CRITICAL RULES:
 AVAILABLE ENTITIES:
 {entity_prompt}
 
+POLISH COLOR MAPPING:
+- "czerwony" → [255, 0, 0], "niebieski" → [0, 0, 255], "zielony" → [0, 255, 0]
+- "żółty" → [255, 255, 0], "biały" → [255, 255, 255], "pomarańczowy" → [255, 165, 0]
+- "fioletowy" → [128, 0, 128], "różowy" → [255, 192, 203], "turkusowy" → [0, 255, 255]
+
+COLOR TEMPERATURE: "ciepłe" → 2700K, "neutralne" → 4000K, "zimne" → 6500K
+
 SUPPORTED ACTIONS:
 - Turn on: {{"action":"call_service","service":"<domain>.turn_on","entity_id":"<entity_id>","data":{{}},"confidence":0.95}}
 - Turn off: {{"action":"call_service","service":"<domain>.turn_off","entity_id":"<entity_id>","data":{{}},"confidence":0.95}}
-- Set brightness: {{"action":"call_service","service":"light.turn_on","entity_id":"<entity_id>","data":{{"brightness":255}},"confidence":0.9}}
+- Set brightness (50%=128, 100%=255): {{"action":"call_service","service":"light.turn_on","entity_id":"<entity_id>","data":{{"brightness":128}},"confidence":0.9}}
+- Set color (RGB): {{"action":"call_service","service":"light.turn_on","entity_id":"<entity_id>","data":{{"rgb_color":[255,0,0]}},"confidence":0.9}}
+- Set color temperature: {{"action":"call_service","service":"light.turn_on","entity_id":"<entity_id>","data":{{"color_temp_kelvin":2700}},"confidence":0.9}}
+- Transition: {{"action":"call_service","service":"light.turn_on","entity_id":"<entity_id>","data":{{"brightness":255,"transition":5}},"confidence":0.9}}
 - Media control: {{"action":"call_service","service":"media_player.<action>","entity_id":"<entity_id>","data":{{}},"confidence":0.9}}
+- Create scene/mood: {{"action":"create_scene","actions":[...list of call_service actions...],"confidence":0.85}}
 
 Special entity "all" controls all devices in a domain (e.g., entity_id: "all" for all lights).
 
@@ -208,6 +219,18 @@ Output: {{"action":"call_service","service":"light.turn_on","entity_id":"light.y
 
 Command: "Zgaś wszystko"
 Output: {{"action":"call_service","service":"light.turn_off","entity_id":"all","data":{{}},"confidence":0.95}}
+
+Command: "Ustaw jasność na 50%"
+Output: {{"action":"call_service","service":"light.turn_on","entity_id":"<matched_entity>","data":{{"brightness":128}},"confidence":0.9}}
+
+Command: "Zmień kolor na czerwony"
+Output: {{"action":"call_service","service":"light.turn_on","entity_id":"<matched_entity>","data":{{"rgb_color":[255,0,0]}},"confidence":0.9}}
+
+Command: "Ciepłe światło"
+Output: {{"action":"call_service","service":"light.turn_on","entity_id":"<matched_entity>","data":{{"color_temp_kelvin":2700}},"confidence":0.9}}
+
+Command: "Stwórz romantyczny klimat"
+Output: {{"action":"create_scene","actions":[{{"action":"call_service","service":"light.turn_on","entity_id":"<light1>","data":{{"brightness":50,"color_temp_kelvin":2700}}}},{{"action":"call_service","service":"light.turn_off","entity_id":"<light2>","data":{{}}}}],"confidence":0.85}}
 
 Return ONLY the JSON object."""
 

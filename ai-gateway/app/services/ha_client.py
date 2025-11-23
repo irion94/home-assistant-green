@@ -96,6 +96,67 @@ class HomeAssistantClient:
             logger.error(f"Unexpected error in call_service: {e}")
             return None
 
+    async def call_services(self, actions: list[HAAction]) -> list[dict[str, Any]]:
+        """Execute multiple Home Assistant service calls sequentially.
+
+        Args:
+            actions: List of HAAction plans to execute
+
+        Returns:
+            List of results for each action (success/error status)
+        """
+        results: list[dict[str, Any]] = []
+
+        for i, action in enumerate(actions):
+            try:
+                if action.action != "call_service":
+                    logger.warning(f"Skipping non-service action at index {i}: {action.action}")
+                    results.append({
+                        "index": i,
+                        "status": "skipped",
+                        "service": None,
+                        "entity_id": action.entity_id,
+                        "error": f"Invalid action type: {action.action}",
+                    })
+                    continue
+
+                result = await self.call_service(action)
+
+                if result is not None:
+                    results.append({
+                        "index": i,
+                        "status": "success",
+                        "service": action.service,
+                        "entity_id": action.entity_id,
+                        "result": result,
+                    })
+                    logger.info(f"Scene action {i+1}/{len(actions)} succeeded: {action.service}")
+                else:
+                    results.append({
+                        "index": i,
+                        "status": "error",
+                        "service": action.service,
+                        "entity_id": action.entity_id,
+                        "error": "Service call returned None",
+                    })
+                    logger.warning(f"Scene action {i+1}/{len(actions)} failed: {action.service}")
+
+            except Exception as e:
+                results.append({
+                    "index": i,
+                    "status": "error",
+                    "service": action.service if action else None,
+                    "entity_id": action.entity_id if action else None,
+                    "error": str(e),
+                })
+                logger.error(f"Exception in scene action {i+1}/{len(actions)}: {e}")
+
+        # Summary log
+        success_count = sum(1 for r in results if r["status"] == "success")
+        logger.info(f"Scene execution complete: {success_count}/{len(actions)} actions succeeded")
+
+        return results
+
     async def health_check(self) -> bool:
         """Check if Home Assistant API is accessible.
 

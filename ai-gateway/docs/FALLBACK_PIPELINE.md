@@ -320,6 +320,8 @@ async with httpx.AsyncClient() as client:
 | 2025-11-22 | Phase 5.2 | Done | Jarvis personality |
 | 2025-11-22 | Phase 6 | Done | Streaming TTS |
 | 2025-11-22 | Phase 7 | Done | Dynamic entity discovery (OpenAI + Ollama) |
+| 2025-11-22 | Phase 7.4 | Done | LLM caching + pattern auto-learning |
+| 2025-11-22 | Phase 8 | In Progress | Advanced entity control + ambient mood |
 
 ### Phase 7: Dynamic Entity Discovery ✅
 Automatic entity mapping using AI semantic matching.
@@ -372,8 +374,8 @@ User: "Zapal światło na biurku"
 #### 7.4 Fast Path Optimization
 - [x] Keep pattern matcher for common commands (speed)
 - [x] Use LLM only when pattern fails
-- [ ] Cache recent LLM matches for repeated commands
-- [ ] Optional: Learn from LLM matches to improve pattern matcher
+- [x] Cache recent LLM matches for repeated commands
+- [x] Optional: Learn from LLM matches to improve pattern matcher
 
 #### Files to create/modify:
 
@@ -482,6 +484,123 @@ async def match_with_fallback(self, text: str, entity_discovery) -> tuple[HAActi
 - Pattern match: <10ms (unchanged)
 - Cached LLM match: <100ms
 - Full LLM match: <1s
+
+### Phase 8: Advanced Entity Control & Ambient Mood 🔲
+Full property control (brightness, color) and LLM-dynamic ambient/mood creation.
+
+**Goal**: Control all entity properties and create intelligent mood/scene responses using LLM.
+
+**Target Architecture**:
+```
+User: "Stwórz romantyczny klimat"
+         ↓
+1. IntentPipeline detects mood request
+         ↓
+2. LLM analyzes available entities (lights, media, climate, covers)
+         ↓
+3. LLM generates multi-action plan:
+   [
+     {"service": "light.turn_on", "entity_id": "light.salon", "data": {"brightness": 50, "color_temp_kelvin": 2700}},
+     {"service": "media_player.play_media", "entity_id": "media_player.spotify", "data": {"media_content_id": "romantic_playlist"}},
+     {"service": "cover.close_cover", "entity_id": "cover.blinds"}
+   ]
+         ↓
+4. Pipeline executes all actions sequentially
+         ↓
+5. Returns aggregated result to user
+```
+
+#### 8.1 Full Property Control
+- [ ] Enhance LLM prompts with brightness examples (Polish)
+- [ ] Add color control examples (RGB, color names, kelvin)
+- [ ] Add transition time support
+- [ ] Polish color name mapping (czerwony, niebieski, zielony, etc.)
+
+#### 8.2 Ambient/Mood Control
+- [ ] Extend HAAction model with `create_scene` action type
+- [ ] Add `actions: list[HAAction]` field for multi-action responses
+- [ ] Update LLM prompts with Polish mood examples
+- [ ] Document available entity types for mood creation
+
+#### 8.3 Multi-Action Execution
+- [ ] Update pipeline executor for scene action type
+- [ ] Add `call_services()` method to HA client
+- [ ] Execute actions sequentially with error handling
+- [ ] Return aggregated results
+
+#### 8.4 Gateway Integration
+- [ ] Update gateway router for scene responses
+- [ ] Handle multi-action results
+
+#### Files to modify:
+
+**models.py** - Extend HAAction:
+```python
+class HAAction(BaseModel):
+    action: Literal["call_service", "none", "conversation_start", "conversation_end", "create_scene"]
+    service: str | None = None
+    entity_id: str | None = None
+    data: dict[str, Any] | None = Field(default_factory=dict)
+    actions: list["HAAction"] | None = None  # For multi-action scenes
+```
+
+**llm_client.py** - Enhanced prompts:
+```python
+# Polish property control examples
+- "Ustaw jasność na 50%": {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{"brightness":128},"confidence":0.9}
+- "Zmień kolor na czerwony": {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{"rgb_color":[255,0,0]},"confidence":0.9}
+- "Ciepłe światło": {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{"color_temp_kelvin":2700},"confidence":0.9}
+
+# Polish mood examples
+- "Romantyczny klimat": {"action":"create_scene","actions":[...multiple actions...],"confidence":0.85}
+- "Tryb kino": {"action":"create_scene","actions":[...],"confidence":0.85}
+- "Pora na sen": {"action":"create_scene","actions":[...],"confidence":0.85}
+
+# Polish color mapping
+POLISH_COLORS = {
+    "czerwony": [255, 0, 0],
+    "niebieski": [0, 0, 255],
+    "zielony": [0, 255, 0],
+    "żółty": [255, 255, 0],
+    "biały": [255, 255, 255],
+    "pomarańczowy": [255, 165, 0],
+    "fioletowy": [128, 0, 128],
+    "różowy": [255, 192, 203],
+}
+```
+
+**ha_client.py** - Multi-action execution:
+```python
+async def call_services(self, actions: list[HAAction]) -> list[dict]:
+    """Execute multiple service calls sequentially."""
+    results = []
+    for action in actions:
+        try:
+            result = await self.call_service(action)
+            results.append({"status": "success", "action": action.service, "result": result})
+        except Exception as e:
+            results.append({"status": "error", "action": action.service, "error": str(e)})
+    return results
+```
+
+**pipeline/executor.py** - Scene handling:
+```python
+# In process() method, after LLM result
+if llm_result.action and llm_result.action.action == "create_scene":
+    # Return scene action for gateway to execute all sub-actions
+    return llm_result
+```
+
+#### Expected Benefits:
+- **Full property control**: Brightness, color, temperature via voice
+- **Dynamic moods**: LLM creates intelligent scene responses
+- **Multi-entity control**: One command affects multiple devices
+- **Polish language support**: Native mood and property commands
+
+#### Performance Targets:
+- Property control: <1s (single LLM call)
+- Mood creation: <2s (LLM analysis + multi-action execution)
+- Scene execution: ~200ms per action
 
 ### Phase 1-3 Details (Completed)
 

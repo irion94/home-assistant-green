@@ -242,7 +242,39 @@ async def ask(
                 message="Tryb rozmowy zakończony",
             )
 
-        # Step 3: Execute service call
+        # Step 3: Handle scene creation (multiple actions)
+        if action.action == "create_scene":
+            if not action.actions:
+                logger.warning(f"[{correlation_id}] create_scene with no actions")
+                return AskResponse(
+                    status="error",
+                    plan=action,
+                    message="Scena nie zawiera żadnych akcji",
+                )
+
+            logger.info(f"[{correlation_id}] Executing scene with {len(action.actions)} actions")
+            scene_results = await ha_client.call_services(action.actions)
+
+            # Check if any actions succeeded
+            success_count = sum(1 for r in scene_results if r["status"] == "success")
+            if success_count == 0:
+                logger.error(f"[{correlation_id}] All scene actions failed")
+                return AskResponse(
+                    status="error",
+                    plan=action,
+                    message="Nie udało się wykonać sceny",
+                    ha_response=scene_results,
+                )
+
+            logger.info(f"[{correlation_id}] Scene executed: {success_count}/{len(action.actions)} succeeded")
+            return AskResponse(
+                status="success",
+                plan=action,
+                message=f"Gotowe ({success_count}/{len(action.actions)} akcji)",
+                ha_response=scene_results,
+            )
+
+        # Step 4: Execute single service call
         ha_response = await ha_client.call_service(action)
 
         if ha_response is None:

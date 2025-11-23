@@ -107,11 +107,31 @@ MEDIA PLAYERS:
 - "tv" / "telewizor" / "tv salon" → media_player.telewizor_w_salonie
 - "bedroom tv" / "tv sypialnia" / "telewizor sypialnia" → media_player.telewizor_w_sypialni
 
+POLISH COLOR MAPPING (use for "zmień kolor na..." commands):
+- "czerwony" → [255, 0, 0]
+- "niebieski" → [0, 0, 255]
+- "zielony" → [0, 255, 0]
+- "żółty" → [255, 255, 0]
+- "biały" → [255, 255, 255]
+- "pomarańczowy" → [255, 165, 0]
+- "fioletowy" → [128, 0, 128]
+- "różowy" → [255, 192, 203]
+- "turkusowy" → [0, 255, 255]
+
+COLOR TEMPERATURE (kelvin):
+- "ciepłe" / "ciepły" → 2700
+- "neutralne" → 4000
+- "zimne" / "zimny" → 6500
+
 SUPPORTED ACTIONS:
 - Turn on lights: {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{},"confidence":0.95}
 - Turn off lights: {"action":"call_service","service":"light.turn_off","entity_id":"<entity>","data":{},"confidence":0.95}
-- Set brightness: {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{"brightness":255},"confidence":0.9}
+- Set brightness (0-255, 50%=128): {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{"brightness":128},"confidence":0.9}
+- Set color (RGB): {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{"rgb_color":[255,0,0]},"confidence":0.9}
+- Set color temperature: {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{"color_temp_kelvin":2700},"confidence":0.9}
+- Set transition (seconds): {"action":"call_service","service":"light.turn_on","entity_id":"<entity>","data":{"brightness":255,"transition":5},"confidence":0.9}
 - Say/speak text (TTS): {"action":"call_service","service":"tts.speak","entity_id":"tts.google_translate_en_com","data":{"media_player_entity_id":"media_player.living_room_display","message":"<text>"},"confidence":0.85}
+- Create scene/mood (multiple actions): {"action":"create_scene","actions":[...list of call_service actions...],"confidence":0.85}
 - Unknown/unsupported: {"action":"none","confidence":0.0}
 
 CONFIDENCE SCORING (0.0 to 1.0):
@@ -147,6 +167,30 @@ Output: {"action":"call_service","service":"light.turn_off","entity_id":"all","d
 
 Input: "Zgaś wszystko"
 Output: {"action":"call_service","service":"light.turn_off","entity_id":"all","data":{},"confidence":0.95}
+
+Input: "Ustaw jasność w salonie na 50%"
+Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80156a9","data":{"brightness":128},"confidence":0.9}
+
+Input: "Przyciemnij światło w sypialni"
+Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80147dd","data":{"brightness":50},"confidence":0.85}
+
+Input: "Zmień kolor w salonie na czerwony"
+Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80156a9","data":{"rgb_color":[255,0,0]},"confidence":0.9}
+
+Input: "Ustaw ciepłe światło w kuchni"
+Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x49c27e1","data":{"color_temp_kelvin":2700},"confidence":0.9}
+
+Input: "Rozjaśnij powoli lampkę"
+Output: {"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_lamp15_0x1b37d19d_ambilight","data":{"brightness":255,"transition":5},"confidence":0.85}
+
+Input: "Stwórz romantyczny klimat"
+Output: {"action":"create_scene","actions":[{"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80156a9","data":{"brightness":50,"color_temp_kelvin":2700}},{"action":"call_service","service":"light.turn_off","entity_id":"light.yeelight_color_0x49c27e1","data":{}}],"confidence":0.85}
+
+Input: "Tryb kino"
+Output: {"action":"create_scene","actions":[{"action":"call_service","service":"light.turn_off","entity_id":"all","data":{}}],"confidence":0.85}
+
+Input: "Pora na sen"
+Output: {"action":"create_scene","actions":[{"action":"call_service","service":"light.turn_on","entity_id":"light.yeelight_color_0x80147dd","data":{"brightness":25,"color_temp_kelvin":2700}},{"action":"call_service","service":"light.turn_off","entity_id":"light.yeelight_color_0x80156a9","data":{}}],"confidence":0.85}
 
 Remember: ONLY return the JSON object with confidence, nothing else."""
 

@@ -64,6 +64,21 @@ def validate_ha_action(json_str: str) -> HAAction | None:
                 )
                 return None
 
+        if action.action == "create_scene":
+            if not action.actions or len(action.actions) == 0:
+                logger.warning("create_scene action missing actions list")
+                return None
+            # Validate each sub-action
+            for i, sub_action in enumerate(action.actions):
+                if sub_action.action != "call_service":
+                    logger.warning(f"Scene sub-action {i} is not call_service: {sub_action.action}")
+                    continue
+                if not sub_action.service or not sub_action.entity_id:
+                    logger.warning(
+                        f"Scene sub-action {i} missing fields: "
+                        f"service={sub_action.service}, entity_id={sub_action.entity_id}"
+                    )
+
         return action
 
     except json.JSONDecodeError as e:
