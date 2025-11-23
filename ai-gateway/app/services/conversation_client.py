@@ -16,9 +16,12 @@ from typing import TYPE_CHECKING, AsyncIterator
 from collections import defaultdict
 
 import httpx
+import json
 
 if TYPE_CHECKING:
     from app.models import Config
+
+from app.services.llm_tools import get_tools, get_tool_executor
 
 logger = logging.getLogger(__name__)
 
@@ -155,39 +158,21 @@ class ConversationClient:
             logger.info(f"Cleared conversation session: {session_id}")
 
     async def chat(self, text: str, session_id: str) -> str:
-        """Send message and get response (non-streaming).
+        """Send message and get response with function calling.
 
-        Checks for HA actions in the message first. If found, executes action
-        and acknowledges, then optionally continues with AI response.
+        Uses OpenAI function calling to let the LLM decide when to use tools
+        like web search, device control, etc.
 
         Args:
             text: User message
             session_id: Session identifier for memory
 
         Returns:
-            AI response text (or action acknowledgment + response)
+            AI response text
         """
-        # Check for HA actions in message
-        intent_matcher, ha_client = self._get_action_handlers()
-
-        if intent_matcher and ha_client:
-            try:
-                action = intent_matcher.match(text)
-                if action and action.action not in ("none", "conversation_start", "conversation_end"):
-                    logger.info(f"Detected HA action in conversation: {action.action}")
-                    # Execute the action
-                    result = await ha_client.call_service(action)
-                    if result is not None:
-                        logger.info(f"Executed HA action during conversation: {action.service}")
-                        # Just acknowledge the action, don't ask AI for commentary
-                        _sessions[session_id].append({"role": "user", "content": text})
-                        _sessions[session_id].append({"role": "assistant", "content": "Gotowe"})
-                        return "Gotowe"
-                    else:
-                        logger.warning(f"HA action failed: {action.service}")
-                        return "Nie udało się wykonać polecenia"
-            except Exception as e:
-                logger.error(f"Error checking for HA action: {e}")
+        # Get HA client for tool execution
+        _, ha_client = self._get_action_handlers()
+        tool_executor = get_tool_executor(ha_client)
 
         # Add user message to history
         _sessions[session_id].append({"role": "user", "content": text})
@@ -200,6 +185,7 @@ class ConversationClient:
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
+                # First call with tools
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers={
@@ -209,14 +195,63 @@ class ConversationClient:
                     json={
                         "model": self.model,
                         "messages": messages,
-                        "max_tokens": 150,  # Keep responses short for TTS
+                        "tools": get_tools(),
+                        "tool_choice": "auto",
+                        "max_tokens": 500,
                         "temperature": 0.7,
                     },
                 )
                 response.raise_for_status()
                 data = response.json()
 
-                assistant_message = data["choices"][0]["message"]["content"]
+                message = data["choices"][0]["message"]
+
+                # Check if LLM wants to call a tool
+                if message.get("tool_calls"):
+                    logger.info(f"LLM requested {len(message['tool_calls'])} tool call(s)")
+
+                    # Add assistant's tool call request to messages
+                    messages.append(message)
+
+                    # Execute each tool call
+                    for tool_call in message["tool_calls"]:
+                        tool_name = tool_call["function"]["name"]
+                        try:
+                            arguments = json.loads(tool_call["function"]["arguments"])
+                        except json.JSONDecodeError:
+                            arguments = {}
+
+                        # Execute the tool
+                        result = await tool_executor.execute(tool_name, arguments)
+                        logger.info(f"Tool {tool_name} result: {result[:100]}...")
+
+                        # Add tool result to messages
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call["id"],
+                            "content": result
+                        })
+
+                    # Get final response from LLM with tool results
+                    final_response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {self.api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": self.model,
+                            "messages": messages,
+                            "max_tokens": 300,
+                            "temperature": 0.7,
+                        },
+                    )
+                    final_response.raise_for_status()
+                    final_data = final_response.json()
+                    assistant_message = final_data["choices"][0]["message"]["content"]
+                else:
+                    # No tool call, use direct response
+                    assistant_message = message.get("content", "")
 
                 # Add assistant response to history
                 _sessions[session_id].append({

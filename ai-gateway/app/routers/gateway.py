@@ -26,6 +26,7 @@ from app.services.llm_client import LLMClient, get_llm_client
 from app.services.pattern_learner import PatternLearner, get_pattern_learner
 from app.services.pipeline import IntentPipeline, IntentResult, STTPipeline
 from app.services.stt_client import STTClient, get_stt_client, get_stt_pipeline
+from app.services.web_search import get_web_search_client
 
 
 class ConversationRequest(BaseModel):
@@ -572,6 +573,54 @@ async def voice_stream(
                 yield "data: [DONE]\n\n"
                 return
 
+            # Handle web search
+            if action and action.action == "web_search":
+                search_query = action.data.get("query", "")
+                logger.info(f"[{correlation_id}] Web search: '{search_query}'")
+
+                web_search_client = get_web_search_client()
+                if not web_search_client.is_available():
+                    yield f"data: {json.dumps({'sentence': 'Wyszukiwanie internetowe nie jest skonfigurowane', 'index': 0})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
+
+                # Perform search
+                search_result = await web_search_client.search(search_query)
+
+                if not search_result.get("success"):
+                    error_msg = search_result.get("error", "Unknown")
+                    yield f"data: {json.dumps({'sentence': f'Błąd wyszukiwania: {error_msg}', 'index': 0})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
+
+                if not search_result.get("results"):
+                    yield f"data: {json.dumps({'sentence': f'Nie znaleziono wyników dla: {search_query}', 'index': 0})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    return
+
+                # Format results for LLM
+                search_context = web_search_client.format_for_llm(search_result)
+
+                # Ask LLM to summarize results
+                search_prompt = f"""Based on the following web search results, provide a concise summary for the user.
+Answer in the same language as the search query.
+
+{search_context}
+
+User's question: {search_query}
+
+Provide a helpful, concise summary (2-4 sentences). If the results don't fully answer the question, mention that."""
+
+                # Stream LLM summary
+                sentence_index = 0
+                async for sentence in conversation_client.chat_stream_sentences(search_prompt, "web_search"):
+                    yield f"data: {json.dumps({'sentence': sentence, 'index': sentence_index})}\n\n"
+                    sentence_index += 1
+
+                yield "data: [DONE]\n\n"
+                logger.info(f"[{correlation_id}] Web search complete: {sentence_index} sentences")
+                return
+
             # Step 4: Validate input for AI fallback
             if not is_valid_input(text):
                 yield f"data: {json.dumps({'sentence': 'Nie rozumiem', 'index': 0})}\n\n"
@@ -661,7 +710,7 @@ async def conversation(
                 message="Conversation ended",
             )
 
-        # Get AI response
+        # Get AI response with function calling (LLM decides when to use tools)
         response_text = await conversation_client.chat(request.text, request.session_id)
 
         logger.info(f"[{correlation_id}] Conversation response: {len(response_text)} chars")
@@ -743,7 +792,7 @@ async def conversation_voice(
 
         logger.info(f"[{correlation_id}] Transcribed: {text}")
 
-        # Get AI response
+        # Get AI response with function calling (LLM decides when to use tools)
         response_text = await conversation_client.chat(text, session_id)
 
         # Show transcription on display

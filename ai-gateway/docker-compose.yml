@@ -59,6 +59,9 @@ services:
       # STT Provider selection (vosk or whisper)
       - STT_PROVIDER=${STT_PROVIDER:-vosk}
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      # Web search (Brave Search API)
+      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      - SEARCH_RESULTS_LIMIT=${SEARCH_RESULTS_LIMIT:-5}
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
@@ -104,6 +107,8 @@ services:
       - LOG_LEVEL=INFO
       # Vosk local transcription (only Polish model available, 50MB on SSD)
       - VOSK_MODEL_PATH=/app/models/vosk/vosk-model-small-pl-0.22
+      # TTS cache directory (persists XTTS v2 model across rebuilds)
+      - TTS_HOME=/app/tts-cache
     depends_on:
       - ai-gateway
     restart: unless-stopped
@@ -112,6 +117,8 @@ services:
     volumes:
       - ../wake-word-service/sounds:/app/sounds:ro
       - /mnt/data-ssd/ha-data/wake-word-models:/app/models
+      # Persist TTS models on SSD (XTTS v2 ~2GB)
+      - /mnt/data-ssd/ha-data/tts-cache:/app/tts-cache
     group_add:
       - audio
 

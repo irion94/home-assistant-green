@@ -102,6 +102,16 @@ CONVERSATION_END_KEYWORDS = [
     "koniec", "wystarczy", "to wszystko", "koniec rozmowy", "pa pa", "do widzenia",
 ]
 
+# Web search triggers
+SEARCH_KEYWORDS = [
+    # English
+    "search for", "search", "look up", "find information about", "find info about",
+    "what is", "who is", "tell me about", "google", "search the web for",
+    # Polish
+    "wyszukaj", "poszukaj", "znajdź informacje o", "znajdź", "co to jest",
+    "kto to jest", "opowiedz mi o", "poszukaj w internecie",
+]
+
 
 class IntentMatcher:
     """Fast pattern-based intent matcher using fuzzy string matching."""
@@ -142,7 +152,21 @@ class IntentMatcher:
         text_lower = text.lower().strip()
         confidence = 0.0
 
-        # Check for conversation mode triggers first
+        # Check for web search intent first
+        search_query = self._extract_search_query(text_lower)
+        if search_query:
+            logger.info(f"Search intent matched: '{search_query}' (confidence=0.95)")
+            return (
+                HAAction(
+                    action="web_search",
+                    service=None,
+                    entity_id=None,
+                    data={"query": search_query},
+                ),
+                0.95,
+            )
+
+        # Check for conversation mode triggers
         conversation_action, conv_confidence = self._detect_conversation_with_confidence(text_lower)
         if conversation_action:
             logger.info(f"Conversation intent matched: {conversation_action} (confidence={conv_confidence:.2f}, text: {text})")
@@ -457,6 +481,60 @@ class IntentMatcher:
                 message = message.rstrip(".")
                 if len(message) > 2:  # Minimum message length
                     return message
+
+        return None
+
+    def _extract_search_query(self, text: str) -> str | None:
+        """Extract search query from text.
+
+        Returns:
+            Search query string or None
+        """
+        # Check for explicit search patterns first
+        search_patterns = [
+            # English patterns
+            r"search for\s+(.+)",
+            r"search the web for\s+(.+)",
+            r"look up\s+(.+)",
+            r"find information about\s+(.+)",
+            r"find info about\s+(.+)",
+            r"google\s+(.+)",
+            # Polish patterns
+            r"wyszukaj\s+(.+)",
+            r"poszukaj\s+(.+)",
+            r"znajdź informacje o\s+(.+)",
+            r"znajdź\s+(.+)",
+            r"poszukaj w internecie\s+(.+)",
+        ]
+
+        for pattern in search_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                query = match.group(1).strip()
+                # Clean up the query
+                query = query.rstrip("?.")
+                if len(query) > 2:  # Minimum query length
+                    return query
+
+        # Check for question patterns that might need web search
+        question_patterns = [
+            # English
+            r"what is\s+(.+)",
+            r"who is\s+(.+)",
+            r"tell me about\s+(.+)",
+            # Polish
+            r"co to jest\s+(.+)",
+            r"kto to jest\s+(.+)",
+            r"opowiedz mi o\s+(.+)",
+        ]
+
+        for pattern in question_patterns:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                query = match.group(1).strip()
+                query = query.rstrip("?.")
+                if len(query) > 2:
+                    return query
 
         return None
 

@@ -206,3 +206,34 @@ class HomeAssistantClient:
         except Exception as e:
             logger.error(f"Unexpected error in get_states: {e}")
             return []
+
+    async def get_state(self, entity_id: str) -> dict[str, Any] | None:
+        """Get state of a specific entity from Home Assistant.
+
+        Args:
+            entity_id: Entity ID to fetch (e.g., 'sensor.temperature')
+
+        Returns:
+            Entity state dictionary or None if not found
+        """
+        url = f"{self.base_url}/api/states/{entity_id}"
+
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(url, headers=self._get_headers())
+                if response.status_code == 404:
+                    logger.warning(f"Entity not found: {entity_id}")
+                    return None
+                response.raise_for_status()
+
+            state: dict[str, Any] = response.json()
+            logger.info(f"Fetched state for {entity_id}: {state.get('state')}")
+            return state
+
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error fetching state for {entity_id}: {e}")
+            return None
+
+        except Exception as e:
+            logger.error(f"Unexpected error in get_state: {e}")
+            return None
