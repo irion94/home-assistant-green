@@ -321,7 +321,8 @@ async with httpx.AsyncClient() as client:
 | 2025-11-22 | Phase 6 | Done | Streaming TTS |
 | 2025-11-22 | Phase 7 | Done | Dynamic entity discovery (OpenAI + Ollama) |
 | 2025-11-22 | Phase 7.4 | Done | LLM caching + pattern auto-learning |
-| 2025-11-22 | Phase 8 | In Progress | Advanced entity control + ambient mood |
+| 2025-11-22 | Phase 8 | Done | Advanced entity control + ambient mood |
+| 2025-11-23 | Phase 9 | In Progress | Conversation mode refinement |
 
 ### Phase 7: Dynamic Entity Discovery ✅
 Automatic entity mapping using AI semantic matching.
@@ -511,26 +512,26 @@ User: "Stwórz romantyczny klimat"
 ```
 
 #### 8.1 Full Property Control
-- [ ] Enhance LLM prompts with brightness examples (Polish)
-- [ ] Add color control examples (RGB, color names, kelvin)
-- [ ] Add transition time support
-- [ ] Polish color name mapping (czerwony, niebieski, zielony, etc.)
+- [x] Enhance LLM prompts with brightness examples (Polish)
+- [x] Add color control examples (RGB, color names, kelvin)
+- [x] Add transition time support
+- [x] Polish color name mapping (czerwony, niebieski, zielony, etc.)
 
 #### 8.2 Ambient/Mood Control
-- [ ] Extend HAAction model with `create_scene` action type
-- [ ] Add `actions: list[HAAction]` field for multi-action responses
-- [ ] Update LLM prompts with Polish mood examples
-- [ ] Document available entity types for mood creation
+- [x] Extend HAAction model with `create_scene` action type
+- [x] Add `actions: list[HAAction]` field for multi-action responses
+- [x] Update LLM prompts with Polish mood examples
+- [x] Document available entity types for mood creation
 
 #### 8.3 Multi-Action Execution
-- [ ] Update pipeline executor for scene action type
-- [ ] Add `call_services()` method to HA client
-- [ ] Execute actions sequentially with error handling
-- [ ] Return aggregated results
+- [x] Update pipeline executor for scene action type
+- [x] Add `call_services()` method to HA client
+- [x] Execute actions sequentially with error handling
+- [x] Return aggregated results
 
 #### 8.4 Gateway Integration
-- [ ] Update gateway router for scene responses
-- [ ] Handle multi-action results
+- [x] Update gateway router for scene responses
+- [x] Handle multi-action results
 
 #### Files to modify:
 
@@ -669,3 +670,89 @@ response_text = response.get("text") or response.get("message")
 if response_text:
     self.tts_service.speak(response_text)
 ```
+
+### Phase 9: Conversation Mode Refinement 🔲
+LED feedback, interrupt detection, and VAD improvements.
+
+**Goal**: Improve user experience with proper visual feedback, interruptible TTS, and reliable speech recording.
+
+#### 9.1 LED Feedback Fix
+- [x] Add `speaking()` LED state for TTS playback
+- [x] Move success feedback to after TTS completes
+- [x] Green flash on success, red only on actual errors
+- [x] Clear LED state transitions: listening → processing → speaking → success/error → idle
+
+#### 9.2 Visual Feedback During Processing
+- [x] Keep `processing()` LED active during AI streaming
+- [x] Add `speaking()` state (blue pulsing) during TTS
+- [x] Consistent feedback in both wake-word and conversation modes
+
+#### 9.3 TTS Interrupt Detection
+- [x] Add `InterruptListener` class for background wake-word detection
+- [x] Lower threshold (0.3) for interrupt detection
+- [x] Clear TTS queue on interrupt
+- [x] Configurable via `INTERRUPT_THRESHOLD` env var
+
+#### 9.4 Dynamic VAD Timeout
+- [x] Make VAD parameters configurable via environment variables
+- [x] Increase silence timeout to ~1.5s (18 chunks) from ~0.8s
+- [x] Increase min speech duration to ~1s (12 chunks)
+- [x] Env vars: `VAD_SILENCE_THRESHOLD`, `VAD_SILENCE_CHUNKS`, `VAD_MIN_SPEECH_CHUNKS`
+
+#### Files modified:
+
+**feedback.py** - Add speaking LED state:
+```python
+def speaking(self):
+    """Show LED for TTS speaking state"""
+    if self.led_enabled:
+        try:
+            pixel_ring.speak()  # Blue pulsing animation
+        except Exception as e:
+            logger.error(f"LED error (speaking): {e}")
+```
+
+**main.py** - Add InterruptListener class:
+```python
+class InterruptListener:
+    """Background listener for interrupt detection during TTS playback."""
+
+    def __init__(self, audio_capture, detector, threshold: float = 0.3):
+        self.threshold = threshold
+        self.interrupted = False
+        # ...
+
+    def _listen_loop(self):
+        while self.listening:
+            audio_chunk = self.audio_capture.get_chunk()
+            prediction = self.detector.predict(audio_chunk)
+            if prediction >= self.threshold:
+                self.interrupted = True
+                break
+```
+
+**audio_capture.py** - Configurable VAD:
+```python
+# VAD parameters - configurable via environment variables
+silence_threshold = int(os.getenv("VAD_SILENCE_THRESHOLD", "1000"))
+silence_chunks_to_stop = int(os.getenv("VAD_SILENCE_CHUNKS", "18"))  # ~1.5s
+min_speech_chunks = int(os.getenv("VAD_MIN_SPEECH_CHUNKS", "12"))  # ~1s
+```
+
+#### Configuration:
+
+```yaml
+# LED/Interrupt
+INTERRUPT_THRESHOLD=0.3
+
+# VAD (Voice Activity Detection)
+VAD_SILENCE_THRESHOLD=1000   # Audio energy threshold
+VAD_SILENCE_CHUNKS=18        # ~1.5s silence to stop
+VAD_MIN_SPEECH_CHUNKS=12     # ~1s minimum speech
+```
+
+#### Expected Improvements:
+- **Clear feedback**: User knows when system is listening vs speaking
+- **Interruptible**: Say wake-word during TTS to stop
+- **Better recording**: Longer pauses tolerated without cutoff
+- **Consistent behavior**: Same feedback in all modes
