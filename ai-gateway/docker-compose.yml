@@ -166,6 +166,27 @@ services:
       retries: 3
       start_period: 30s
 
+  # React Dashboard
+  react-dashboard:
+    build:
+      context: ../react-dashboard
+      dockerfile: Dockerfile
+    container_name: react-dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_HA_URL=http://localhost:8123
+      - VITE_HA_TOKEN=${HA_TOKEN}
+      - VITE_GATEWAY_URL=http://localhost:8080
+    depends_on:
+      - ai-gateway
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 # Volumes are now using SSD paths directly
 # /mnt/data-ssd/ha-data/ha-config
 # /mnt/data-ssd/ha-data/mosquitto/{config,data,log}

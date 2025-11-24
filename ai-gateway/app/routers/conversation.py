@@ -41,6 +41,7 @@ class ConversationResponse(BaseModel):
     text: str | None = Field(None, description="AI response text")
     session_id: str = Field(..., description="Session ID")
     message: str | None = Field(None, description="Status message")
+    transcription: str | None = Field(None, description="Transcribed user speech (voice only)")
 
 
 @router.post("/conversation", response_model=ConversationResponse)
@@ -195,6 +196,7 @@ async def conversation_voice(
             text=response_text,
             session_id=session_id,
             message=f"Response to: '{text}'",
+            transcription=text,
         )
 
     except Exception as e:
