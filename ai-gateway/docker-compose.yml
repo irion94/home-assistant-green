@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL with pgvector for AI memory
   postgres:
@@ -27,11 +25,12 @@ services:
     network_mode: host
     volumes:
       - /mnt/data-ssd/ha-data/ha-config:/config
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - TZ=Europe/Warsaw
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8123/api/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8123/manifest.json"]
       interval: 30s
       timeout: 10s
       retries: 3

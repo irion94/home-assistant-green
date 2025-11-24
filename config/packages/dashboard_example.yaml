@@ -25,3 +25,9 @@ lovelace:
       icon: mdi:home-assistant
       show_in_sidebar: true
       filename: dashboards/home.yaml
+    touch-lights:
+      mode: yaml
+      title: Touch Lights
+      icon: mdi:lightbulb-group
+      show_in_sidebar: true
+      filename: dashboards/touch_lights.yaml
