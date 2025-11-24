@@ -12,6 +12,9 @@ scipy>=1.11.0
 # HTTP client for AI Gateway
 httpx>=0.25.0
 
+# MQTT for status updates
+paho-mqtt>=1.6.0
+
 # Speech-to-text transcription
 vosk>=0.3.45
 

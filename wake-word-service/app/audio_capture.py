@@ -171,14 +171,15 @@ class AudioCapture:
             logger.error(f"Error reading audio chunk: {e}")
             return None
 
-    def record(self, duration: float) -> np.ndarray:
+    def record(self, duration: float, stop_check=None) -> np.ndarray:
         """
         Record audio with voice activity detection (VAD)
 
-        Stops recording after silence is detected or max duration reached.
+        Stops recording after silence is detected, max duration reached, or stop_check returns True.
 
         Args:
             duration: Maximum recording duration in seconds
+            stop_check: Optional callable that returns True to stop recording immediately
 
         Returns:
             Numpy array with recorded audio (mono, int16)
@@ -202,6 +203,11 @@ class AudioCapture:
 
         try:
             for i in range(max_chunks):
+                # Check for external stop signal
+                if stop_check and stop_check():
+                    logger.info("Recording interrupted by stop signal")
+                    break
+
                 chunk = self.get_chunk()
                 if chunk is None:
                     continue

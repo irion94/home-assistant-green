@@ -17,6 +17,7 @@ from typing import Optional
 from pathlib import Path
 
 import httpx
+import paho.mqtt.client as mqtt
 
 from detector import WakeWordDetector
 from audio_capture import AudioCapture
@@ -251,6 +252,11 @@ class WakeWordService:
         self.tts_service: Optional[TTSService] = None
         self.tts_queue: Optional[TTSQueue] = None
         self.interrupt_listener: Optional[InterruptListener] = None
+        self.mqtt_client: Optional[mqtt.Client] = None
+
+        # MQTT command flags
+        self.conversation_start_requested = False
+        self.conversation_stop_requested = False
 
         # Configuration from environment
         self.audio_device = os.getenv("AUDIO_DEVICE", "hw:2,0")
@@ -320,9 +326,53 @@ class WakeWordService:
             )
             logger.info(f"Interrupt listener initialized (threshold: {interrupt_threshold})")
 
+            # Initialize MQTT client for status updates and commands
+            mqtt_host = os.getenv("MQTT_HOST", "host.docker.internal")
+            mqtt_port = int(os.getenv("MQTT_PORT", "1883"))
+            try:
+                self.mqtt_client = mqtt.Client(client_id="wake-word-service")
+                self.mqtt_client.on_message = self._on_mqtt_message
+                self.mqtt_client.connect(mqtt_host, mqtt_port, 60)
+                self.mqtt_client.subscribe("voice_assistant/command")
+                self.mqtt_client.loop_start()
+                logger.info(f"MQTT client connected to {mqtt_host}:{mqtt_port}")
+                logger.info("Subscribed to voice_assistant/command")
+                self.publish_status("idle")
+            except Exception as mqtt_error:
+                logger.warning(f"MQTT connection failed: {mqtt_error} - status updates disabled")
+                self.mqtt_client = None
+
         except Exception as e:
             logger.error(f"Failed to initialize service: {e}")
             raise
+
+    def publish_status(self, status: str, text: str = ""):
+        """Publish status update via MQTT"""
+        if self.mqtt_client:
+            try:
+                self.mqtt_client.publish("voice_assistant/status", status, retain=True)
+                if text:
+                    self.mqtt_client.publish("voice_assistant/text", text, retain=True)
+            except Exception as e:
+                logger.warning(f"Failed to publish MQTT status: {e}")
+
+    def _on_mqtt_message(self, client, userdata, msg):
+        """Handle incoming MQTT commands"""
+        try:
+            topic = msg.topic
+            payload = msg.payload.decode('utf-8')
+            logger.info(f"MQTT message received: {topic} = {payload}")
+
+            if topic == "voice_assistant/command":
+                if payload == "start_conversation":
+                    logger.info("MQTT command: start_conversation")
+                    self.conversation_start_requested = True
+                    self.conversation_stop_requested = False  # Clear any pending stop
+                elif payload == "stop_conversation":
+                    logger.info("MQTT command: stop_conversation")
+                    self.conversation_stop_requested = True
+        except Exception as e:
+            logger.error(f"Error processing MQTT message: {e}")
 
     def run_conversation_loop(self, session_id: str):
         """Run continuous conversation loop until exit or timeout.
@@ -331,25 +381,47 @@ class WakeWordService:
             session_id: Unique session identifier
         """
         logger.info(f"Starting conversation mode (session={session_id}, timeout={self.conversation_timeout}s)")
+        self.publish_status("conversation", "Starting...")
         last_activity = time.time()
 
         try:
             while self.running:
+                # Check for external stop signal (MQTT)
+                if self.conversation_stop_requested:
+                    logger.info("MQTT stop signal received")
+                    self.conversation_stop_requested = False
+                    self.publish_status("idle", "Stopped")
+                    break
+
                 # Check timeout
                 if time.time() - last_activity > self.conversation_timeout:
                     logger.info("Conversation timeout reached")
+                    self.publish_status("idle", "Timeout")
                     break
 
                 # Show listening LED
                 self.feedback.play_listening()
+                self.publish_status("listening")
 
-                # Record user speech
+                # Record user speech with stop check
                 logger.info("Listening for conversation input...")
-                audio_data = self.audio_capture.record(duration=self.recording_duration)
+                audio_data = self.audio_capture.record(
+                    duration=self.recording_duration,
+                    stop_check=lambda: self.conversation_stop_requested
+                )
+
+                # Check if stopped during recording
+                if self.conversation_stop_requested:
+                    logger.info("Stop requested during recording")
+                    self.conversation_stop_requested = False
+                    self.publish_status("idle", "Stopped")
+                    break
+
                 logger.info(f"Recorded {len(audio_data)} audio frames")
 
                 # Show processing LED
                 self.feedback.processing()
+                self.publish_status("processing")
 
                 # Transcribe locally
                 text = self.transcriber.transcribe(audio_data, self.sample_rate)
@@ -358,10 +430,11 @@ class WakeWordService:
                     continue
 
                 logger.info(f"Transcribed: '{text}'")
+                self.publish_status("transcribed", text)
 
                 # Check for conversation end keywords in user's speech BEFORE sending
                 text_lower = text.lower()
-                end_keywords = ["stop", "koniec", "wystarczy", "to wszystko", "bye", "goodbye", "end conversation", "zakończ"]
+                end_keywords = ["stop", "koniec", "wystarczy", "to wszystko", "bye", "goodbye", "end conversation", "zakończ", "wstęp", "dziękuję", "dzięki", "pa", "do widzenia", "skończ", "koniec rozmowy"]
                 should_end = any(keyword in text_lower for keyword in end_keywords)
 
                 if should_end:
@@ -398,6 +471,7 @@ class WakeWordService:
                 # Get response text and play locally
                 response_text = response.get("text", "")
                 if response_text:
+                    self.publish_status("speaking", response_text)
                     logger.info(f"Speaking: '{response_text[:50]}...'")
                     self.tts_service.speak(response_text)
                     logger.info("TTS playback complete")
@@ -409,7 +483,16 @@ class WakeWordService:
             # End conversation session
             self.ai_client.end_conversation(session_id)
             logger.info(f"Conversation ended (session={session_id})")
+            self.publish_status("idle", "Conversation ended")
             self.feedback.idle()
+
+            # Notify HA to turn off the conversation_mode toggle
+            if self.mqtt_client:
+                try:
+                    self.mqtt_client.publish("voice_assistant/conversation_ended", "true")
+                    logger.info("Published conversation_ended to MQTT")
+                except Exception as e:
+                    logger.warning(f"Failed to publish conversation_ended: {e}")
 
     def process_wake_word_detection(self):
         """Handle wake-word detection event with streaming TTS"""
@@ -587,6 +670,28 @@ class WakeWordService:
             logger.info("Warmup complete - ready for detection")
 
             while self.running:
+                # Check for external trigger (MQTT command)
+                if self.conversation_start_requested:
+                    logger.info("MQTT conversation trigger detected")
+                    self.conversation_start_requested = False  # Clear flag
+                    self.conversation_stop_requested = False  # Clear any pending stop
+
+                    # Go directly into conversation mode
+                    self.publish_status("conversation", "Starting...")
+                    session_id = str(uuid.uuid4())[:8]
+                    self.run_conversation_loop(session_id)
+
+                    # Reset audio stream
+                    logger.info("Resetting audio capture stream...")
+                    self.audio_capture.stop()
+                    time.sleep(0.5)
+                    self.audio_capture._initialize()
+                    self.audio_capture.start()
+                    self.detector.reset()
+                    time.sleep(1.0)
+                    chunk_count = 0
+                    continue
+
                 # Get audio chunk
                 audio_chunk = self.audio_capture.get_chunk()
 
