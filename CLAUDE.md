@@ -1,86 +1,352 @@
-# CLAUDE.md
+# Home Assistant AI Companion Device - Development Guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance for Claude Code when working on the Raspberry Pi 5 AI companion device project.
 
-## Project Overview
+## Project Goal
 
-This is a production Home Assistant deployment using GitOps workflow with:
-- **Git-based configuration management** with automated CI/CD validation and deployment
-- **Custom integrations**: Strava Coach (`config/custom_components/strava_coach/`)
-- **AI Gateway**: FastAPI service bridging Ollama LLM ↔ Home Assistant for natural language control
-- **Subproject**: Advanced Strava analytics (`ha-strava-coach/` - separate Python package)
-- **Deployment**: Tailscale VPN + SSH/rsync for secure remote deployment
-- **Testing**: 30% minimum test coverage (infrastructure), 70% target (full project)
-- **Safe workflow**: validate → test → sync → deploy → health check → notify
+Build a **Home Assistant-powered AI companion device** on Raspberry Pi 5 that combines:
+- **Home Assistant** (automation hub) running in Docker
+- **Ollama** (local LLM backend for AI processing)
+- **AI Gateway** (FastAPI bridge connecting Ollama ↔ Home Assistant)
+- **Voice wake-word detection** (planned)
+- **Kiosk display interface** (planned)
 
-## Build, Test, and Development Commands
+All services run via Docker with persistent SSD storage.
 
-### Local Development (Root Project)
-```bash
-# Install development dependencies (includes test, linting, type checking)
-pip install -e .[dev,test]
+## Current Project Status
 
-# Set up pre-commit hooks (recommended)
-pre-commit install
-pre-commit run --all-files
+**Location**: `/mnt/data-ssd/home-assistant-green/` (symlinked to `~/home-assistant-green`)
 
-# Run tests with coverage (30% minimum required for infrastructure)
-pytest --cov=scripts --cov-report=term --cov-report=html
+**Existing & Operational:**
+- ✅ Home Assistant (Docker-based, GitOps workflow)
+- ✅ AI Gateway (FastAPI app in `ai-gateway/` connecting Ollama ↔ Home Assistant)
+- ✅ MQTT Broker (Mosquitto for IoT device communication)
+- ✅ Comprehensive CI/CD pipeline (validation, testing, deployment)
+- ✅ Custom components (Strava Coach, Daikin, Solarman, etc.)
+- ✅ **Wake-Word Detection (OpenWakeWord - "Hey Jarvis", 90-98% accuracy)**
+- ✅ **Audio Recording (7 seconds after wake-word)**
+- ✅ **Audio Transcription (Vosk - offline speech-to-text)**
+- ✅ **Conversation Mode (multi-turn dialogue with interrupt support)**
+- ✅ **TTS Response (Coqui TTS local playback via ReSpeaker)**
+- ✅ **Display Notifications (transcriptions shown on Nest Hub)**
+- ✅ **LLM Function Calling (OpenAI tools for web search, device control, sensors)**
+- ✅ **Web Search Integration (Brave Search API)**
+- ✅ **TTS Text Normalization (units like °C, km/h spoken correctly)**
+- ✅ **React Dashboard (browser-based voice interface with Web Speech API)**
+- ✅ **Browser STT/TTS (Web Speech API for local speech recognition & synthesis)**
 
-# Validate secrets references
-python3 scripts/validate_secrets.py
+**Missing Components:**
+- ❌ Custom wake-word model (Rico - needs retraining)
+- ❌ Streaming with Function Calling (`/voice/stream` endpoint)
 
-# Validate Home Assistant configuration via Docker
-docker run --rm -v "$PWD/config":/config ghcr.io/home-assistant/home-assistant:2024.11.3 \
-  python -m homeassistant --script check_config --config /config
+## Architecture
 
-# Code quality checks (automated by pre-commit, but can run manually)
-ruff check .                    # Linting
-ruff format --check .           # Formatting
-mypy config/custom_components   # Type checking
-yamllint config/                # YAML linting
-shellcheck scripts/*.sh         # Shell script linting
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Voice Input Methods                               │
+├─────────────────────────────────┬───────────────────────────────────────────┤
+│   Wake-Word Service (RPi)       │     React Dashboard (Browser)             │
+│   - OpenWakeWord detection      │     - Web Speech API (local STT)          │
+│   - Vosk transcription          │     - Web Speech Synthesis (local TTS)    │
+│   - Always-on, hands-free       │     - Interactive UI with messages        │
+└─────────────┬───────────────────┴───────────────┬───────────────────────────┘
+              │                                   │
+              ▼                                   ▼
+        ┌─────────────────────────────────────────────┐
+        │              AI Gateway (FastAPI)           │
+        │   - /conversation endpoint (text)           │
+        │   - /conversation/voice endpoint (audio)    │
+        │   - LLM function calling (tools)            │
+        └─────────────────┬───────────────────────────┘
+                          │
+                          ▼
+              ┌─────────────────────────┐
+              │   Ollama/OpenAI LLM     │
+              │   - Intent extraction   │
+              │   - Tool selection      │
+              └───────────┬─────────────┘
+                          │
+                          ▼
+              ┌─────────────────────────┐
+              │    Home Assistant       │
+              │   - Device control      │
+              │   - TTS to Nest Hub     │
+              │   - State updates       │
+              └─────────────────────────┘
 ```
 
-### AI Gateway Development
+### Current Implementation
+
+**AI Gateway** (`home-assistant-green/ai-gateway/`):
+- FastAPI application bridging Ollama and Home Assistant
+- Natural language command processing (English/Polish)
+- Translates user intent → structured JSON → HA service calls
+- Docker-based deployment with health checks
+
+**React Dashboard** (`home-assistant-green/react-dashboard/`):
+- Vite + React + TypeScript application
+- Web Speech API for browser-based STT (no audio transfer)
+- Web Speech Synthesis for local TTS
+- Real-time entity state updates via Home Assistant WebSocket
+- Kiosk-optimized UI for touch interaction
+
+**Docker Compose** (`home-assistant-green/ai-gateway/docker-compose.yml`):
+- Home Assistant container (port 8123)
+- MQTT Broker (Mosquitto, ports 1883/9001)
+- AI Gateway (port 8080)
+- React Dashboard (port 3000)
+- PostgreSQL with pgvector (port 5432)
+- Wake-word service
+- Ollama runs on host, accessed via `host.docker.internal:11434`
+
+**Key Files:**
+- `ai-gateway/app/main.py` — FastAPI application entry point
+- `ai-gateway/app/routers/gateway.py` — `/ask`, `/conversation`, `/conversation/voice` endpoints
+- `ai-gateway/app/services/ollama_client.py` — Ollama LLM integration
+- `ai-gateway/app/services/ha_client.py` — Home Assistant API client
+- `ai-gateway/app/services/intent_matcher.py` — Pattern matching for commands
+- `ai-gateway/app/services/conversation_client.py` — Conversation state management with function calling
+- `ai-gateway/app/services/llm_tools.py` — LLM tool definitions (web_search, control_light, get_home_data, get_time)
+- `ai-gateway/app/services/web_search.py` — Brave Search API client
+- `ai-gateway/docker-compose.yml` — Service orchestration (HA, MQTT, AI Gateway, Wake-word)
+- `wake-word-service/app/main.py` — Wake-word detection loop with conversation mode
+- `wake-word-service/app/detector.py` — OpenWakeWord TFLite/ONNX detection
+- `wake-word-service/app/tts_service.py` — TTS with text normalization for units
+- `wake-word-service/app/ai_gateway_client.py` — HTTP client for AI Gateway
+- `react-dashboard/src/pages/VoiceAssistant.tsx` — Voice interface with Web Speech API STT/TTS
+- `react-dashboard/src/api/gatewayClient.ts` — AI Gateway API client
+- `react-dashboard/src/api/haWebSocket.ts` — Home Assistant WebSocket client
+- `react-dashboard/src/types/api.ts` — API response types
+
+## Development Phases
+
+### Phase 1: Docker Foundation ✅ (Mostly Complete)
+
+**Status**: Operational
+- Home Assistant container configured
+- Ollama running on host (or can be containerized)
+- AI Gateway bridges Ollama ↔ Home Assistant
+- MQTT broker for IoT devices
+
+**Next Steps**:
+- Verify Ollama installation and model availability
+- Test AI Gateway functionality
+- Ensure all services start on boot
+
+### Phase 2: Voice Wake-Word Module ✅ (COMPLETE)
+
+**Status**: Fully operational with conversation mode
+
+**Technology Used**:
+- OpenWakeWord (TFLite inference)
+- Vosk (offline speech-to-text)
+- Google Translate TTS (via Home Assistant)
+
+**Implementation Details**:
+- Wake-word: "Hey Jarvis"
+- Microphone: ReSpeaker 4 Mic Array (UAC1.0)
+- Audio: 16kHz, 2-channel → mono
+- Container: `wake-word` service in Docker Compose
+- Models stored on SSD: `/mnt/data-ssd/ha-data/wake-word-models/`
+- Detection threshold: 0.35 (35% confidence)
+
+**What's Working**:
+- ✅ Audio capture from ReSpeaker microphone
+- ✅ Wake-word detection (OpenWakeWord TFLite models)
+- ✅ 7-second audio recording after detection
+- ✅ HTTP POST to AI Gateway with recorded audio
+- ✅ Docker container with audio device passthrough
+- ✅ Auto-restart on failure
+- ✅ Persistent model storage
+- ✅ **Vosk transcription (offline, Polish/English)**
+- ✅ **Conversation mode (multi-turn dialogue)**
+- ✅ **TTS response via Nest Hub (1.2x speed)**
+- ✅ **Language detection (Polish/English auto-switch)**
+- ✅ **Interrupt detection ("przerwij", "stop", etc.)**
+- ✅ **Display transcriptions on Nest Hub**
+
+**Conversation Mode Features**:
+- Triggered by phrases like "porozmawiajmy", "let's talk"
+- Multi-turn dialogue until "zakończ", "kończymy", "bye"
+- Shows transcribed text on Nest Hub display
+- Faster TTS playback (1.2x speed)
+- Interrupt support during AI response
+
+**Key Files**:
+- `wake-word-service/app/main.py` — Main loop with conversation mode
+- `wake-word-service/app/detector.py` — Wake-word detection
+- `wake-word-service/app/audio_capture.py` — Audio recording with VAD
+- `wake-word-service/app/ai_gateway_client.py` — API client with stop_media()
+- `ai-gateway/app/services/conversation_client.py` — Conversation state management
+
+**Known Issues**:
+- Audio feedback beeps fail (no audio output in container)
+- Custom "Rico" wake-word needs retraining (low accuracy)
+
+**Progress Doc**: `docs/WAKE_WORD_PROGRESS.md`
+
+### Phase 3: Kiosk Display UI ✅ (COMPLETE)
+
+**Objective**: Display Home Assistant dashboards and voice interaction feedback
+
+**Status**: React Dashboard fully operational with voice control
+
+**Technology**: React + Vite + TypeScript + Web Speech API
+
+**Two Interface Options**:
+
+1. **React Dashboard** (Primary - Browser-based):
+   - Modern touch-optimized UI
+   - Web Speech API for local STT (no audio transfer)
+   - Web Speech Synthesis for TTS responses
+   - Real-time entity state via WebSocket
+   - Voice Assistant with conversation history
+   - Light/climate/sensor controls
+
+2. **Chromium Kiosk Mode** (Alternative - HA Lovelace):
+   - Systemd service for auto-start
+   - Displays HA dashboards directly
+
+**Key Files**:
+- `react-dashboard/src/pages/VoiceAssistant.tsx` — Voice interface with STT/TTS
+- `react-dashboard/src/pages/Dashboard.tsx` — Entity controls
+- `react-dashboard/src/api/gateway.ts` — AI Gateway client
+- `react-dashboard/src/api/homeAssistant.ts` — HA WebSocket client
+- `kiosk-service/kiosk.service` — Systemd unit file (alternative)
+
+**What's Working**:
+- ✅ React Dashboard with voice assistant
+- ✅ Web Speech API STT (local speech recognition)
+- ✅ Web Speech Synthesis TTS (speaks responses)
+- ✅ Real-time entity state updates
+- ✅ Touch-optimized kiosk UI
+- ✅ Conversation message history
+- ✅ Polish/English language support
+- ✅ Docker deployment (port 3000)
+
+**Voice Assistant Features**:
+- Tap microphone to speak or type commands
+- Shows interim transcription while speaking
+- Displays conversation as chat bubbles
+- Speaks AI responses automatically
+- Toggle TTS on/off
+- Stop speaking with volume button
+
+### Phase 4: Integration 🔲 (Planned)
+
+**Objective**: Connect all components into unified system
+
+**Integration Flow**:
+1. User speaks wake word
+2. Voice module detects → triggers AI Gateway
+3. AI Gateway captures audio → transcribes (Whisper/Vosk)
+4. Transcription → Ollama for intent extraction
+5. Ollama returns JSON plan → AI Gateway executes HA service
+6. Home Assistant performs action
+7. State update → Display UI reflects change
+8. Audio/visual feedback to user
+
+**Docker Orchestration**:
+- Unified `docker-compose.yml` in project root
+- All services with proper dependencies (`depends_on`)
+- Shared network for inter-service communication
+- Persistent volumes on SSD:
+  - `/mnt/ssd/ha-config` → Home Assistant config
+  - `/mnt/ssd/ollama-models` → Ollama model storage
+  - `/mnt/ssd/mqtt-data` → MQTT persistence
+
+### Phase 5: Production Hardening 🔲 (Planned)
+
+**Objective**: Make system reliable and production-ready
+
+**Components**:
+- Auto-recovery on failures (restart policies)
+- Centralized logging (Loki/Grafana or simple journald)
+- Monitoring (Prometheus + HA integrations)
+- Backup strategy:
+  - Daily HA backups
+  - Ollama model snapshots
+  - Configuration backups to Git
+- Documentation:
+  - Setup guide
+  - Troubleshooting playbook
+  - Architecture diagrams
+
+## AI Assistant Operation Rules
+
+When working on this project, follow these principles:
+
+### 1. Think Modularly
+
+Build step-by-step: Docker base → HA → Ollama → Voice → Display
+
+For each stage:
+- Propose architecture before implementation
+- Create/modify configuration files incrementally
+- Update documentation alongside code changes
+- Test each module independently before integration
+
+### 2. Focus on Maintainability
+
+Optimize for Raspberry Pi 5 deployment:
+- Pin Docker image versions for reproducibility
+- Use persistent SSD-backed volumes (avoid SD card writes)
+- Design for easy updates and backups (especially HA + Ollama models)
+- Keep resource usage low (memory, CPU)
+
+### 3. Home Assistant Integration
+
+All AI features must integrate with Home Assistant:
+- Ollama communicates via AI Gateway (HTTP/gRPC)
+- AI Gateway executes HA service calls via REST API
+- Voice module triggers HA events
+- Display UI reflects HA state changes
+- Automations can trigger AI processing
+
+### 4. Code Workflow
+
+Before modifying anything:
+1. Analyze existing files (especially `home-assistant-green/` repo)
+2. Create TODO plan using TodoWrite tool
+3. Perform edits incrementally
+4. Test at each step
+5. Avoid overly complex designs — prioritize simple, reproducible setups
+
+### 5. Communication Style
+
+- Respond concisely but precisely
+- When information is missing (file/data), clearly state requirements
+- After major actions, propose:
+  - Next possible steps
+  - Verification/tests (Docker commands, HA logs, Ollama endpoints)
+
+## Common Commands
+
+### Docker Operations
+
 ```bash
-# Navigate to AI Gateway
-cd ai-gateway/
+# Navigate to project
+cd ~/home-assistant-green/ai-gateway
 
-# Install AI Gateway dependencies
-pip install -e .[dev,test]
-
-# Run AI Gateway tests with coverage (30% minimum required)
-pytest --cov=app --cov-report=term --cov-report=html --cov-fail-under=30
-
-# Run AI Gateway locally (without Docker)
-export HA_TOKEN=your_token
-export HA_BASE_URL=http://localhost:8123
-export OLLAMA_BASE_URL=http://localhost:11434
-export OLLAMA_MODEL=llama3.2:3b
-uvicorn app.main:app --reload --port 8080
-
-# Build and start AI Gateway with Docker Compose
+# Start all services
 docker-compose up -d
 
-# View AI Gateway logs
-docker-compose logs -f ai-gateway
+# View logs
+docker-compose logs -f
 
-# Test AI Gateway endpoint
-curl -X POST http://localhost:8080/ask \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Turn on living room lights"}'
-
-# Check AI Gateway health
+# Check service health
+docker-compose ps
 curl http://localhost:8080/health
 
-# AI Gateway code quality
-ruff check .                    # Linting
-ruff format .                   # Formatting
-mypy app/                       # Type checking
+# Restart specific service
+docker-compose restart ai-gateway
+
+# Stop all services
+docker-compose down
 ```
 
 ### Ollama Operations
+
 ```bash
 # Check Ollama status
 curl http://localhost:11434/api/tags
@@ -88,400 +354,215 @@ curl http://localhost:11434/api/tags
 # List installed models
 ollama list
 
-# Pull recommended model for RPi5 (2-3GB RAM, ~500ms-1s response)
+# Pull new model (recommended for RPi5: llama3.2:3b)
 ollama pull llama3.2:3b
 
 # Test Ollama directly
 ollama run llama3.2:3b "Turn on living room lights"
-
-# For more powerful systems
-ollama pull llama3.1:8b
-ollama pull mistral:7b
 ```
 
-### Deployment
+### Home Assistant
+
 ```bash
-# PRIMARY: Automated deployment via GitHub Actions (recommended)
-# - Push to master branch triggers CI validation
-# - If CI passes, deploy-ssh-tailscale workflow deploys automatically
-# - Includes health checks and notifications
+# Check HA API
+curl http://localhost:8123/api/
 
-git push origin master  # CI validates → tests → deploys → verifies
-
-# MANUAL: Deploy via SSH/rsync (requires HA_HOST, HA_SSH_USER, HA_SSH_KEY env vars)
-./scripts/deploy_via_ssh.sh
-
-# SYNC UI CHANGES: Pull GUI-created automations/dashboards back to repo
-./scripts/pull_gui_changes.sh
-
-# ROLLBACK: Revert to previous deployment (see DISASTER_RECOVERY.md)
-gh workflow run rollback.yml -f snapshot_run_id=<RUN_ID> -f confirm_rollback=ROLLBACK
+# Test HA service call (requires token)
+curl -X POST http://localhost:8123/api/services/light/turn_on \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"entity_id": "light.living_room"}'
 ```
 
-## Architecture
+### AI Gateway Testing
 
-### AI Gateway Architecture
-
-**Location**: `ai-gateway/` (FastAPI subproject)
-
-The AI Gateway enables natural language control of Home Assistant:
-
-```
-User Command → AI Gateway → Ollama (LLM) → JSON Plan → Home Assistant → Action
-     |              ↓
-     |         API Endpoint (port 8080)
-     |              ↓
-     |         OllamaClient (LLM translation)
-     |              ↓
-     |         HAClient (HA service calls)
-```
-
-#### Fallback Pipeline Architecture
-
-The AI Gateway uses a cascading recognition system for intelligent voice processing:
-
-```
-Voice Input → STT Pipeline → Intent Pipeline → Action found?
-                                                    ↓
-                                         yes ←──────┴──────→ no
-                                          ↓                   ↓
-                                     Execute HA           Ask AI
-                                          ↓                   ↓
-                                      "Gotowe"          AI response
-                                                              ↓
-                                                         TTS speak
-```
-
-**STT Pipeline** (Speech-to-Text):
-- Tier 1: Vosk (~100ms) - Clear speech, known phrases
-- Tier 2: Whisper (~1s) - Fallback when Vosk confidence < 0.7
-
-**Intent Pipeline**:
-- Tier 1: Pattern matcher (~10ms) - Exact command matches
-- Tier 2: Ollama LLM (~500ms) - Pattern fails
-- Tier 3: AI fallback (~1s) - No HA action → treat as conversation
-
-**TTS Pipeline** (Text-to-Speech):
-- Tier 1: VITS Polish (~200ms) - Short responses (≤15 words)
-- Tier 2: XTTS v2 (~10s) - Long responses (>15 words)
-
-**Streaming TTS**: Responses stream sentence-by-sentence via SSE for reduced latency (0.5-1s to first audio vs 2-4s for full response).
-
-See `ai-gateway/docs/FALLBACK_PIPELINE.md` for detailed implementation.
-
-#### API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/ask` | POST | Single command processing (JSON) |
-| `/voice` | POST | Voice command with audio file |
-| `/voice/stream` | POST | Streaming voice response (SSE) |
-| `/conversation` | POST | Multi-turn text conversation |
-| `/conversation/voice` | POST | Multi-turn voice conversation |
-| `/health` | GET | Service health check |
-
-**Key Files**:
-- `ai-gateway/app/main.py` — FastAPI application entry point
-- `ai-gateway/app/routers/` — Modular endpoint routers:
-  - `ask.py` — `/ask` endpoint
-  - `voice.py` — `/voice`, `/voice/stream`, `/health` endpoints
-  - `conversation.py` — `/conversation`, `/conversation/voice` endpoints
-  - `dependencies.py` — Shared FastAPI dependencies
-- `ai-gateway/app/services/ollama_client.py` — Ollama LLM integration with JSON validation
-- `ai-gateway/app/services/ha_client.py` — Home Assistant REST API client
-- `ai-gateway/app/services/intent_matcher.py` — Pattern matching for commands
-- `ai-gateway/app/services/conversation_client.py` — OpenAI streaming + session memory
-- `ai-gateway/app/services/entities.py` — Centralized entity mappings (single source of truth)
-- `ai-gateway/app/services/llm_tools.py` — LLM function calling tools
-- `ai-gateway/app/services/pipeline/` — STT and intent pipeline executors
-- `ai-gateway/app/utils/text.py` — Shared text utilities (detect_language, build_entity_prompt)
-- `ai-gateway/config/PERSONALITY.md` — Roco personality configuration
-- `ai-gateway/docker-compose.yml` — HA + MQTT + AI Gateway + Wake-word orchestration
-- `ai-gateway/docs/FALLBACK_PIPELINE.md` — Pipeline architecture documentation
-
-**Service Dependencies**:
-1. **Home Assistant** (container, port 8123) - Via `network_mode: host`
-2. **MQTT Broker** (Mosquitto, ports 1883/9001) - For IoT devices
-3. **AI Gateway** (container, port 8080) - Depends on HA health
-4. **Wake-Word Service** (container) - Depends on AI Gateway
-5. **Ollama** (host, port 11434) - Accessed via `host.docker.internal`
-
-### Wake-Word Service Architecture
-
-**Location**: `wake-word-service/` (separate from ai-gateway)
-
-The wake-word service handles voice input and streaming TTS playback:
-
-```
-Microphone → Wake-word detection → Audio recording → AI Gateway → TTS Queue → Speaker
-     ↓                                                    ↓
-ReSpeaker 4-mic                                   Streaming SSE
-     ↓                                                    ↓
-OpenWakeWord                                      Sentence-by-sentence
-```
-
-**Key Files**:
-- `wake-word-service/app/main.py` — Detection loop + TTSQueue
-- `wake-word-service/app/detector.py` — OpenWakeWord TFLite/ONNX
-- `wake-word-service/app/audio_capture.py` — Recording with VAD
-- `wake-word-service/app/tts_service.py` — Coqui TTS playback
-
-**Features**:
-- Wake-word: "Hey Jarvis" (OpenWakeWord)
-- Audio: 16kHz mono via ReSpeaker 4-mic array
-- Streaming playback: TTSQueue processes sentences as they arrive
-- Conversation mode: Multi-turn dialogue with interrupt support
-- Detection threshold: 0.35 (35% confidence)
-
-**Persistent Storage** (SSD-backed):
-- `/mnt/data-ssd/ha-data/ha-config` → Home Assistant configuration
-- `/mnt/data-ssd/ha-data/mosquitto/{config,data,log}` → MQTT persistence
-- Ollama models stored on host (avoid SD card)
-
-### Custom Integration Structure
-
-**IMPORTANT**: Custom components live in `config/custom_components/` (inside the config directory)
-
-This repository includes:
-- `config/custom_components/strava_coach/` — Strava Coach custom integration
-  - Provides advanced training metrics (ATL, CTL, TSB, fitness/fatigue)
-  - LLM-powered coaching insights
-  - Integrates with ha-strava-coach subproject for data processing
-- `config/custom_components/daikin_onecta/` — Daikin Onecta integration
-- `config/custom_components/solarman/` — Solarman inverter integration
-- `config/custom_components/xiaomi_home/` — Xiaomi Home integration
-- `config/custom_components/tech/` — TECH Controllers integration
-- `ha-strava-coach/` — Separate Python package (subproject)
-  - Advanced analytics engine
-  - Independent testing and versioning
-  - See `ha-strava-coach/README.md` for details
-
-**Standard Home Assistant component pattern**:
-1. `__init__.py` — Integration setup (`async_setup`, `async_setup_entry`)
-2. `const.py` — Domain constants (`DOMAIN = 'strava_coach'`)
-3. Platform files (`sensor.py`, `binary_sensor.py`) — Entity implementations
-4. `config_flow.py` — UI-based configuration (OAuth flow)
-5. `manifest.json` — Integration metadata and dependencies
-6. `services.yaml` — Service definitions (if any)
-
-### Configuration Layout
-- `config/configuration.yaml` — Main HA config with package imports
-- `config/packages/` — Modular feature configurations (packages pattern, see ADR 002)
-  - `mqtt.yaml`, `strava_coach_dashboard.yaml`, `tuya.yaml`, etc.
-  - Each package is self-contained with related sensors, automations, scripts
-- `config/automations.yaml` — Automation definitions (can be UI-managed)
-- `config/secrets.yaml` — Credentials (gitignored, use `secrets.yaml.example` as template)
-- `config/custom_components/` — Custom integrations (strava_coach, daikin_onecta, etc.)
-- `data/` — Inventory snapshots and HA mirror (see `data/README.md`)
-
-**Packages Pattern** (see `docs/adr/002-packages-pattern.md`):
-- Each package file is a complete HA configuration snippet merged at load time
-- Enables feature-based organization, prevents merge conflicts
-- Easy to disable features (rename to `.yaml.disabled`)
-
-### Deployment Workflows
-
-**Primary: Tailscale + SSH** (`.github/workflows/deploy-ssh-tailscale.yml`) — **Recommended**
-- Connects via Tailscale VPN (no port forwarding, see ADR 001)
-- Syncs config via rsync (excludes `.storage/`, database)
-- Validates configuration before restart
-- Performs health check (5-minute timeout)
-- Creates deployment snapshots (artifacts, 90-day retention)
-- Sends notifications (GitHub summary + optional Slack)
-
-**Additional Workflows**:
-- `ci.yml` — Validates config, runs tests, checks coverage, creates snapshots
-- `deploy-webhook.yml` — Git Pull webhook deployment (alternative)
-- `rollback.yml` — Manual rollback to previous deployment (see DISASTER_RECOVERY.md)
-- `inventory.yml` — Daily device/entity inventory snapshots (03:00 UTC)
-- `codeql.yml` — Security scanning
-
-## Coding Standards
-
-### Python (Custom Integration)
-- **Python 3.11+** required (root project), 3.12+ for ha-strava-coach subproject
-- **Code style**: Enforced by Ruff (linting + formatting)
-  - Line length: 100 characters
-  - Follow PEP 8: 4-space indents, snake_case for modules/functions
-  - Use type hints from `__future__ import annotations` (Home Assistant pattern)
-- **Type checking**: MyPy strict mode enabled
-- **Entity classes**: Inherit from `SensorEntity`, `BinarySensorEntity`, etc.
-- **Attributes**: Use `_attr_*` class attributes for static properties when possible
-- **Pre-commit**: Hooks run automatically before commits (ruff, mypy, trailing-whitespace, etc.)
-
-### AI Gateway Python Standards
-- **Python 3.11+** required
-- **FastAPI patterns**: Use dependency injection via `Depends()`
-- **Async/await**: All I/O operations must be async (httpx for HTTP requests)
-- **Pydantic models**: Use for request/response validation
-- **Logging**: Structured JSON logging with correlation IDs
-- **Error handling**: Graceful degradation, return meaningful errors
-- **Type hints**: Required, enforced by MyPy strict mode
-
-### YAML Configuration
-- **Indentation**: 2 spaces (enforced by yamllint)
-- **Secrets**: Reference via `!secret key_name` (never commit actual secrets)
-  - Validate with `python3 scripts/validate_secrets.py`
-  - Template in `config/secrets.yaml.example`
-- **Modularity**: Use `!include` and `!include_dir_named` (packages pattern)
-- **Self-contained packages**: Each package file should be feature-complete
-
-### Shell Scripts
-- **Linting**: Shellcheck enforced in CI
-- **SSH**: Use `StrictHostKeyChecking=accept-new` (not `no`)
-- **Error handling**: Use `set -euo pipefail` at script start
-- **Documentation**: Clear comments for complex operations
-
-### Testing
-- **Framework**: pytest with pytest-asyncio
-- **Coverage**: **30% minimum required** (infrastructure), 70% target (see ADR 004)
-  - Current: Infrastructure code (scripts, validation) + AI Gateway
-  - Future: Custom components unit tests
-- **Structure**: All test files in `tests/` directory
-  - `tests/conftest.py` — Shared fixtures and test data factories
-  - `tests/test_config_validation.py` — Config structure and security tests
-  - `tests/test_integrations.py` — Custom component validation
-  - `tests/test_automations.py` — Automation validation and best practices
-  - `ai-gateway/tests/` — AI Gateway-specific tests
-- **Async tests**: Use `pytest.mark.asyncio` decorator
-- **CI validation**: Config validation (Docker) + pytest + coverage check
-
-## Commit Conventions
-Use Conventional Commits format:
-- `feat: add new sensor platform`
-- `feat(ai-gateway): add entity mapping for bedroom`
-- `fix: handle None state in sensor`
-- `fix(ai-gateway): improve JSON validation`
-- `config: update automation trigger`
-- `ci: update deployment workflow`
-
-## Documentation
-
-### Developer Resources
-- **CONTRIBUTING.md** — Comprehensive developer onboarding guide
-  - Development environment setup
-  - Workflow (development, testing, commits, PRs)
-  - Code quality standards and testing requirements
-  - Troubleshooting common issues
-- **DISASTER_RECOVERY.md** — Backup and restoration procedures
-  - Three-layer backup strategy (Git, Artifacts, HA Backups)
-  - Recovery scenarios with step-by-step instructions
-  - Emergency procedures and rollback workflows
-- **INTEGRATIONS.md** — Integration setup guides
-- **ai-gateway/README.md** — AI Gateway comprehensive documentation
-  - Architecture and flow
-  - API endpoints and examples
-  - Deployment and configuration
-  - Troubleshooting and performance optimization
-- **docs/adr/** — Architecture Decision Records
-  - ADR 001: Tailscale for secure deployment
-  - ADR 002: Packages pattern for modular configuration
-  - ADR 003: Git-based configuration management (GitOps)
-  - ADR 004: Test coverage requirements (phased approach: 30% → 70%)
-- **data/README.md** — Inventory snapshots and HA mirror documentation
-- **config/secrets.yaml.example** — Secret template with setup instructions
-
-### Quick Links
-- Testing guide: `CONTRIBUTING.md#testing`
-- Deployment workflow: `CONTRIBUTING.md#deployment`
-- Rollback procedure: `DISASTER_RECOVERY.md#scenario-1-rollback-recent-deployment`
-- Secret validation: `scripts/validate_secrets.py`
-- Inventory snapshots: `data/README.md#inventory-snapshots`
-- AI Gateway docs: `ai-gateway/README.md`
-
-## Important Notes
-
-### AI Gateway Considerations
-- **Ollama models**: Use `llama3.2:3b` for Raspberry Pi 5 (2-3GB RAM, ~500ms-1s response)
-- **Entity mapping**: Edit `ai-gateway/app/services/ollama_client.py` to add new entities
-- **Bilingual support**: English and Polish commands supported out of the box
-- **JSON validation**: All LLM output is validated before execution for safety
-- **Performance**: First request ~2-3s (model load), subsequent ~500ms-1s
-- **Health checks**: Use `/health` endpoint to verify Ollama and HA connectivity
-- **Interactive docs**: Available at `http://localhost:8080/docs` (Swagger UI)
-
-**Configuration** (environment variables):
 ```bash
-# LLM Provider (ollama or openai)
-LLM_PROVIDER=ollama
-OLLAMA_BASE_URL=http://host.docker.internal:11434
-OLLAMA_MODEL=qwen2.5:3b
-# For OpenAI (conversation mode)
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
+# Test natural language command
+curl -X POST http://localhost:8080/ask \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Turn on living room lights"}'
 
-# STT Provider (vosk or whisper)
-STT_PROVIDER=vosk
-WHISPER_MODEL=small
+# Polish command
+curl -X POST http://localhost:8080/ask \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Włącz światło w salonie"}'
 
-# Confidence thresholds
-STT_CONFIDENCE_THRESHOLD=0.7
-INTENT_CONFIDENCE_THRESHOLD=0.8
+# Test conversation mode (text)
+curl -X POST http://localhost:8080/conversation \
+  -H "Content-Type: application/json" \
+  -d '{"text": "What is the weather like?", "session_id": "test123"}'
 
-# TTS routing
-TTS_SHORT_RESPONSE_LIMIT=15
+# Test conversation voice endpoint (with audio file)
+curl -X POST http://localhost:8080/conversation/voice \
+  -F "audio=@recording.wav" \
+  -F "session_id=test123"
+
+# Check health
+curl http://localhost:8080/health
 ```
 
-**Personality Configuration**:
-- Edit `ai-gateway/config/PERSONALITY.md` to customize Roco's character
-- Supports markdown format with sections for identity, language rules, response style
-- Loaded at startup, change requires ai-gateway restart
+### Wake-Word Service
 
-### Storage and Performance (Raspberry Pi 5)
-- **SSD paths**: All persistent data on `/mnt/data-ssd/ha-data/`
-  - HA config: `/mnt/data-ssd/ha-data/ha-config`
-  - MQTT data: `/mnt/data-ssd/ha-data/mosquitto/`
-  - Ollama models: Store on SSD (avoid SD card)
-- **SD card**: Boot only, avoid write-heavy operations
-- **Memory**: Monitor usage (Ollama can use 2-3GB, HA ~500MB-1GB)
-- **Docker restart policies**: `unless-stopped` for all services
+```bash
+# View wake-word logs
+docker-compose logs -f wake-word
+
+# Restart wake-word service
+docker-compose restart wake-word
+
+# Check current configuration
+docker-compose exec wake-word env | grep -E "WAKE_WORD|THRESHOLD|FRAMEWORK"
+```
+
+### React Dashboard
+
+```bash
+# Access React Dashboard
+open http://localhost:3000
+
+# View dashboard logs
+docker compose logs -f react-dashboard
+
+# Rebuild after changes
+docker compose build react-dashboard && docker compose up -d react-dashboard
+
+# Check health
+curl -s http://localhost:3000/health
+
+# Development mode (outside Docker)
+cd ~/home-assistant-green/react-dashboard
+npm install
+npm run dev
+```
+
+## File Structure
+
+```
+/home/irion94/
+├── CLAUDE.md                           # This file
+└── home-assistant-green -> /mnt/data-ssd/home-assistant-green  # Symlink to SSD
+
+/mnt/data-ssd/
+├── home-assistant-green/               # Main repository (on SSD)
+    ├── README.md                       # Repository documentation
+    ├── CLAUDE.md                       # Repository-specific Claude guide
+    ├── ai-gateway/                     # AI Gateway subproject
+    │   ├── docker-compose.yml          # HA + MQTT + AI Gateway orchestration
+    │   ├── Dockerfile                  # AI Gateway container image
+    │   ├── app/
+    │   │   ├── main.py                 # FastAPI app entry point
+    │   │   ├── routers/gateway.py      # /ask endpoint
+    │   │   ├── services/
+    │   │   │   ├── ollama_client.py    # Ollama LLM integration
+    │   │   │   └── ha_client.py        # Home Assistant API client
+    │   │   └── utils/
+    │   └── tests/                      # AI Gateway tests
+    ├── react-dashboard/                 # React voice dashboard
+    │   ├── Dockerfile                  # Production container
+    │   ├── src/
+    │   │   ├── pages/
+    │   │   │   ├── VoiceAssistant.tsx  # Voice UI with Web Speech API
+    │   │   │   └── Dashboard.tsx       # Entity controls
+    │   │   ├── api/
+    │   │   │   ├── gatewayClient.ts    # AI Gateway client
+    │   │   │   └── haWebSocket.ts      # HA WebSocket client
+    │   │   └── types/                  # TypeScript definitions
+    │   └── README.md                   # Setup documentation
+    ├── wake-word-service/              # Wake-word detection service
+    │   ├── Dockerfile                  # Service container
+    │   ├── app/
+    │   │   ├── main.py                 # Detection loop
+    │   │   ├── detector.py             # OpenWakeWord
+    │   │   └── tts_service.py          # TTS playback
+    │   └── README.md                   # Setup documentation
+    ├── kiosk-service/                  # Chromium kiosk (alternative)
+    │   ├── kiosk.service               # Systemd unit file
+    │   ├── install.sh                  # Installation script
+    │   └── README.md                   # Setup documentation
+    ├── config/                         # Home Assistant configuration
+    │   ├── configuration.yaml
+    │   ├── automations.yaml
+    │   ├── packages/                   # Modular HA configs
+    │   └── custom_components/          # Custom integrations
+    ├── scripts/                        # Deployment/utility scripts
+    └── docs/                           # Additional documentation
+```
+
+## Next Steps
+
+1. **Custom Wake-Word Training**:
+   - Retrain "Rico" wake-word model with better parameters
+   - Test ONNX vs TFLite performance
+   - Adjust detection thresholds
+
+2. **TTS Voice Improvement**:
+   - Try different Coqui TTS models for more natural conversation
+   - Consider XTTS v2 (requires more storage, moved Docker to SSD)
+   - Test multi-language support (Polish/English)
+   - Evaluate voice quality vs. performance trade-offs
+
+3. **Conversation Mode Refinement**:
+   - Fine-tune TTS wait time calculations
+   - Improve interrupt detection accuracy
+   - Test notify entity for different displays
+   - Add visual feedback during processing
+
+4. **Kiosk Display** 🚧:
+   - ✅ Basic kiosk setup complete (systemd service, Chromium)
+   - ⏳ Voice feedback panel (custom Lovelace card)
+   - ⏳ AI Gateway SSE integration
+   - ⏳ Touch screen calibration
+
+5. **Production Hardening**:
+   - Add monitoring/alerting
+   - Implement backup strategy
+   - Document troubleshooting procedures
+   - Optimize resource usage
+
+5. **Advanced Features**:
+   - Context-aware responses (remember previous commands)
+   - Proactive notifications
+   - Multi-room audio support
+
+6. **LLM Function Calling Enhancements**:
+   - ✅ Basic function calling implemented (web_search, control_light, get_time, get_home_data)
+   - ✅ Brave Search API integration
+   - ⏳ Add streaming with function calling for `/voice/stream` endpoint
+   - ⏳ Configure sensor entity mappings for `get_home_data` tool
+   - Future: Add more tools (climate control, media playback, calendar)
+
+7. **Streaming with Function Calling** (Phase 11):
+   - Implement tool calling in `chat_stream_sentences` method
+   - Handle tool calls within SSE streaming response
+   - Allow LLM to decide tools in `/voice/stream` endpoint
+   - This enables natural tool usage in all voice interactions
+
+## Important Considerations
 
 ### Security
-- **Never commit**: `secrets.yaml`, `.storage/`, `home-assistant_v2.db*`, `*.db-*`, `.env`
-- **GitHub Secrets**: Store CI/CD credentials (TS_OAUTH_CLIENT_ID, HA_SSH_KEY, HA_TOKEN, etc.)
-  - See `config/secrets.yaml.example` for mapping to GitHub secrets
-  - See `ai-gateway/.env.example` for AI Gateway secrets
-- **SSH Security**: Use `StrictHostKeyChecking=accept-new` (not `no`)
-- **API Keys**: Rotate every 90 days, use read-only scopes when possible
-- **HA Token**: Use long-lived access tokens (not admin passwords) for AI Gateway
-- **Pre-commit hooks**: Detect secrets accidentally added to commits
-- **Network security**: Run AI Gateway on trusted network or behind reverse proxy
+- Never commit secrets (`.env` files, tokens)
+- Use Home Assistant long-lived tokens (not admin passwords)
+- Run on trusted network or behind reverse proxy
 
-### Configuration Changes
-- **Always validate** before deployment:
-  ```bash
-  python3 scripts/validate_secrets.py  # Check secrets references
-  docker run --rm -v "$PWD/config":/config \
-    ghcr.io/home-assistant/home-assistant:2024.11.3 \
-    python -m homeassistant --script check_config --config /config
-  ```
-- **Test changes**: Run `pytest --cov` before pushing (30% coverage required)
-- **CI must pass**: Config validation + tests + coverage before merge
-- **Sync UI changes**: Run `./scripts/pull_gui_changes.sh` before committing
+### Performance (Raspberry Pi 5)
+- **Recommended Ollama models**:
+  - `llama3.2:3b` — Best balance (2-3GB RAM, ~500ms-1s response)
+  - `phi3:mini` — Faster, less accurate
+  - Avoid 7B+ models (too slow for real-time voice)
+- **Memory management**: Limit HA recorder history, prune logs
+- **Storage**: Use SSD for all persistent volumes (SD card for boot only)
 
-### Custom Integration Development
-- **Location**: `config/custom_components/strava_coach/` (inside config directory)
-- **Subproject**: `ha-strava-coach/` is separate Python package with own tests
-- **Adding platforms**: Create `sensor.py`, `binary_sensor.py`, etc.
-- **Adding services**: Define in `services.yaml`, implement in `__init__.py`
-- **Config flow**: Implement `config_flow.py` for UI-based setup (OAuth, etc.)
-- **Testing**: Add tests to `tests/test_integrations.py`
-- **Dependencies**: Update `manifest.json` and `pyproject.toml`
+### Reliability
+- Set Docker restart policies to `unless-stopped`
+- Implement health checks for all services
+- Monitor resource usage (RAM, CPU, disk)
+- Regular backups of HA config and Ollama models
 
-### AI Gateway Development Workflow
-1. **Make changes** to AI Gateway code (`ai-gateway/app/`)
-2. **Add tests** for new functionality (`ai-gateway/tests/`)
-3. **Run tests**: `cd ai-gateway && pytest --cov`
-4. **Test locally**: `uvicorn app.main:app --reload`
-5. **Test in Docker**: `docker-compose up --build`
-6. **Verify coverage**: Must maintain 30%+ coverage
-7. **Commit**: Follow conventional commits (`feat(ai-gateway): ...`)
-8. **Deploy**: Push to master triggers CI/CD
+## Resources
 
-### Troubleshooting AI Gateway
-- **Ollama not reachable**: Check `OLLAMA_BASE_URL`, verify `host.docker.internal` works
-- **HA not reachable**: Check `HA_BASE_URL`, verify token in `HA_TOKEN`
-- **Invalid JSON from Ollama**: Check system prompt, try different model
-- **Entity not found**: Verify entity ID exists in HA, check mapping in `ollama_client.py`
-- **Slow responses**: First request loads model (~2-3s), subsequent faster
-- **Container won't start**: Check logs with `docker-compose logs ai-gateway`
+- **Repository**: `/mnt/data-ssd/home-assistant-green/` (or `~/home-assistant-green` via symlink)
+- **AI Gateway README**: `~/home-assistant-green/ai-gateway/README.md`
+- **Repository README**: `~/home-assistant-green/README.md`
+- **HA Documentation**: https://www.home-assistant.io/docs/
+- **Ollama Documentation**: https://github.com/ollama/ollama
+- **FastAPI Documentation**: https://fastapi.tiangolo.com/
