@@ -59,6 +59,16 @@
     padding-right: env(safe-area-inset-right);
     padding-bottom: env(safe-area-inset-bottom);
   }
+
+  /* Hide scrollbar for horizontal kiosk scroller */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari, Opera */
+  }
 }
 
 /* Scrollbar styling */
