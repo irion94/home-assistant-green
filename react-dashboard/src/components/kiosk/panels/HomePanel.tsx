@@ -68,27 +68,27 @@ export default function HomePanel() {
         {isAvailable && entity ? (
           <>
             {/* Main weather display */}
-            <div className="flex-1 flex items-center justify-center gap-6">
-              <Icon className="w-16 h-16 text-primary" />
+            <div className="flex-1 flex items-center justify-center gap-8">
+              <Icon className="w-24 h-24 text-primary" />
               <div>
-                <p className="text-kiosk-2xl font-bold">
+                <p className="text-[6vw] font-bold leading-none">
                   {formatTemperature(temperature)}
                 </p>
-                <p className="text-sm text-text-secondary capitalize">
+                <p className="text-lg text-text-secondary capitalize mt-1">
                   {state.replace('-', ' ')}
                 </p>
               </div>
             </div>
 
             {/* Weather details */}
-            <div className="flex justify-center gap-8 pt-4 border-t border-surface-light">
-              <div className="flex items-center gap-2">
-                <Droplets className="w-5 h-5 text-blue-400" />
-                <span className="text-sm">{humidity}%</span>
+            <div className="flex justify-center gap-10 pt-4 border-t border-surface-light">
+              <div className="flex items-center gap-3">
+                <Droplets className="w-7 h-7 text-blue-400" />
+                <span className="text-xl">{humidity}%</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Wind className="w-5 h-5 text-text-secondary" />
-                <span className="text-sm">{windSpeed} km/h</span>
+              <div className="flex items-center gap-3">
+                <Wind className="w-7 h-7 text-text-secondary" />
+                <span className="text-xl">{windSpeed} km/h</span>
               </div>
             </div>
           </>
