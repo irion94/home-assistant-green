@@ -51,13 +51,16 @@ export default function HomePanel() {
   return (
     <div className="h-full flex flex-col">
       {/* Time Section - Top Half */}
-      <div className="flex-1 flex flex-col items-center justify-center bg-surface rounded-2xl mb-2 p-4">
-        <time className="text-kiosk-3xl font-bold tracking-tight">
+      <div className="flex-1 flex flex-col items-center justify-between bg-surface rounded-2xl mb-2 p-2">
+        <div className="flex-1" />
+        <time className="text-[18vw] font-bold tracking-tight leading-none">
           {formatTime(currentTime)}
         </time>
-        <p className="text-kiosk-lg text-text-secondary mt-2">
-          {formatDate(currentTime)}
-        </p>
+        <div className="flex-1 flex items-end pb-2">
+          <p className="text-kiosk-lg text-text-secondary">
+            {formatDate(currentTime)}
+          </p>
+        </div>
       </div>
 
       {/* Weather Section - Bottom Half */}
