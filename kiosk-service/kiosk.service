@@ -1,6 +1,6 @@
 [Unit]
 Description=Home Assistant Kiosk Display
-After=graphical-session.target network-online.target
+After=graphical.target network-online.target
 Wants=network-online.target
 
 [Service]
@@ -34,10 +34,10 @@ ExecStart=/usr/bin/chromium \
     --disable-pinch \
     --overscroll-history-navigation=0 \
     --autoplay-policy=no-user-gesture-required \
-    http://localhost:8123/lovelace/kiosk
+    http://localhost:3000/kiosk
 
 Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=graphical.target
