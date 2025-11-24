@@ -66,18 +66,39 @@ export function useLightEntity(entityId: string) {
 
   const colorTemp = base.attributes.color_temp
   const rgbColor = base.attributes.rgb_color
-  const supportsBrightness = (base.attributes.supported_features ?? 0) & 1
-  const supportsColorTemp = (base.attributes.supported_features ?? 0) & 2
-  const supportsColor = (base.attributes.supported_features ?? 0) & 16
+
+  // Check supported_color_modes (modern way) or fall back to supported_features (legacy)
+  const colorModes = base.attributes.supported_color_modes as string[] | undefined
+
+  let supportsBrightness = false
+  let supportsColorTemp = false
+  let supportsColor = false
+
+  if (colorModes && colorModes.length > 0) {
+    // Modern detection via supported_color_modes
+    supportsBrightness = colorModes.some(mode =>
+      ['brightness', 'color_temp', 'hs', 'rgb', 'rgbw', 'rgbww', 'xy'].includes(mode)
+    )
+    supportsColorTemp = colorModes.includes('color_temp')
+    supportsColor = colorModes.some(mode =>
+      ['hs', 'rgb', 'rgbw', 'rgbww', 'xy'].includes(mode)
+    )
+  } else {
+    // Legacy detection via supported_features
+    const features = base.attributes.supported_features ?? 0
+    supportsBrightness = Boolean(features & 1)
+    supportsColorTemp = Boolean(features & 2)
+    supportsColor = Boolean(features & 16)
+  }
 
   return {
     ...base,
     brightness,
     colorTemp,
     rgbColor,
-    supportsBrightness: Boolean(supportsBrightness),
-    supportsColorTemp: Boolean(supportsColorTemp),
-    supportsColor: Boolean(supportsColor),
+    supportsBrightness,
+    supportsColorTemp,
+    supportsColor,
   }
 }
 
