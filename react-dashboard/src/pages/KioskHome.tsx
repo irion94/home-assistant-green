@@ -1,32 +1,27 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import HorizontalScroller from '../components/kiosk/HorizontalScroller'
 import KioskPanel from '../components/kiosk/KioskPanel'
 import MenuPanel from '../components/kiosk/panels/MenuPanel'
 import HomePanel from '../components/kiosk/panels/HomePanel'
-import LightPanel from '../components/kiosk/panels/LightPanel'
+import LightsGridPanel from '../components/kiosk/panels/LightsGridPanel'
 import SensorsPanel from '../components/kiosk/panels/SensorsPanel'
 import VoicePanel from '../components/kiosk/panels/VoicePanel'
 import MediaPanel from '../components/kiosk/panels/MediaPanel'
-import { LIGHTS } from '../config/entities'
 
 // Panel width configurations (in viewport width units)
 const PANEL_WIDTHS = {
-  menu: 80,      // 80vw
-  home: 50,      // 50vw - half screen for Time/Weather
-  light: 40,     // 40vw per light
-  sensors: 80,   // 80vw
-  voice: 80,     // 80vw
-  media: 80,     // 80vw
+  menu: 80,       // 80vw
+  home: 50,       // 50vw - half screen for Time/Weather
+  lights: 80,     // 80vw - grid with all lights
+  sensors: 80,    // 80vw
+  voice: 80,      // 80vw
+  media: 80,      // 80vw
 }
 
 export default function KioskHome() {
   const navigate = useNavigate()
   const [initialOffset, setInitialOffset] = useState(0)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  // Get all light entities
-  const lights = Object.entries(LIGHTS)
 
   // Calculate initial offset to position at Home panel (index 1, after Menu)
   useEffect(() => {
@@ -41,7 +36,7 @@ export default function KioskHome() {
   }
 
   return (
-    <div ref={containerRef} className="h-screen w-screen bg-background">
+    <div className="h-screen w-screen bg-background">
       <HorizontalScroller
         initialOffset={initialOffset}
         resetTimeout={15000}
@@ -56,17 +51,12 @@ export default function KioskHome() {
           <HomePanel />
         </KioskPanel>
 
-        {/* Panels 2-8: Lights */}
-        {lights.map(([key, light]) => (
-          <KioskPanel key={key} width={`${PANEL_WIDTHS.light}vw`}>
-            <LightPanel
-              entityId={light.entity_id}
-              name={light.name}
-            />
-          </KioskPanel>
-        ))}
+        {/* Panel 2: Lights Grid */}
+        <KioskPanel width={`${PANEL_WIDTHS.lights}vw`}>
+          <LightsGridPanel />
+        </KioskPanel>
 
-        {/* Panel 9: Sensors */}
+        {/* Panel 3: Sensors */}
         <KioskPanel width={`${PANEL_WIDTHS.sensors}vw`}>
           <SensorsPanel />
         </KioskPanel>
