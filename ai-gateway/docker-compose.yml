@@ -161,6 +161,11 @@ services:
       - CONVERSATION_MODE_DEFAULT=false
       # Conversation timeout in seconds
       - CONVERSATION_TIMEOUT=30
+      # Parallel TTS Configuration (reduces latency via background synthesis)
+      - PARALLEL_TTS_ENABLED=true                 # Feature flag (default: disabled)
+      - PARALLEL_TTS_WORKERS=1                    # Synthesis thread pool size (1-2) - REDUCED to 1 to prevent OOM
+      - PARALLEL_TTS_FORCE_XTTS=false             # Use VITS for short text (<15 words) to save memory
+      - PARALLEL_TTS_QUEUE_TIMEOUT=30             # Synthesis timeout (seconds) - XTTS can take 10-15s
     depends_on:
       - ai-gateway
       - mosquitto
