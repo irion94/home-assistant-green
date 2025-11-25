@@ -15,10 +15,12 @@ function App() {
         <Routes>
           {/* New horizontal kiosk layout */}
           <Route path="/kiosk" element={<KioskHome />} />
+          {/* Default route redirects to kiosk */}
+          <Route path="/" element={<KioskHome />} />
 
           {/* Original layout with navigation */}
           <Route element={<KioskLayout />}>
-            <Route path="/" element={<Overview />} />
+            <Route path="/overview" element={<Overview />} />
             <Route path="/lights" element={<Lights />} />
             <Route path="/climate" element={<Climate />} />
             <Route path="/sensors" element={<Sensors />} />
