@@ -272,6 +272,7 @@ class MqttService {
       this.currentSessionId = sessionId
       // Write to store
       store.setSessionId(sessionId)
+      store.addDebugLog('MQTT', `session/active = ${sessionId ?? 'none'}`)
       // Legacy callback
       this.callbacks.onActiveSessionChange?.(sessionId)
       console.log(`[MQTT] Active session: ${sessionId ?? 'none'}`)
@@ -284,12 +285,16 @@ class MqttService {
       const sessionId = stateMatch[1]
       // State can be JSON object {"status": "listening", ...} or plain string
       let state: VoiceState
+      const prevState = store.state
       try {
         const data = JSON.parse(payload)
         state = (data.status || data.state || 'idle') as VoiceState
       } catch {
         state = payload as VoiceState
       }
+
+      // Debug log state transition
+      store.addDebugLog('STATE', `${prevState} → ${state}`)
 
       // Write to store - this handles auto-opening overlay
       store.setVoiceState(state)
@@ -331,6 +336,7 @@ class MqttService {
       }
       // Write to store
       store.addTranscript(message)
+      store.addDebugLog('MQTT', `transcript = "${message.text.slice(0, 50)}${message.text.length > 50 ? '...' : ''}"`)
       // Legacy callback
       console.log('[MQTT] Calling onTranscript callback with:', message)
       this.callbacks.onTranscript?.(message)
@@ -361,6 +367,7 @@ class MqttService {
       }
       // Write to store
       store.addResponse(message)
+      store.addDebugLog('MQTT', `response = "${message.text.slice(0, 50)}${message.text.length > 50 ? '...' : ''}"`)
       // Legacy callback
       this.callbacks.onResponse?.(message)
       return
@@ -370,6 +377,7 @@ class MqttService {
     const endedMatch = subTopic.match(/^session\/([^/]+)\/ended$/)
     if (endedMatch) {
       const sessionId = endedMatch[1]
+      store.addDebugLog('MQTT', `session/ended = ${sessionId}`)
       // Write to store - handles overlay close
       store.endSession()
       // Update local tracking
@@ -387,6 +395,7 @@ class MqttService {
       const enabled = payload.toLowerCase() === 'true'
       // Write to store
       store.setConversationMode(enabled)
+      store.addDebugLog('MQTT', `conversation_mode = ${enabled}`)
       // Legacy callback
       this.callbacks.onConversationModeChange?.(enabled)
       console.log(`[MQTT] Conversation mode synced: ${enabled}`)
@@ -398,6 +407,7 @@ class MqttService {
       const comparison = JSON.parse(payload) as STTComparison
       // Write to store
       store.setLastComparison(comparison)
+      store.addDebugLog('TIMING', `STT: vosk=${comparison.vosk.duration.toFixed(2)}s, whisper=${comparison.whisper.duration.toFixed(2)}s → ${comparison.selected}`)
       // Legacy callback
       this.callbacks.onSTTComparison?.(comparison)
       return

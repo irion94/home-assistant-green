@@ -23,6 +23,17 @@ export interface ConversationMessage {
   sttEngine?: string
 }
 
+export type DebugLogType = 'STATE' | 'MQTT' | 'TIMING' | 'ERROR'
+
+export interface DebugLogEntry {
+  id: string
+  timestamp: Date
+  type: DebugLogType
+  message: string
+}
+
+const MAX_DEBUG_LOGS = 100
+
 interface VoiceStore {
   // Session state
   sessionId: string | null
@@ -39,6 +50,10 @@ interface VoiceStore {
   overlayOpen: boolean
   startSessionOnOpen: boolean
   triggerState: VoiceState
+
+  // Debug state
+  debugEnabled: boolean
+  debugLogs: DebugLogEntry[]
 
   // Actions - Session
   setSessionId: (sessionId: string | null) => void
@@ -62,6 +77,11 @@ interface VoiceStore {
 
   // Actions - Session lifecycle
   endSession: () => void
+
+  // Actions - Debug
+  addDebugLog: (type: DebugLogType, message: string) => void
+  clearDebugLogs: () => void
+  toggleDebug: () => void
 }
 
 export const useVoiceStore = create<VoiceStore>()(
@@ -78,6 +98,8 @@ export const useVoiceStore = create<VoiceStore>()(
       overlayOpen: false,
       startSessionOnOpen: false,
       triggerState: 'idle',
+      debugEnabled: false,
+      debugLogs: [],
 
       // Session actions
       setSessionId: (sessionId) => set({ sessionId }),
@@ -168,14 +190,32 @@ export const useVoiceStore = create<VoiceStore>()(
         }
 
         set({ sessionId: null, state: 'idle' })
-      }
+      },
+
+      // Debug actions
+      addDebugLog: (type, message) => set((state) => {
+        const newLog: DebugLogEntry = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          timestamp: new Date(),
+          type,
+          message
+        }
+        // Keep only last MAX_DEBUG_LOGS entries
+        const logs = [...state.debugLogs, newLog].slice(-MAX_DEBUG_LOGS)
+        return { debugLogs: logs }
+      }),
+
+      clearDebugLogs: () => set({ debugLogs: [] }),
+
+      toggleDebug: () => set((state) => ({ debugEnabled: !state.debugEnabled }))
     }),
     {
       name: 'voice-store',
       // Only persist these fields
       partialize: (state) => ({
         roomId: state.roomId,
-        conversationMode: state.conversationMode
+        conversationMode: state.conversationMode,
+        debugEnabled: state.debugEnabled
       })
     }
   )
@@ -190,3 +230,5 @@ export const useMqttConnected = () => useVoiceStore((state) => state.mqttConnect
 export const useRoomId = () => useVoiceStore((state) => state.roomId)
 export const useOverlayOpen = () => useVoiceStore((state) => state.overlayOpen)
 export const useLastComparison = () => useVoiceStore((state) => state.lastComparison)
+export const useDebugEnabled = () => useVoiceStore((state) => state.debugEnabled)
+export const useDebugLogs = () => useVoiceStore((state) => state.debugLogs)

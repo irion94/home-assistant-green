@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react'
-import { Mic, X, Loader2, Volume2, Wifi, WifiOff, MessageCircle, Radio } from 'lucide-react'
+import { Mic, X, Loader2, Volume2, Wifi, WifiOff, MessageCircle, Radio, Bug } from 'lucide-react'
 import { mqttService, VoiceState } from '../../services/mqttService'
 import { classNames } from '../../utils/formatters'
-import { useVoiceStore } from '../../stores/voiceStore'
+import { useVoiceStore, useDebugEnabled } from '../../stores/voiceStore'
+import { DebugLogPanel } from './DebugLogPanel'
 
 interface VoiceOverlayProps {
   isOpen: boolean
@@ -45,8 +46,10 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
     conversationMode,
     mqttConnected: connected,
     lastComparison,
-    setVoiceState
+    setVoiceState,
+    toggleDebug
   } = useVoiceStore()
+  const debugEnabled = useDebugEnabled()
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -152,6 +155,20 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
             <span className="text-base font-semibold">
               {conversationMode ? "🔥 In conversation" : "Start conversation"}
             </span>
+          </button>
+
+          {/* Debug toggle button */}
+          <button
+            onClick={toggleDebug}
+            className={classNames(
+              "p-3 rounded-full transition-colors",
+              debugEnabled
+                ? "bg-yellow-500/30 text-yellow-400"
+                : "bg-surface-light/30 text-text-secondary hover:bg-surface-light/50"
+            )}
+            title="Toggle debug log"
+          >
+            <Bug className="w-5 h-5" />
           </button>
 
           {/* Close button */}
@@ -272,6 +289,9 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
           )}
         </div>
       </div>
+
+      {/* Debug Log Panel */}
+      <DebugLogPanel />
     </div>
   )
 }
