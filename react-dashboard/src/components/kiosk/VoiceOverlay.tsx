@@ -140,13 +140,13 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
             }}
             disabled={conversationMode}
             className={classNames(
-              "flex items-center gap-2 px-4 py-2 rounded-full transition-colors",
+              "flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-300",
               conversationMode
-                ? "bg-primary/20 text-primary cursor-default"
-                : "bg-surface-light/30 text-text-secondary hover:bg-surface-light/50 cursor-pointer"
+                ? "bg-primary text-white shadow-lg shadow-primary/40 animate-pulse cursor-default"
+                : "bg-surface-light/30 text-text-secondary hover:bg-surface-light/50 cursor-pointer border border-transparent hover:border-primary/30"
             )}
           >
-            <MessageCircle className="w-4 h-4" />
+            <MessageCircle className={classNames("w-4 h-4", conversationMode && "animate-bounce")} />
             <span className="text-sm font-medium">
               {conversationMode ? "In conversation" : "Tap to start conversation"}
             </span>
