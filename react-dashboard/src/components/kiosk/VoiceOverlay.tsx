@@ -203,8 +203,24 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
               >
                 <p className="text-sm text-text-secondary mb-1">
                   {message.type === 'user' ? 'You' : 'Assistant'}
+                  {message.sttEngine && (
+                    <span className="ml-2 text-xs opacity-70">({message.sttEngine})</span>
+                  )}
                 </p>
-                <p className="text-lg">{message.text}</p>
+                <p className="text-lg whitespace-pre-wrap break-words">
+                  {message.text}
+                  {/* Blinking cursor for streaming messages */}
+                  {message.isStreaming && (
+                    <span className="inline-block w-[3px] h-5 ml-1 bg-primary animate-pulse align-middle" />
+                  )}
+                </p>
+                {/* Streaming indicator */}
+                {message.isStreaming && (
+                  <div className="flex items-center gap-2 mt-2 text-xs text-text-secondary">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>Streaming...</span>
+                  </div>
+                )}
               </div>
             ))}
             <div ref={messagesEndRef} />
