@@ -790,6 +790,9 @@ class WakeWordService:
                 if not result.should_continue:
                     break
 
+                # Re-read conversation mode (may have changed during process_interaction)
+                is_conversation_mode = self.conversation_mode_enabled
+
                 # Single command mode - exit after one successful interaction
                 # UNLESS: AI asked a clarifying question (response ends with ?)
                 if not is_conversation_mode and result.transcript:
