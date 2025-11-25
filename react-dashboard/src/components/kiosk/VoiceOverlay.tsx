@@ -140,24 +140,24 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
             }}
             disabled={conversationMode}
             className={classNames(
-              "flex items-center gap-2 px-4 py-2 rounded-full transition-all duration-300",
+              "flex items-center gap-3 px-5 py-3 rounded-full transition-all duration-300",
               conversationMode
-                ? "bg-primary text-white shadow-lg shadow-primary/40 animate-pulse cursor-default"
-                : "bg-surface-light/30 text-text-secondary hover:bg-surface-light/50 cursor-pointer border border-transparent hover:border-primary/30"
+                ? "bg-orange-500 text-white shadow-xl shadow-orange-500/50 animate-pulse cursor-default ring-4 ring-orange-400/50"
+                : "bg-surface-light/30 text-text-secondary hover:bg-surface-light/50 cursor-pointer border-2 border-transparent hover:border-orange-400/50"
             )}
           >
-            <MessageCircle className={classNames("w-4 h-4", conversationMode && "animate-bounce")} />
-            <span className="text-sm font-medium">
-              {conversationMode ? "In conversation" : "Tap to start conversation"}
+            <MessageCircle className={classNames("w-5 h-5", conversationMode && "animate-bounce")} />
+            <span className="text-base font-semibold">
+              {conversationMode ? "🔥 In conversation" : "Start conversation"}
             </span>
           </button>
 
           {/* Close button */}
           <button
             onClick={handleClose}
-            className="p-3 rounded-full bg-surface-light/50 hover:bg-surface-light"
+            className="p-4 rounded-full bg-surface-light/50 hover:bg-red-500/80 hover:text-white transition-colors"
           >
-            <X className="w-6 h-6" />
+            <X className="w-7 h-7" />
           </button>
         </div>
       </div>
