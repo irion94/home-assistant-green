@@ -322,7 +322,8 @@ async with httpx.AsyncClient() as client:
 | 2025-11-22 | Phase 7 | Done | Dynamic entity discovery (OpenAI + Ollama) |
 | 2025-11-22 | Phase 7.4 | Done | LLM caching + pattern auto-learning |
 | 2025-11-22 | Phase 8 | Done | Advanced entity control + ambient mood |
-| 2025-11-23 | Phase 9 | In Progress | Conversation mode refinement |
+| 2025-11-23 | Phase 9 | Done | Conversation mode refinement |
+| 2025-11-25 | Phase 9 Streaming | Done | MQTT-based streaming responses |
 
 ### Phase 7: Dynamic Entity Discovery ✅
 Automatic entity mapping using AI semantic matching.
