@@ -232,6 +232,29 @@ class TTSService:
 
         return self._slow_tts
 
+    def preload_xtts(self) -> bool:
+        """Preload XTTS model to avoid lazy loading delay during first synthesis.
+
+        Call this during initialization when parallel TTS is enabled to ensure
+        the model is loaded before any synthesis attempts.
+
+        Returns:
+            True if XTTS loaded successfully, False otherwise
+        """
+        if not self.enable_xtts:
+            logger.info("XTTS preload skipped (disabled)")
+            return False
+
+        logger.info("Preloading XTTS model for parallel TTS...")
+        result = self._get_slow_tts()
+
+        if result is not None:
+            logger.info("XTTS model preloaded successfully")
+            return True
+        else:
+            logger.warning("XTTS preload failed")
+            return False
+
     def _should_use_xtts(self, text: str) -> bool:
         """Determine if XTTS should be used based on text length.
 
