@@ -6,10 +6,12 @@ for multi-turn AI conversations with function calling support.
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.models import HAAction
@@ -42,6 +44,18 @@ class ConversationResponse(BaseModel):
     session_id: str = Field(..., description="Session ID")
     message: str | None = Field(None, description="Status message")
     transcription: str | None = Field(None, description="Transcribed user speech (voice only)")
+
+
+class Message(BaseModel):
+    """Message schema for streaming chat (Vercel AI SDK format)."""
+    role: str = Field(..., description="Message role: 'user' or 'assistant'")
+    content: str = Field(..., description="Message content")
+
+
+class ChatRequest(BaseModel):
+    """Request schema for /conversation/stream endpoint (Vercel AI SDK format)."""
+    messages: list[Message] = Field(..., description="Conversation message history")
+    session_id: str = Field(default="default", description="Conversation session ID")
 
 
 @router.post("/conversation", response_model=ConversationResponse)
@@ -202,3 +216,95 @@ async def conversation_voice(
     except Exception as e:
         logger.error(f"[{correlation_id}] Conversation voice error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Conversation error: {e}")
+
+
+@router.post("/conversation/stream")
+async def conversation_stream(
+    request: ChatRequest,
+    conversation_client: ConversationClient = Depends(get_conversation_client_dependency),
+) -> StreamingResponse:
+    """Stream AI response using Server-Sent Events (SSE) - Vercel AI SDK compatible.
+
+    This endpoint accepts a conversation history in Vercel AI SDK format and streams
+    the AI response token-by-token for real-time display in the UI.
+
+    Args:
+        request: Chat request with message history and session ID
+        conversation_client: Conversation client instance
+
+    Returns:
+        StreamingResponse with SSE events containing response tokens
+
+    Example Request:
+        POST /conversation/stream
+        {
+            "messages": [
+                {"role": "user", "content": "Hello"},
+                {"role": "assistant", "content": "Hi there!"},
+                {"role": "user", "content": "How are you?"}
+            ],
+            "session_id": "chat_123"
+        }
+
+    Example Response (SSE):
+        data: {"content": "I'm"}
+        data: {"content": " doing"}
+        data: {"content": " well"}
+        data: [DONE]
+    """
+    correlation_id = str(uuid.uuid4())
+    logger.info(
+        f"[{correlation_id}] Stream request: session={request.session_id}, "
+        f"messages={len(request.messages)}"
+    )
+
+    # Extract the last user message from the conversation history
+    user_message = next(
+        (msg.content for msg in reversed(request.messages) if msg.role == "user"),
+        None,
+    )
+
+    if not user_message:
+        async def error_stream():
+            yield f"data: {json.dumps({'error': 'No user message found'})}\n\n"
+
+        return StreamingResponse(
+            error_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    async def generate():
+        """Generate SSE stream of response tokens."""
+        try:
+            logger.info(f"[{correlation_id}] Streaming response for: '{user_message[:50]}...'")
+
+            # Stream response token by token using existing chat_stream method
+            token_count = 0
+            async for token in conversation_client.chat_stream(user_message, request.session_id):
+                # Vercel AI SDK format: {"content": "token"}
+                yield f"data: {json.dumps({'content': token})}\n\n"
+                token_count += 1
+
+            logger.info(f"[{correlation_id}] Stream complete: {token_count} tokens")
+
+            # Signal completion (Vercel AI SDK expects this)
+            yield "data: [DONE]\n\n"
+
+        except Exception as e:
+            logger.error(f"[{correlation_id}] Streaming error: {e}", exc_info=True)
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
