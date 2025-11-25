@@ -260,6 +260,11 @@ class WakeWordService:
         self.interrupt_listener: Optional[InterruptListener] = None
         self.mqtt_client: Optional[mqtt.Client] = None
 
+        # Parallel TTS support (for Phase X: reduced latency via parallel synthesis)
+        self.parallel_tts_queue = None  # Lazy init to ParallelTTSQueue
+        self.sentence_buffer = ""  # Token buffer for sentence extraction
+        self.sentence_endings = {'.', '!', '?'}  # Sentence boundary markers
+
         # MQTT command flags
         self.conversation_start_requested = False
         self.conversation_stop_requested = False
@@ -347,6 +352,11 @@ class WakeWordService:
             # Initialize TTS service for local text-to-speech
             self.tts_service = TTSService()
             logger.info("TTS service initialized for local speech output")
+
+            # Preload XTTS if parallel TTS is enabled (avoid lazy loading delay)
+            if os.getenv("PARALLEL_TTS_ENABLED", "false").lower() == "true":
+                logger.info("Parallel TTS enabled - preloading XTTS model...")
+                self.tts_service.preload_xtts()
 
             # Initialize TTS queue for streaming playback
             self.tts_queue = TTSQueue(self.tts_service)
@@ -826,6 +836,29 @@ class WakeWordService:
                 token_count = sequence
                 self._publish_streaming_token(session_id, token, sequence)
 
+                # Parallel TTS: buffer tokens and enqueue complete sentences
+                if self._parallel_tts_enabled():
+                    self.sentence_buffer += token
+                    # Log first few tokens to verify callback is working
+                    if sequence <= 3:
+                        logger.info(f"Token #{sequence}: '{token}' (buffer: {len(self.sentence_buffer)} chars)")
+
+                    # Check for sentence endings (.!?)
+                    for i, char in enumerate(self.sentence_buffer):
+                        if char in self.sentence_endings:
+                            # Verify it's really an ending (not abbreviation like "Dr.")
+                            if i + 1 >= len(self.sentence_buffer) or self.sentence_buffer[i + 1] in ' \n':
+                                # Extract complete sentence
+                                sentence = self.sentence_buffer[:i + 1].strip()
+                                self.sentence_buffer = self.sentence_buffer[i + 1:].lstrip()
+
+                                if sentence:
+                                    # Enqueue for background synthesis (detect language from first sentence)
+                                    lang = self._detect_language(sentence)
+                                    logger.info(f"Enqueueing TTS ({lang}): '{sentence[:40]}...'")
+                                    self._get_parallel_tts_queue().enqueue(sentence, lang)
+                                break
+
             # Stream response from AI Gateway
             try:
                 full_response = asyncio.run(
@@ -863,11 +896,35 @@ class WakeWordService:
                 # self.publish_message("response", result.response, session_id)
 
                 tts_start = time.time()
-                logger.info(f"Speaking: '{result.response[:50]}...'")
-                self.tts_service.speak(result.response)
-                result.tts_duration = time.time() - tts_start
 
-                logger.info("TTS playback complete")
+                if self._parallel_tts_enabled():
+                    # === PARALLEL TTS MODE ===
+                    logger.info("Starting parallel TTS playback...")
+
+                    # Enqueue any remaining buffer (last sentence fragment)
+                    if self.sentence_buffer.strip():
+                        lang = self._detect_language(result.transcript)
+                        self._get_parallel_tts_queue().enqueue(self.sentence_buffer.strip(), lang)
+                        self.sentence_buffer = ""
+
+                    # Play all queued audio chunks (blocks until queue empty)
+                    chunk_count = 0
+                    queue_timeout = float(os.getenv("PARALLEL_TTS_QUEUE_TIMEOUT", "30"))
+                    while self._get_parallel_tts_queue().has_pending():
+                        if not self._get_parallel_tts_queue().play_next(timeout=queue_timeout):
+                            break  # Interrupted, timeout, or error
+                        chunk_count += 1
+
+                    result.tts_duration = time.time() - tts_start
+                    logger.info(f"Parallel TTS complete: {chunk_count} chunks in {result.tts_duration:.1f}s")
+
+                else:
+                    # === LEGACY MODE (fallback) ===
+                    logger.info(f"Speaking (legacy): '{result.response[:50]}...'")
+                    self.tts_service.speak(result.response)
+                    result.tts_duration = time.time() - tts_start
+                    logger.info("TTS playback complete")
+
                 self.feedback.play_success()
 
             # Update session activity
@@ -925,6 +982,48 @@ class WakeWordService:
             self.mqtt_client.publish("voice_assistant/stt_comparison", comparison_data)
         except Exception as e:
             logger.warning(f"Failed to publish STT comparison: {e}")
+
+    def _parallel_tts_enabled(self) -> bool:
+        """Check if parallel TTS feature is enabled.
+
+        When enabled, forces XTTS mode for all responses to ensure
+        consistent synthesis latency suitable for parallel processing.
+
+        Returns:
+            True if PARALLEL_TTS_ENABLED env var is true
+        """
+        enabled = os.getenv("PARALLEL_TTS_ENABLED", "false").lower() == "true"
+
+        if enabled:
+            # Force XTTS for all responses (parallel TTS requires consistent latency)
+            self.tts_service.enable_xtts = True
+            self.tts_service.short_threshold = 0  # No VITS routing
+
+        return enabled
+
+    def _get_parallel_tts_queue(self):
+        """Get or create ParallelTTSQueue instance (lazy init).
+
+        Returns:
+            ParallelTTSQueue instance
+        """
+        if self.parallel_tts_queue is None:
+            from tts_queue import ParallelTTSQueue
+            max_workers = int(os.getenv("PARALLEL_TTS_WORKERS", "2"))
+            self.parallel_tts_queue = ParallelTTSQueue(self.tts_service, max_workers=max_workers)
+            logger.info(f"Initialized ParallelTTSQueue (workers={max_workers})")
+        return self.parallel_tts_queue
+
+    def _detect_language(self, text: str) -> str:
+        """Detect language from text (delegate to TTS service).
+
+        Args:
+            text: Text to analyze
+
+        Returns:
+            Language code ('pl' or 'en')
+        """
+        return self.tts_service.detect_language(text)
 
     def _process_streaming_stt(self, session_id: str) -> tuple:
         """Process audio with streaming STT for real-time interim results.
