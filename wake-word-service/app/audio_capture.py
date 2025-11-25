@@ -7,7 +7,7 @@ import logging
 import os
 import numpy as np
 import pyaudio
-from typing import Optional
+from typing import Callable, Optional
 from collections import deque
 
 logger = logging.getLogger(__name__)
@@ -243,6 +243,100 @@ class AudioCapture:
 
         except Exception as e:
             logger.error(f"Error during recording: {e}")
+            return np.array([], dtype=np.int16)
+
+    def record_streaming(
+        self,
+        duration: float,
+        on_chunk: Callable[[np.ndarray], None],
+        stop_check: Optional[Callable[[], bool]] = None
+    ) -> np.ndarray:
+        """
+        Record audio with streaming callback for real-time STT.
+
+        Similar to record() but invokes on_chunk() for each audio chunk,
+        enabling real-time transcription while still recording.
+
+        Args:
+            duration: Maximum recording duration in seconds
+            on_chunk: Callback invoked with each audio chunk (for streaming STT)
+            stop_check: Optional callable that returns True to stop recording
+
+        Returns:
+            Numpy array with complete recorded audio (mono, int16)
+        """
+        logger.info(f"Recording with streaming (max {duration}s, VAD enabled)")
+
+        max_chunks = int(duration * self.sample_rate / self.chunk_size)
+        recorded_chunks = []
+
+        # VAD parameters (same as record())
+        silence_threshold = int(os.getenv("VAD_SILENCE_THRESHOLD", "1000"))
+        silence_chunks_to_stop = int(os.getenv("VAD_SILENCE_CHUNKS", "12"))
+        min_speech_chunks = int(os.getenv("VAD_MIN_SPEECH_CHUNKS", "8"))
+
+        logger.debug(
+            f"Streaming VAD params: threshold={silence_threshold}, "
+            f"silence_chunks={silence_chunks_to_stop}, min_speech={min_speech_chunks}"
+        )
+
+        consecutive_silence = 0
+        speech_detected = False
+        speech_chunks = 0
+
+        try:
+            for i in range(max_chunks):
+                # Check for external stop signal
+                if stop_check and stop_check():
+                    logger.info("Streaming recording interrupted by stop signal")
+                    break
+
+                chunk = self.get_chunk()
+                if chunk is None:
+                    continue
+
+                # Store chunk for final audio
+                recorded_chunks.append(chunk)
+
+                # Invoke streaming callback (for STT processing)
+                try:
+                    on_chunk(chunk)
+                except Exception as e:
+                    logger.error(f"on_chunk callback error: {e}")
+
+                # Calculate audio energy for VAD
+                energy = np.mean(np.abs(chunk))
+
+                if energy > silence_threshold:
+                    speech_detected = True
+                    speech_chunks += 1
+                    consecutive_silence = 0
+                else:
+                    consecutive_silence += 1
+
+                # Stop if we've had speech and now have enough silence
+                if speech_detected and speech_chunks >= min_speech_chunks:
+                    if consecutive_silence >= silence_chunks_to_stop:
+                        logger.info(
+                            f"Streaming VAD: Speech ended after {len(recorded_chunks)} chunks "
+                            f"({len(recorded_chunks) * self.chunk_size / self.sample_rate:.2f}s)"
+                        )
+                        break
+
+            # Concatenate all chunks
+            if recorded_chunks:
+                audio = np.concatenate(recorded_chunks)
+                logger.info(
+                    f"Streaming recording complete: {len(audio)} samples "
+                    f"({len(audio)/self.sample_rate:.2f}s)"
+                )
+                return audio
+            else:
+                logger.warning("No audio data recorded in streaming mode")
+                return np.array([], dtype=np.int16)
+
+        except Exception as e:
+            logger.error(f"Error during streaming recording: {e}")
             return np.array([], dtype=np.int16)
 
     def get_device_info(self) -> dict:

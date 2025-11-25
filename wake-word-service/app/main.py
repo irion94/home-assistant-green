@@ -13,6 +13,7 @@ import uuid
 import queue
 import threading
 import json
+import asyncio
 from typing import Optional
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from feedback import AudioFeedback
 from transcriber import Transcriber
 from whisper_transcriber import WhisperTranscriber
 from parallel_stt import ParallelSTT
+from streaming_transcriber import StreamingTranscriber
 from tts_service import TTSService
 from state_machine import VoiceStateMachine, VoiceState, SessionContext, InteractionResult
 
@@ -252,6 +254,7 @@ class WakeWordService:
         self.ai_client: Optional[AIGatewayClient] = None
         self.feedback: Optional[AudioFeedback] = None
         self.parallel_stt: Optional[ParallelSTT] = None
+        self.streaming_stt: Optional[StreamingTranscriber] = None
         self.tts_service: Optional[TTSService] = None
         self.tts_queue: Optional[TTSQueue] = None
         self.interrupt_listener: Optional[InterruptListener] = None
@@ -280,6 +283,11 @@ class WakeWordService:
         self.detection_threshold = float(os.getenv("DETECTION_THRESHOLD", "0.5"))
         self.recording_duration = int(os.getenv("RECORDING_DURATION", "7"))
         self.conversation_timeout = int(os.getenv("CONVERSATION_TIMEOUT", "30"))
+
+        # Streaming STT configuration
+        self.streaming_stt_enabled = os.getenv("STREAMING_STT_ENABLED", "true").lower() == "true"
+        self.streaming_stt_confidence_threshold = float(os.getenv("STREAMING_STT_CONFIDENCE_THRESHOLD", "0.7"))
+        self.vosk_model_path: Optional[str] = None
 
     def setup(self):
         """Initialize all components"""
@@ -318,13 +326,23 @@ class WakeWordService:
             logger.info(f"Audio feedback initialized (enabled: {enable_beep})")
 
             # Initialize parallel STT (Vosk + Whisper) for local speech-to-text
-            vosk_model_path = os.getenv("VOSK_MODEL_PATH")
+            self.vosk_model_path = os.getenv("VOSK_MODEL_PATH")
             whisper_model_size = os.getenv("WHISPER_MODEL_SIZE", "base")
             self.parallel_stt = ParallelSTT(
-                vosk_model_path=vosk_model_path,
+                vosk_model_path=self.vosk_model_path,
                 whisper_model_size=whisper_model_size
             )
             logger.info(f"Parallel STT initialized (Vosk + Whisper {whisper_model_size})")
+
+            # Initialize streaming STT (Vosk only) for real-time interim results
+            if self.streaming_stt_enabled and self.vosk_model_path:
+                self.streaming_stt = StreamingTranscriber(
+                    model_path=self.vosk_model_path,
+                    sample_rate=self.sample_rate
+                )
+                logger.info(f"Streaming STT initialized (Vosk, confidence threshold: {self.streaming_stt_confidence_threshold})")
+            else:
+                logger.info(f"Streaming STT disabled (enabled={self.streaming_stt_enabled})")
 
             # Initialize TTS service for local text-to-speech
             self.tts_service = TTSService()
@@ -476,6 +494,148 @@ class WakeWordService:
             except Exception as e:
                 logger.warning(f"Failed to publish MQTT message: {e}")
 
+    def publish_interim_transcript(self, session_id: str, text: str, sequence: int):
+        """Publish interim (partial) transcript for streaming STT.
+
+        Args:
+            session_id: Session identifier
+            text: Partial transcription text
+            sequence: Sequence number (increments with each partial)
+        """
+        if not self.mqtt_client or not session_id:
+            return
+
+        try:
+            topic = f"voice_assistant/room/{self.room_id}/session/{session_id}/transcript/interim"
+            payload = json.dumps({
+                "text": text,
+                "is_final": False,
+                "sequence": sequence,
+                "timestamp": time.time()
+            })
+            self.mqtt_client.publish(topic, payload)
+            logger.debug(f"Published interim transcript [{sequence}]: '{text[:30]}...'")
+        except Exception as e:
+            logger.warning(f"Failed to publish interim transcript: {e}")
+
+    def publish_final_transcript(self, session_id: str, text: str, confidence: float, engine: str = "vosk"):
+        """Publish final transcript from streaming STT.
+
+        Args:
+            session_id: Session identifier
+            text: Final transcription text
+            confidence: Confidence score (0.0-1.0)
+            engine: STT engine used (default: vosk)
+        """
+        if not self.mqtt_client or not session_id:
+            return
+
+        try:
+            topic = f"voice_assistant/room/{self.room_id}/session/{session_id}/transcript/final"
+            payload = json.dumps({
+                "text": text,
+                "is_final": True,
+                "engine": engine,
+                "confidence": confidence,
+                "timestamp": time.time()
+            })
+            self.mqtt_client.publish(topic, payload)
+            logger.info(f"Published final transcript: '{text[:50]}...' (confidence={confidence:.2f})")
+
+            # Note: Legacy transcript topic not needed - frontend uses transcript/final
+            # self.publish_message("transcript", text, session_id)
+        except Exception as e:
+            logger.warning(f"Failed to publish final transcript: {e}")
+
+    def publish_refined_transcript(self, session_id: str, text: str):
+        """Publish Whisper-refined transcript (when Vosk confidence was low).
+
+        Args:
+            session_id: Session identifier
+            text: Refined transcription text from Whisper
+        """
+        if not self.mqtt_client or not session_id:
+            return
+
+        try:
+            topic = f"voice_assistant/room/{self.room_id}/session/{session_id}/transcript/refined"
+            payload = json.dumps({
+                "text": text,
+                "is_final": True,
+                "engine": "whisper",
+                "is_refinement": True,
+                "timestamp": time.time()
+            })
+            self.mqtt_client.publish(topic, payload)
+            logger.info(f"Published refined transcript: '{text[:50]}...'")
+        except Exception as e:
+            logger.warning(f"Failed to publish refined transcript: {e}")
+
+    def _publish_streaming_start(self, session_id: str):
+        """Publish streaming response start event.
+
+        Args:
+            session_id: Session identifier
+        """
+        if not self.mqtt_client or not session_id:
+            return
+
+        try:
+            topic = f"voice_assistant/room/{self.room_id}/session/{session_id}/response/stream/start"
+            payload = json.dumps({"started_at": time.time()})
+            self.mqtt_client.publish(topic, payload)
+            logger.debug("Published streaming start")
+        except Exception as e:
+            logger.warning(f"Failed to publish streaming start: {e}")
+
+    def _publish_streaming_token(self, session_id: str, token: str, sequence: int):
+        """Publish single streaming response token.
+
+        Args:
+            session_id: Session identifier
+            token: Token content
+            sequence: Token sequence number
+        """
+        if not self.mqtt_client or not session_id:
+            return
+
+        try:
+            topic = f"voice_assistant/room/{self.room_id}/session/{session_id}/response/stream/chunk"
+            payload = json.dumps({
+                "sequence": sequence,
+                "content": token,
+                "timestamp": time.time()
+            })
+            self.mqtt_client.publish(topic, payload)
+            logger.debug(f"Published streaming token [{sequence}]: '{token[:20]}...'")
+        except Exception as e:
+            logger.warning(f"Failed to publish streaming token: {e}")
+
+    def _publish_streaming_complete(self, session_id: str, full_text: str, duration: float, token_count: int):
+        """Publish streaming response complete event.
+
+        Args:
+            session_id: Session identifier
+            full_text: Complete response text
+            duration: Processing duration in seconds
+            token_count: Total number of tokens streamed
+        """
+        if not self.mqtt_client or not session_id:
+            return
+
+        try:
+            topic = f"voice_assistant/room/{self.room_id}/session/{session_id}/response/stream/complete"
+            payload = json.dumps({
+                "text": full_text,
+                "duration": duration,
+                "total_tokens": token_count,
+                "timestamp": time.time()
+            })
+            self.mqtt_client.publish(topic, payload)
+            logger.info(f"Published streaming complete: {token_count} tokens in {duration:.2f}s")
+        except Exception as e:
+            logger.warning(f"Failed to publish streaming complete: {e}")
+
     def _on_mqtt_message(self, client, userdata, msg):
         """Handle incoming MQTT commands.
 
@@ -563,8 +723,8 @@ class WakeWordService:
         """Process a single voice interaction.
 
         Unified method that handles one complete interaction cycle:
-        1. Record audio (LISTENING state)
-        2. Transcribe speech (TRANSCRIBING state)
+        1. Record audio (LISTENING state) - with streaming STT if enabled
+        2. Transcribe speech (TRANSCRIBING state) - Whisper refinement if needed
         3. Get LLM response (PROCESSING state)
         4. Play TTS response (SPEAKING state)
 
@@ -577,15 +737,24 @@ class WakeWordService:
         result = InteractionResult()
 
         try:
-            # LISTENING - Record user speech
+            # LISTENING - Record user speech (with optional streaming STT)
             self.state_machine.transition(VoiceState.LISTENING)
             self.feedback.play_listening()
             logger.info("Listening for speech...")
 
-            audio_data = self.audio_capture.record(
-                duration=self.recording_duration,
-                stop_check=lambda: self.conversation_stop_requested
-            )
+            stt_start = time.time()
+
+            # Use streaming STT if enabled
+            if self.streaming_stt_enabled and self.streaming_stt:
+                audio_data, vosk_text, vosk_confidence = self._process_streaming_stt(session_id)
+            else:
+                # Fallback to batch mode
+                audio_data = self.audio_capture.record(
+                    duration=self.recording_duration,
+                    stop_check=lambda: self.conversation_stop_requested
+                )
+                vosk_text = None
+                vosk_confidence = 0.0
 
             # Check for stop during recording
             if self.conversation_stop_requested:
@@ -594,18 +763,33 @@ class WakeWordService:
 
             logger.info(f"Recorded {len(audio_data)} audio frames")
 
-            # TRANSCRIBING - Convert speech to text
+            # TRANSCRIBING - Convert speech to text (or refine streaming result)
             self.state_machine.transition(VoiceState.TRANSCRIBING)
             self.feedback.processing()
 
-            stt_start = time.time()
-            stt_result = self.parallel_stt.transcribe_parallel(audio_data, self.sample_rate)
-            result.stt_duration = time.time() - stt_start
-            result.transcript = stt_result.selected.text
-            result.stt_engine = stt_result.selected.engine
+            if self.streaming_stt_enabled and vosk_text:
+                # Streaming mode: use Vosk result, optionally refine with Whisper
+                result.transcript = vosk_text
+                result.stt_engine = "vosk"
 
-            # Publish STT comparison for debugging
-            self._publish_stt_comparison(stt_result, session_id)
+                # Check if Whisper refinement needed (low confidence)
+                if vosk_confidence < self.streaming_stt_confidence_threshold:
+                    logger.info(f"Low confidence ({vosk_confidence:.2f}), running Whisper refinement...")
+                    whisper_result = self.parallel_stt.whisper.transcribe(audio_data, self.sample_rate)
+                    if whisper_result and whisper_result.strip():
+                        result.transcript = whisper_result
+                        result.stt_engine = "whisper"
+                        self.publish_refined_transcript(session_id, whisper_result)
+                        logger.info(f"Whisper refined: '{whisper_result[:50]}...'")
+            else:
+                # Batch mode: use parallel STT
+                stt_result = self.parallel_stt.transcribe_parallel(audio_data, self.sample_rate)
+                result.transcript = stt_result.selected.text
+                result.stt_engine = stt_result.selected.engine
+                # Publish STT comparison for debugging
+                self._publish_stt_comparison(stt_result, session_id)
+
+            result.stt_duration = time.time() - stt_start
 
             if not result.transcript:
                 logger.info("No speech detected")
@@ -613,7 +797,10 @@ class WakeWordService:
                 return result
 
             logger.info(f"Transcribed: '{result.transcript}' (via {result.stt_engine})")
-            self.publish_message("transcript", result.transcript, session_id)
+
+            # Only publish via legacy method if not using streaming (streaming publishes via final topic)
+            if not self.streaming_stt_enabled:
+                self.publish_message("transcript", result.transcript, session_id)
 
             # Check for end command keywords
             result.is_end_command = self._is_end_command(result.transcript)
@@ -622,57 +809,58 @@ class WakeWordService:
                 result.should_continue = False
                 return result
 
-            # PROCESSING - Get LLM response
+            # PROCESSING - Get LLM response (streaming)
             self.state_machine.transition(VoiceState.PROCESSING)
+            self.feedback.processing()
 
+            # Publish streaming start
+            self._publish_streaming_start(session_id)
+
+            # Track streaming state
             llm_start = time.time()
-            response = self.ai_client.send_conversation_text(
-                text=result.transcript,
-                session_id=session_id
-            )
+            token_count = 0
+
+            # Define callback for streaming tokens
+            def on_token(token: str, sequence: int):
+                nonlocal token_count
+                token_count = sequence
+                self._publish_streaming_token(session_id, token, sequence)
+
+            # Stream response from AI Gateway
+            try:
+                full_response = asyncio.run(
+                    self.ai_client.send_conversation_stream(
+                        text=result.transcript,
+                        session_id=session_id,
+                        on_token=on_token
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error during streaming: {e}")
+                full_response = None
+
             result.llm_duration = time.time() - llm_start
 
-            if not response:
-                logger.warning("No response from AI Gateway")
+            # Publish streaming complete
+            if full_response:
+                self._publish_streaming_complete(session_id, full_response, result.llm_duration, token_count)
+                result.response = full_response
+            else:
+                logger.warning("No response from AI Gateway streaming")
                 result.error = "No response from AI Gateway"
                 self.feedback.play_error()
                 return result
 
-            if response.get("status") == "error":
-                result.error = response.get("message", "Unknown error")
-                logger.warning(f"AI Gateway error: {result.error}")
-                self.feedback.play_error()
-                return result
-
-            result.response = response.get("text", "")
-
-            # Check for conversation mode action from AI
-            action = response.get("action")
-            if action == "conversation_start":
-                logger.info("AI triggered conversation mode")
-                self.conversation_mode_enabled = True
-                # Publish mode change to MQTT
-                self.mqtt_client.publish(
-                    f"voice_assistant/room/{self.room_id}/config/conversation_mode",
-                    "true",
-                    retain=True
-                )
-                result.should_continue = True  # Continue in conversation mode
-            elif action == "conversation_end":
-                logger.info("AI ended conversation mode")
-                self.conversation_mode_enabled = False
-                self.mqtt_client.publish(
-                    f"voice_assistant/room/{self.room_id}/config/conversation_mode",
-                    "false",
-                    retain=True
-                )
-                result.should_continue = False
+            # Note: Streaming endpoint doesn't return conversation mode action metadata
+            # Conversation mode is now controlled via MQTT commands from the dashboard
 
             # SPEAKING - Play TTS response
             if result.response:
                 self.state_machine.transition(VoiceState.SPEAKING)
                 self.feedback.speaking()
-                self.publish_message("response", result.response, session_id)
+                # Note: Legacy response topic not needed - streaming already published complete text
+                # via stream/complete topic, which frontend uses to finalize the message
+                # self.publish_message("response", result.response, session_id)
 
                 tts_start = time.time()
                 logger.info(f"Speaking: '{result.response[:50]}...'")
@@ -737,6 +925,66 @@ class WakeWordService:
             self.mqtt_client.publish("voice_assistant/stt_comparison", comparison_data)
         except Exception as e:
             logger.warning(f"Failed to publish STT comparison: {e}")
+
+    def _process_streaming_stt(self, session_id: str) -> tuple:
+        """Process audio with streaming STT for real-time interim results.
+
+        Records audio while simultaneously streaming it to Vosk for real-time
+        partial transcriptions. Publishes interim results via MQTT for immediate
+        UI feedback (Debug Panel).
+
+        Args:
+            session_id: Session identifier for MQTT topics
+
+        Returns:
+            Tuple of (audio_data, final_text, confidence):
+            - audio_data: Complete recorded audio as numpy array
+            - final_text: Final Vosk transcription
+            - confidence: Vosk confidence score (0.0-1.0)
+        """
+        import numpy as np
+
+        # Reset streaming transcriber for new session
+        self.streaming_stt.reset()
+        logger.info("Starting streaming STT...")
+
+        # Track sequence for interim results
+        sequence_tracker = {"seq": 0}
+
+        def on_chunk(audio_chunk: np.ndarray) -> None:
+            """Process audio chunk through streaming STT and publish interim results."""
+            try:
+                partial_text, is_complete = self.streaming_stt.process_chunk(audio_chunk)
+
+                if partial_text and not is_complete:
+                    # New partial result - publish to MQTT for Debug Panel
+                    sequence_tracker["seq"] += 1
+                    self.publish_interim_transcript(
+                        session_id,
+                        partial_text,
+                        sequence_tracker["seq"]
+                    )
+            except Exception as e:
+                logger.error(f"Streaming STT chunk error: {e}")
+
+        # Record audio with streaming callback
+        audio_data = self.audio_capture.record_streaming(
+            duration=self.recording_duration,
+            on_chunk=on_chunk,
+            stop_check=lambda: self.conversation_stop_requested
+        )
+
+        # Finalize transcription and get confidence
+        final_text, confidence = self.streaming_stt.finalize()
+
+        # Publish final transcript via MQTT
+        if final_text:
+            self.publish_final_transcript(session_id, final_text, confidence, engine="vosk")
+            logger.info(f"Streaming STT complete: '{final_text[:50]}...' (confidence={confidence:.2f})")
+        else:
+            logger.info("Streaming STT: No speech detected")
+
+        return audio_data, final_text, confidence
 
     def run_session(self, session_id: str, conversation_mode: bool) -> None:
         """Run a voice assistant session.

@@ -7,9 +7,11 @@ import os
 import logging
 import io
 import wave
+import json
+import asyncio
 import numpy as np
 import httpx
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +215,83 @@ class AIGatewayClient:
             return None
         except Exception as e:
             logger.error(f"Error in conversation: {e}")
+            return None
+
+    async def send_conversation_stream(
+        self,
+        text: str,
+        session_id: str,
+        on_token: Callable[[str, int], None]
+    ) -> Optional[str]:
+        """
+        Send text to conversation endpoint and stream response token by token
+
+        Args:
+            text: User message text
+            session_id: Conversation session ID
+            on_token: Callback function (token, sequence) for each streaming token
+
+        Returns:
+            Complete response text or None on error
+        """
+        try:
+            logger.info(f"Streaming conversation text (session={session_id}): '{text[:50]}...'")
+
+            url = f"{self.base_url}/conversation/stream"
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "messages": [{"role": "user", "content": text}],
+                "session_id": session_id
+            }
+
+            full_response = ""
+            sequence = 0
+
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream("POST", url, json=payload, headers=headers) as response:
+                    response.raise_for_status()
+
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+
+                        data = line[6:]  # Remove "data: " prefix
+
+                        # Check for completion signal
+                        if data == "[DONE]":
+                            logger.info("Streaming complete")
+                            break
+
+                        try:
+                            parsed = json.loads(data)
+
+                            # Check for errors in stream
+                            if "error" in parsed:
+                                logger.error(f"Stream error: {parsed['error']}")
+                                return None
+
+                            # Extract token content
+                            token = parsed.get("content", "")
+                            if token:
+                                sequence += 1
+                                full_response += token
+
+                                # Call token callback
+                                on_token(token, sequence)
+
+                        except json.JSONDecodeError as e:
+                            # Ignore JSON parse errors (incomplete chunks)
+                            logger.debug(f"JSON parse error in stream: {e}")
+                            continue
+
+            logger.info(f"Streaming response complete: {len(full_response)} chars, {sequence} tokens")
+            return full_response
+
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error in streaming conversation: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error in streaming conversation: {e}")
             return None
 
     def end_conversation(self, session_id: str = "default") -> Optional[Dict[str, Any]]:
