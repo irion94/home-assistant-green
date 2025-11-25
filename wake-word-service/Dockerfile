@@ -29,6 +29,13 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Fix Coqui TTS XTTS v2 compatibility issues:
+# 1. Pin transformers to version compatible with XTTS (requires <4.36)
+# 2. Patch TTS library for PyTorch 2.6+ (which defaults to weights_only=True)
+RUN pip install --no-cache-dir 'transformers==4.35.2' 'tokenizers<0.19' && \
+    sed -i 's/torch\.load(f, map_location=map_location, \*\*kwargs)/torch.load(f, map_location=map_location, weights_only=False, **kwargs)/g' \
+    /usr/local/lib/python3.11/site-packages/TTS/utils/io.py
+
 # Note: TTS models (VITS, XTTS v2) are downloaded at first use and cached
 # on the SSD volume via TTS_HOME=/app/tts-cache (see docker-compose.yml)
 # This avoids ~2GB of model downloads during every rebuild
