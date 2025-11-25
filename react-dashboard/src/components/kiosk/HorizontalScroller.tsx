@@ -39,7 +39,7 @@ export default function HorizontalScroller({
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current)
     }
-    timeoutRef.current = setTimeout(resetScroll, resetTimeout)
+    timeoutRef.current = window.setTimeout(resetScroll, resetTimeout)
   }, [resetScroll, resetTimeout])
 
   // Handle user interaction

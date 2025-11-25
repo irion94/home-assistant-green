@@ -24,7 +24,10 @@ from audio_capture import AudioCapture
 from ai_gateway_client import AIGatewayClient
 from feedback import AudioFeedback
 from transcriber import Transcriber
+from whisper_transcriber import WhisperTranscriber
+from parallel_stt import ParallelSTT
 from tts_service import TTSService
+from state_machine import VoiceStateMachine, VoiceState, SessionContext, InteractionResult
 
 # Configure logging
 logging.basicConfig(
@@ -248,7 +251,7 @@ class WakeWordService:
         self.detector: Optional[WakeWordDetector] = None
         self.ai_client: Optional[AIGatewayClient] = None
         self.feedback: Optional[AudioFeedback] = None
-        self.transcriber: Optional[Transcriber] = None
+        self.parallel_stt: Optional[ParallelSTT] = None
         self.tts_service: Optional[TTSService] = None
         self.tts_queue: Optional[TTSQueue] = None
         self.interrupt_listener: Optional[InterruptListener] = None
@@ -257,6 +260,16 @@ class WakeWordService:
         # MQTT command flags
         self.conversation_start_requested = False
         self.conversation_stop_requested = False
+
+        # Conversation mode configuration
+        # Default to single-command mode (false = one command then close)
+        self.conversation_mode_enabled = os.getenv("CONVERSATION_MODE_DEFAULT", "false").lower() == "true"
+
+        # Room identification for multi-device support
+        self.room_id = os.getenv("ROOM_ID", "default")
+
+        # State machine (initialized in setup after room_id is set)
+        self.state_machine: Optional[VoiceStateMachine] = None
 
         # Configuration from environment
         self.audio_device = os.getenv("AUDIO_DEVICE", "hw:2,0")
@@ -304,10 +317,14 @@ class WakeWordService:
             self.feedback = AudioFeedback(enabled=enable_beep)
             logger.info(f"Audio feedback initialized (enabled: {enable_beep})")
 
-            # Initialize transcriber for local speech-to-text
+            # Initialize parallel STT (Vosk + Whisper) for local speech-to-text
             vosk_model_path = os.getenv("VOSK_MODEL_PATH")
-            self.transcriber = Transcriber(model_path=vosk_model_path)
-            logger.info("Transcriber initialized for local STT")
+            whisper_model_size = os.getenv("WHISPER_MODEL_SIZE", "base")
+            self.parallel_stt = ParallelSTT(
+                vosk_model_path=vosk_model_path,
+                whisper_model_size=whisper_model_size
+            )
+            logger.info(f"Parallel STT initialized (Vosk + Whisper {whisper_model_size})")
 
             # Initialize TTS service for local text-to-speech
             self.tts_service = TTSService()
@@ -330,49 +347,567 @@ class WakeWordService:
             mqtt_host = os.getenv("MQTT_HOST", "host.docker.internal")
             mqtt_port = int(os.getenv("MQTT_PORT", "1883"))
             try:
-                self.mqtt_client = mqtt.Client(client_id="wake-word-service")
+                self.mqtt_client = mqtt.Client(client_id=f"wake-word-{self.room_id}")
                 self.mqtt_client.on_message = self._on_mqtt_message
                 self.mqtt_client.connect(mqtt_host, mqtt_port, 60)
+                # Subscribe to room-scoped topics
+                self.mqtt_client.subscribe(f"voice_assistant/room/{self.room_id}/command/#")
+                self.mqtt_client.subscribe(f"voice_assistant/room/{self.room_id}/config/conversation_mode")
+                # Also subscribe to legacy topics for backward compatibility during migration
                 self.mqtt_client.subscribe("voice_assistant/command")
+                self.mqtt_client.subscribe("voice_assistant/config/conversation_mode")
                 self.mqtt_client.loop_start()
                 logger.info(f"MQTT client connected to {mqtt_host}:{mqtt_port}")
-                logger.info("Subscribed to voice_assistant/command")
-                self.publish_status("idle")
+                logger.info(f"Room ID: {self.room_id}")
+                logger.info(f"Subscribed to room-scoped topics: voice_assistant/room/{self.room_id}/...")
+                logger.info(f"Conversation mode default: {self.conversation_mode_enabled}")
             except Exception as mqtt_error:
                 logger.warning(f"MQTT connection failed: {mqtt_error} - status updates disabled")
                 self.mqtt_client = None
+
+            # Initialize state machine (after MQTT for status callbacks)
+            self.state_machine = VoiceStateMachine(
+                room_id=self.room_id,
+                on_state_change=self._on_state_change
+            )
+            logger.info(f"State machine initialized (room_id={self.room_id})")
+
+            # Publish initial idle status
+            self.publish_status("idle")
 
         except Exception as e:
             logger.error(f"Failed to initialize service: {e}")
             raise
 
+    def _on_state_change(
+        self,
+        old_state: VoiceState,
+        new_state: VoiceState,
+        session: Optional[SessionContext]
+    ) -> None:
+        """Callback for state machine transitions - publishes MQTT status."""
+        status = self.state_machine.get_status_string() if self.state_machine else "idle"
+        session_id = session.session_id if session else None
+        self.publish_session_state(status, session_id)
+
     def publish_status(self, status: str, text: str = ""):
-        """Publish status update via MQTT"""
+        """Publish status update via MQTT (not retained to avoid stale status).
+
+        Publishes to both legacy and room-scoped topics for compatibility.
+        """
         if self.mqtt_client:
             try:
-                self.mqtt_client.publish("voice_assistant/status", status, retain=True)
+                # Legacy topic (for backward compatibility during migration)
+                self.mqtt_client.publish("voice_assistant/status", status, retain=False)
                 if text:
-                    self.mqtt_client.publish("voice_assistant/text", text, retain=True)
+                    self.mqtt_client.publish("voice_assistant/text", text, retain=False)
+
+                # Room-scoped topic (new format)
+                session_id = self.state_machine.session.session_id if (
+                    self.state_machine and self.state_machine.session
+                ) else None
+                self.publish_session_state(status, session_id, text)
             except Exception as e:
                 logger.warning(f"Failed to publish MQTT status: {e}")
 
+    def publish_session_state(self, status: str, session_id: Optional[str] = None, text: str = ""):
+        """Publish session state to room-scoped MQTT topics.
+
+        New topic structure:
+        - voice_assistant/room/{room_id}/session/active -> session_id or "none"
+        - voice_assistant/room/{room_id}/session/{session_id}/state -> status string
+        """
+        if not self.mqtt_client:
+            return
+
+        try:
+            base_topic = f"voice_assistant/room/{self.room_id}"
+
+            # Publish active session ID
+            active_session = session_id if session_id else "none"
+            self.mqtt_client.publish(f"{base_topic}/session/active", active_session, retain=True)
+
+            # Publish session state if we have a session
+            if session_id:
+                state_data = json.dumps({
+                    "status": status,
+                    "text": text,
+                    "timestamp": time.time()
+                })
+                self.mqtt_client.publish(
+                    f"{base_topic}/session/{session_id}/state",
+                    state_data,
+                    retain=False
+                )
+        except Exception as e:
+            logger.warning(f"Failed to publish session state: {e}")
+
+    def publish_message(self, msg_type: str, text: str, session_id: str = ""):
+        """Publish conversation message for kiosk display.
+
+        Publishes to both legacy and room-scoped topics.
+
+        Args:
+            msg_type: 'transcript' or 'response'
+            text: Message text
+            session_id: Session identifier
+        """
+        if self.mqtt_client:
+            try:
+                message_data = json.dumps({
+                    "type": msg_type,
+                    "text": text,
+                    "session_id": session_id,
+                    "room_id": self.room_id,
+                    "timestamp": time.time()
+                })
+
+                # Legacy topic (backward compatibility)
+                self.mqtt_client.publish(f"voice_assistant/{msg_type}", message_data)
+
+                # Room-scoped topic (new format)
+                if session_id:
+                    self.mqtt_client.publish(
+                        f"voice_assistant/room/{self.room_id}/session/{session_id}/{msg_type}",
+                        message_data
+                    )
+
+                logger.info(f"Published MQTT {msg_type}: '{text[:50]}...' to session {session_id}")
+            except Exception as e:
+                logger.warning(f"Failed to publish MQTT message: {e}")
+
     def _on_mqtt_message(self, client, userdata, msg):
-        """Handle incoming MQTT commands"""
+        """Handle incoming MQTT commands.
+
+        Handles both legacy and room-scoped topics:
+        - Legacy: voice_assistant/command, voice_assistant/config/conversation_mode
+        - Room-scoped: voice_assistant/room/{room_id}/command/*, voice_assistant/room/{room_id}/config/*
+        """
         try:
             topic = msg.topic
             payload = msg.payload.decode('utf-8')
             logger.info(f"MQTT message received: {topic} = {payload}")
 
-            if topic == "voice_assistant/command":
+            # Room-scoped command topics
+            room_prefix = f"voice_assistant/room/{self.room_id}"
+            if topic.startswith(f"{room_prefix}/command/"):
+                command = topic.split("/")[-1]  # Get last part: start, stop
+                self._handle_command(command, payload)
+            elif topic == f"{room_prefix}/config/conversation_mode":
+                self._handle_conversation_mode_change(payload)
+
+            # Legacy topics (backward compatibility)
+            elif topic == "voice_assistant/command":
                 if payload == "start_conversation":
-                    logger.info("MQTT command: start_conversation")
-                    self.conversation_start_requested = True
-                    self.conversation_stop_requested = False  # Clear any pending stop
+                    self._handle_command("start", "")
                 elif payload == "stop_conversation":
-                    logger.info("MQTT command: stop_conversation")
-                    self.conversation_stop_requested = True
+                    self._handle_command("stop", "")
+            elif topic == "voice_assistant/config/conversation_mode":
+                self._handle_conversation_mode_change(payload)
+
         except Exception as e:
             logger.error(f"Error processing MQTT message: {e}")
+
+    def _handle_command(self, command: str, payload: str) -> None:
+        """Handle voice assistant commands.
+
+        Args:
+            command: 'start' or 'stop'
+            payload: Optional JSON payload with mode, source info
+        """
+        if command == "start":
+            logger.info("MQTT command: start session")
+            self.conversation_start_requested = True
+            self.conversation_stop_requested = False
+            # Parse payload for mode if provided
+            if payload:
+                try:
+                    data = json.loads(payload)
+                    if "mode" in data:
+                        self.conversation_mode_enabled = data["mode"] == "multi"
+                        logger.info(f"Session mode set to: {'multi-turn' if self.conversation_mode_enabled else 'single'}")
+                except json.JSONDecodeError:
+                    pass
+        elif command == "stop":
+            logger.info("MQTT command: stop session")
+            self.conversation_stop_requested = True
+
+    def _handle_conversation_mode_change(self, payload: str) -> None:
+        """Handle conversation mode toggle.
+
+        Args:
+            payload: 'true'/'false' or '1'/'0' or 'on'/'off'
+        """
+        enabled = payload.lower() in ["true", "1", "on"]
+        old_mode = self.conversation_mode_enabled
+        self.conversation_mode_enabled = enabled
+        if old_mode != enabled:
+            logger.info(f"Conversation mode {'enabled' if enabled else 'disabled'} via MQTT")
+            # Publish back to confirm (for bidirectional sync)
+            if self.mqtt_client:
+                self.mqtt_client.publish(
+                    f"voice_assistant/room/{self.room_id}/config/conversation_mode",
+                    "true" if enabled else "false",
+                    retain=True
+                )
+
+    def process_interaction(self, session_id: str) -> InteractionResult:
+        """Process a single voice interaction.
+
+        Unified method that handles one complete interaction cycle:
+        1. Record audio (LISTENING state)
+        2. Transcribe speech (TRANSCRIBING state)
+        3. Get LLM response (PROCESSING state)
+        4. Play TTS response (SPEAKING state)
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            InteractionResult with transcript, response, and flags
+        """
+        result = InteractionResult()
+
+        try:
+            # LISTENING - Record user speech
+            self.state_machine.transition(VoiceState.LISTENING)
+            self.feedback.play_listening()
+            logger.info("Listening for speech...")
+
+            audio_data = self.audio_capture.record(
+                duration=self.recording_duration,
+                stop_check=lambda: self.conversation_stop_requested
+            )
+
+            # Check for stop during recording
+            if self.conversation_stop_requested:
+                result.should_continue = False
+                return result
+
+            logger.info(f"Recorded {len(audio_data)} audio frames")
+
+            # TRANSCRIBING - Convert speech to text
+            self.state_machine.transition(VoiceState.TRANSCRIBING)
+            self.feedback.processing()
+
+            stt_start = time.time()
+            stt_result = self.parallel_stt.transcribe_parallel(audio_data, self.sample_rate)
+            result.stt_duration = time.time() - stt_start
+            result.transcript = stt_result.selected.text
+            result.stt_engine = stt_result.selected.engine
+
+            # Publish STT comparison for debugging
+            self._publish_stt_comparison(stt_result, session_id)
+
+            if not result.transcript:
+                logger.info("No speech detected")
+                result.should_continue = True  # Continue listening in multi-turn
+                return result
+
+            logger.info(f"Transcribed: '{result.transcript}' (via {result.stt_engine})")
+            self.publish_message("transcript", result.transcript, session_id)
+
+            # Check for end command keywords
+            result.is_end_command = self._is_end_command(result.transcript)
+            if result.is_end_command:
+                logger.info(f"End command detected: '{result.transcript}'")
+                result.should_continue = False
+                return result
+
+            # PROCESSING - Get LLM response
+            self.state_machine.transition(VoiceState.PROCESSING)
+
+            llm_start = time.time()
+            response = self.ai_client.send_conversation_text(
+                text=result.transcript,
+                session_id=session_id
+            )
+            result.llm_duration = time.time() - llm_start
+
+            if not response:
+                logger.warning("No response from AI Gateway")
+                result.error = "No response from AI Gateway"
+                self.feedback.play_error()
+                return result
+
+            if response.get("status") == "error":
+                result.error = response.get("message", "Unknown error")
+                logger.warning(f"AI Gateway error: {result.error}")
+                self.feedback.play_error()
+                return result
+
+            result.response = response.get("text", "")
+
+            # SPEAKING - Play TTS response
+            if result.response:
+                self.state_machine.transition(VoiceState.SPEAKING)
+                self.feedback.speaking()
+                self.publish_message("response", result.response, session_id)
+
+                tts_start = time.time()
+                logger.info(f"Speaking: '{result.response[:50]}...'")
+                self.tts_service.speak(result.response)
+                result.tts_duration = time.time() - tts_start
+
+                logger.info("TTS playback complete")
+                self.feedback.play_success()
+
+            # Update session activity
+            if self.state_machine.session:
+                self.state_machine.session.increment_turn()
+
+        except Exception as e:
+            logger.error(f"Error in process_interaction: {e}")
+            result.error = str(e)
+            self.feedback.play_error()
+
+        return result
+
+    def _is_end_command(self, text: str) -> bool:
+        """Check if text contains conversation end keywords.
+
+        Args:
+            text: User transcript
+
+        Returns:
+            True if end command detected
+        """
+        text_lower = text.lower()
+        end_keywords = [
+            "stop", "koniec", "wystarczy", "to wszystko", "bye", "goodbye",
+            "end conversation", "zakończ", "dziękuję", "dzięki", "pa",
+            "do widzenia", "skończ", "koniec rozmowy", "end"
+        ]
+        return any(keyword in text_lower for keyword in end_keywords)
+
+    def _publish_stt_comparison(self, stt_result, session_id: str) -> None:
+        """Publish STT comparison results for debugging.
+
+        Args:
+            stt_result: ParallelSTTResult
+            session_id: Session identifier
+        """
+        if not self.mqtt_client:
+            return
+
+        try:
+            comparison_data = json.dumps({
+                "vosk": {
+                    "text": stt_result.vosk.text,
+                    "duration": round(stt_result.vosk.duration, 2)
+                },
+                "whisper": {
+                    "text": stt_result.whisper.text,
+                    "duration": round(stt_result.whisper.duration, 2)
+                },
+                "selected": stt_result.selected.engine,
+                "reason": stt_result.selection_reason,
+                "session_id": session_id
+            })
+            self.mqtt_client.publish("voice_assistant/stt_comparison", comparison_data)
+        except Exception as e:
+            logger.warning(f"Failed to publish STT comparison: {e}")
+
+    def run_session(self, session_id: str, conversation_mode: bool) -> None:
+        """Run a voice assistant session.
+
+        Unified method that handles both single-command and multi-turn sessions.
+        Supports smart clarification: if AI asks a question in single-command mode,
+        allows one follow-up turn for the user to clarify.
+
+        NOTE: The session respects LIVE toggle changes - if user toggles conversation
+        mode during the session, it affects the next turn immediately.
+
+        Args:
+            session_id: Unique session identifier
+            conversation_mode: Initial mode (True for multi-turn, False for single)
+        """
+        mode_str = "multi-turn" if conversation_mode else "single-command"
+        logger.info(f"Starting {mode_str} session (id={session_id})")
+
+        # Start session in state machine
+        self.state_machine.start_session(session_id, conversation_mode)
+        self.state_machine.transition(VoiceState.WAKE_DETECTED)
+        self.feedback.play_wake_detected()
+
+        # Track if we've already done a clarification turn (prevent infinite loop)
+        clarification_used = False
+
+        try:
+            timeout = self.conversation_timeout
+            last_activity = time.time()
+
+            while self.running:
+                # Use LIVE conversation_mode_enabled flag (allows mid-session toggle)
+                is_conversation_mode = self.conversation_mode_enabled
+
+                # Check timeout for multi-turn
+                if is_conversation_mode and (time.time() - last_activity > timeout):
+                    logger.info("Session timeout reached")
+                    break
+
+                # Check for external stop signal
+                if self.conversation_stop_requested:
+                    logger.info("Stop signal received")
+                    self.conversation_stop_requested = False
+                    break
+
+                # Process one interaction
+                result = self.process_interaction(session_id)
+
+                if result.error:
+                    logger.warning(f"Interaction error: {result.error}")
+                    if not is_conversation_mode:
+                        break
+
+                if result.is_end_command:
+                    logger.info("End command detected, ending session")
+                    self.feedback.play_success()
+                    break
+
+                if not result.should_continue:
+                    break
+
+                # Single command mode - exit after one successful interaction
+                # UNLESS: AI asked a clarifying question (response ends with ?)
+                if not is_conversation_mode and result.transcript:
+                    # Smart clarification: if response is a question, allow one follow-up
+                    response_is_question = result.response and result.response.strip().endswith('?')
+                    if response_is_question and not clarification_used:
+                        logger.info("Response is a question - allowing clarification turn")
+                        clarification_used = True
+                        # Transition to WAITING state for clarity
+                        self.state_machine.transition(VoiceState.WAITING)
+                        last_activity = time.time()
+                        continue  # Allow one more turn
+                    else:
+                        break  # Normal single-command exit
+
+                # Multi-turn: transition to WAITING and update activity
+                if is_conversation_mode:
+                    self.state_machine.transition(VoiceState.WAITING)
+                    last_activity = time.time()
+
+        except Exception as e:
+            logger.error(f"Error in session: {e}")
+        finally:
+            # Clean up session
+            self.conversation_start_requested = False
+            self.conversation_stop_requested = False
+            self.state_machine.end_session()
+            self.state_machine.transition(VoiceState.IDLE, force=True)
+            self.publish_status("idle", "Session ended")
+            self.feedback.idle()
+
+            # Publish session ended for bidirectional sync
+            if self.mqtt_client:
+                self.mqtt_client.publish(
+                    f"voice_assistant/room/{self.room_id}/session/{session_id}/ended",
+                    json.dumps({"timestamp": time.time()})
+                )
+                # Legacy topic
+                self.mqtt_client.publish("voice_assistant/conversation_ended", "true")
+
+            logger.info(f"Session ended: {session_id}")
+
+    def process_single_command(self, session_id: str):
+        """Process a single command without entering conversation loop.
+
+        DEPRECATED: Use run_session(session_id, conversation_mode=False) instead.
+
+        Args:
+            session_id: Unique session identifier
+        """
+        logger.info(f"Processing single command (session={session_id})")
+
+        try:
+            # Show listening LED
+            self.feedback.play_listening()
+            self.publish_status("listening")
+
+            # Record user speech
+            logger.info("Listening for single command...")
+            audio_data = self.audio_capture.record(duration=self.recording_duration)
+            logger.info(f"Recorded {len(audio_data)} audio frames")
+
+            # Show processing LED
+            self.feedback.processing()
+            self.publish_status("processing")
+
+            # Transcribe locally using parallel STT
+            stt_result = self.parallel_stt.transcribe_parallel(audio_data, self.sample_rate)
+            text = stt_result.selected.text
+
+            if not text:
+                logger.info("No speech detected")
+                self.publish_status("idle", "No speech detected")
+                self.feedback.idle()
+                return
+
+            logger.info(f"Transcribed: '{text}' (via {stt_result.selected.engine})")
+            self.publish_status("transcribed", text)
+            self.publish_message("transcript", text, session_id)
+
+            # Publish comparison results for kiosk display
+            if self.mqtt_client:
+                comparison_data = json.dumps({
+                    "vosk": {
+                        "text": stt_result.vosk.text,
+                        "duration": round(stt_result.vosk.duration, 2)
+                    },
+                    "whisper": {
+                        "text": stt_result.whisper.text,
+                        "duration": round(stt_result.whisper.duration, 2)
+                    },
+                    "selected": stt_result.selected.engine,
+                    "reason": stt_result.selection_reason
+                })
+                self.mqtt_client.publish("voice_assistant/stt_comparison", comparison_data)
+
+            # Send text to conversation endpoint
+            response = self.ai_client.send_conversation_text(
+                text=text,
+                session_id=session_id
+            )
+
+            if not response:
+                logger.warning("No response from conversation endpoint")
+                self.feedback.play_error()
+                self.publish_status("idle", "Error")
+                return
+
+            status = response.get("status")
+            message = response.get("message", "")
+
+            if status == "error":
+                logger.warning(f"Conversation error: {message}")
+                self.feedback.play_error()
+                self.publish_status("idle", "Error")
+                return
+
+            # Success - play response locally via TTS
+            logger.info(f"Playing response via local TTS")
+            self.feedback.speaking()
+
+            # Get response text and play locally
+            response_text = response.get("text", "")
+            if response_text:
+                self.publish_status("speaking", response_text)
+                self.publish_message("response", response_text, session_id)
+                logger.info(f"Speaking: '{response_text[:50]}...'")
+                self.tts_service.speak(response_text)
+                logger.info("TTS playback complete")
+                self.feedback.play_success()
+
+        except Exception as e:
+            logger.error(f"Error in single command processing: {e}")
+            self.feedback.play_error()
+        finally:
+            # End conversation session
+            self.ai_client.end_conversation(session_id)
+            logger.info(f"Single command completed (session={session_id})")
+            self.publish_status("idle", "Command completed")
+            self.feedback.idle()
 
     def run_conversation_loop(self, session_id: str):
         """Run continuous conversation loop until exit or timeout.
@@ -423,14 +958,33 @@ class WakeWordService:
                 self.feedback.processing()
                 self.publish_status("processing")
 
-                # Transcribe locally
-                text = self.transcriber.transcribe(audio_data, self.sample_rate)
+                # Transcribe locally using parallel STT
+                stt_result = self.parallel_stt.transcribe_parallel(audio_data, self.sample_rate)
+                text = stt_result.selected.text
+
                 if not text:
                     logger.info("No speech detected, continuing conversation...")
                     continue
 
-                logger.info(f"Transcribed: '{text}'")
+                logger.info(f"Transcribed: '{text}' (via {stt_result.selected.engine})")
                 self.publish_status("transcribed", text)
+                self.publish_message("transcript", text, session_id)
+
+                # Publish comparison results for kiosk display
+                if self.mqtt_client:
+                    comparison_data = json.dumps({
+                        "vosk": {
+                            "text": stt_result.vosk.text,
+                            "duration": round(stt_result.vosk.duration, 2)
+                        },
+                        "whisper": {
+                            "text": stt_result.whisper.text,
+                            "duration": round(stt_result.whisper.duration, 2)
+                        },
+                        "selected": stt_result.selected.engine,
+                        "reason": stt_result.selection_reason
+                    })
+                    self.mqtt_client.publish("voice_assistant/stt_comparison", comparison_data)
 
                 # Check for conversation end keywords in user's speech BEFORE sending
                 text_lower = text.lower()
@@ -453,9 +1007,6 @@ class WakeWordService:
                     self.feedback.play_error()
                     continue
 
-                # Update activity timestamp
-                last_activity = time.time()
-
                 status = response.get("status")
                 message = response.get("message", "")
 
@@ -472,14 +1023,23 @@ class WakeWordService:
                 response_text = response.get("text", "")
                 if response_text:
                     self.publish_status("speaking", response_text)
+                    self.publish_message("response", response_text, session_id)
                     logger.info(f"Speaking: '{response_text[:50]}...'")
                     self.tts_service.speak(response_text)
                     logger.info("TTS playback complete")
                     self.feedback.play_success()
 
+                # Update activity timestamp AFTER TTS completes
+                # This ensures timeout measures "idle time" not "processing time"
+                last_activity = time.time()
+
         except Exception as e:
             logger.error(f"Error in conversation loop: {e}")
         finally:
+            # Clear flags to prevent auto-restart
+            self.conversation_start_requested = False
+            self.conversation_stop_requested = False
+
             # End conversation session
             self.ai_client.end_conversation(session_id)
             logger.info(f"Conversation ended (session={session_id})")
@@ -495,158 +1055,23 @@ class WakeWordService:
                     logger.warning(f"Failed to publish conversation_ended: {e}")
 
     def process_wake_word_detection(self):
-        """Handle wake-word detection event with streaming TTS"""
+        """Handle wake-word detection using unified session flow.
+
+        Uses run_session() with the current conversation_mode_enabled setting.
+        This ensures the toggle in the dashboard is respected.
+        """
         logger.info("Wake word detected!")
 
-        # Play wake-word detected beep and show LED
-        self.feedback.play_wake_detected()
+        # Generate session ID and use current conversation mode setting
+        session_id = str(uuid.uuid4())[:8]
+        mode_str = "conversation" if self.conversation_mode_enabled else "single"
+        logger.info(f"Starting {mode_str} mode session (id={session_id})")
 
-        # Record audio for command
-        logger.info(f"Recording command for {self.recording_duration} seconds...")
-        try:
-            # Show listening LED
-            self.feedback.play_listening()
+        # Run unified session (handles feedback, state, MQTT, TTS)
+        self.run_session(session_id, self.conversation_mode_enabled)
 
-            audio_data = self.audio_capture.record(duration=self.recording_duration)
-            logger.info(f"Recorded {len(audio_data)} audio frames")
-
-            # Show processing LED
-            self.feedback.processing()
-
-            # Save audio to temp file for streaming upload
-            import tempfile
-            import wave
-            import numpy as np
-
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
-                temp_path = temp_file.name
-                # Convert audio frames to WAV
-                audio_array = np.array(audio_data, dtype=np.int16)
-                with wave.open(temp_path, 'wb') as wav_file:
-                    wav_file.setnchannels(1)
-                    wav_file.setsampwidth(2)
-                    wav_file.setframerate(self.sample_rate)
-                    wav_file.writeframes(audio_array.tobytes())
-
-            logger.info(f"Saved audio to temp file: {temp_path}")
-
-            # Send to streaming endpoint
-            ai_gateway_url = os.getenv("AI_GATEWAY_URL", "http://host.docker.internal:8080")
-            stream_url = f"{ai_gateway_url}/voice/stream"
-            logger.info(f"Streaming request to {stream_url}")
-
-            conversation_start = False
-            sentence_count = 0
-            transcription = None
-
-            try:
-                with open(temp_path, 'rb') as audio_file:
-                    files = {'audio': ('recording.wav', audio_file, 'audio/wav')}
-
-                    with httpx.Client(timeout=60.0) as client:
-                        with client.stream('POST', stream_url, files=files) as response:
-                            response.raise_for_status()
-
-                            for line in response.iter_lines():
-                                if not line:
-                                    continue
-
-                                if line.startswith('data: '):
-                                    data_str = line[6:]  # Remove 'data: ' prefix
-
-                                    if data_str == '[DONE]':
-                                        logger.info(f"Streaming complete: {sentence_count} sentences")
-                                        break
-
-                                    try:
-                                        data = json.loads(data_str)
-
-                                        # Handle transcription
-                                        if 'transcription' in data:
-                                            transcription = data['transcription']
-                                            logger.info(f"Transcribed: '{transcription}'")
-
-                                        # Handle errors
-                                        if 'error' in data:
-                                            logger.warning(f"Stream error: {data['error']}")
-                                            self.tts_queue.add(data['error'])
-                                            break
-
-                                        # Handle sentences
-                                        if 'sentence' in data:
-                                            sentence = data['sentence']
-                                            sentence_count += 1
-
-                                            # Check for conversation mode
-                                            if data.get('action') == 'conversation_start':
-                                                conversation_start = True
-
-                                            # Queue sentence for immediate TTS playback
-                                            logger.info(f"Queueing sentence {sentence_count}: {sentence[:50]}...")
-                                            self.tts_queue.add(sentence)
-
-                                            # Show speaking LED on first sentence
-                                            if sentence_count == 1:
-                                                self.feedback.speaking()
-
-                                    except json.JSONDecodeError as e:
-                                        logger.warning(f"JSON decode error: {e}, data: {data_str}")
-                                        continue
-
-            except httpx.HTTPError as e:
-                logger.error(f"HTTP error during streaming: {e}")
-                self.feedback.play_error()
-                self.tts_service.speak("Błąd połączenia z serwerem")
-            finally:
-                # Clean up temp file
-                try:
-                    os.unlink(temp_path)
-                except Exception:
-                    pass
-
-            # Start interrupt listener while TTS plays
-            if sentence_count > 0:
-                self.interrupt_listener.start()
-
-            # Wait for TTS with interrupt checking
-            logger.info("Waiting for TTS queue to complete (interrupt enabled)...")
-            while not self.tts_queue.queue.empty() or self.tts_queue.playing:
-                # Check for interrupt
-                if self.interrupt_listener.was_interrupted():
-                    logger.info("User interrupted TTS playback")
-                    self.tts_queue.clear()
-                    self.feedback.idle()
-                    break
-                time.sleep(0.1)
-
-            # Stop interrupt listener
-            self.interrupt_listener.stop()
-            logger.info("TTS playback complete")
-
-            # Show success LED after all TTS completes (unless interrupted)
-            if sentence_count > 0 and not self.interrupt_listener.was_interrupted():
-                self.feedback.play_success()
-
-            # Handle conversation mode
-            if conversation_start:
-                logger.info("Entering conversation mode...")
-
-                # Reset audio stream for conversation
-                self.audio_capture.stop()
-                time.sleep(0.5)
-                self.audio_capture._initialize()
-                self.audio_capture.start()
-
-                # Run conversation loop
-                session_id = str(uuid.uuid4())
-                self.run_conversation_loop(session_id)
-
-        except Exception as e:
-            logger.error(f"Error processing voice command: {e}")
-            self.feedback.play_error()
-        finally:
-            # Return to idle state
-            self.feedback.idle()
+        # Reset audio stream after session
+        self._reset_audio_stream()
 
     def run(self):
         """Main detection loop"""
@@ -672,23 +1097,15 @@ class WakeWordService:
             while self.running:
                 # Check for external trigger (MQTT command)
                 if self.conversation_start_requested:
-                    logger.info("MQTT conversation trigger detected")
+                    logger.info("MQTT session trigger detected")
                     self.conversation_start_requested = False  # Clear flag
-                    self.conversation_stop_requested = False  # Clear any pending stop
 
-                    # Go directly into conversation mode
-                    self.publish_status("conversation", "Starting...")
+                    # Start session via MQTT (uses current conversation_mode_enabled setting)
                     session_id = str(uuid.uuid4())[:8]
-                    self.run_conversation_loop(session_id)
+                    self.run_session(session_id, self.conversation_mode_enabled)
 
                     # Reset audio stream
-                    logger.info("Resetting audio capture stream...")
-                    self.audio_capture.stop()
-                    time.sleep(0.5)
-                    self.audio_capture._initialize()
-                    self.audio_capture.start()
-                    self.detector.reset()
-                    time.sleep(1.0)
+                    self._reset_audio_stream()
                     chunk_count = 0
                     continue
 
@@ -709,24 +1126,15 @@ class WakeWordService:
 
                 if prediction >= self.detection_threshold:
                     logger.info(f"Wake word detected with confidence: {prediction:.2f}")
-                    self.process_wake_word_detection()
 
-                    # Reset audio stream after command processing
-                    # (stream can stall during long AI Gateway requests)
-                    logger.info("Resetting audio capture stream...")
-                    self.audio_capture.stop()
-                    time.sleep(0.5)
-                    self.audio_capture._initialize()
-                    self.audio_capture.start()
-                    logger.info("Audio capture stream reset complete")
+                    # Generate session ID and run session
+                    # Mode is determined by conversation_mode_enabled flag
+                    session_id = str(uuid.uuid4())[:8]
+                    self.run_session(session_id, self.conversation_mode_enabled)
 
-                    # Reset detector state to clear prediction buffer
-                    self.detector.reset()
-                    logger.info("Detector state reset")
-
-                    # Longer pause to avoid re-triggering from residual audio
-                    time.sleep(2.0)
-                    chunk_count = 0  # Reset counter after detection
+                    # Reset audio stream after session
+                    self._reset_audio_stream()
+                    chunk_count = 0
 
         except KeyboardInterrupt:
             logger.info("Received shutdown signal")
@@ -736,19 +1144,48 @@ class WakeWordService:
         finally:
             self.shutdown()
 
+    def _reset_audio_stream(self) -> None:
+        """Reset audio capture stream after a session.
+
+        Stops and restarts the audio stream and resets the detector state.
+        """
+        logger.info("Resetting audio capture stream...")
+        self.audio_capture.stop()
+        time.sleep(0.5)
+        self.audio_capture._initialize()
+        self.audio_capture.start()
+        self.detector.reset()
+        logger.info("Audio capture stream reset complete")
+        time.sleep(1.0)  # Pause to avoid re-triggering from residual audio
+
     def shutdown(self):
         """Clean shutdown"""
         logger.info("Shutting down Wake-Word Detection Service")
         self.running = False
 
+        # End any active session
+        if self.state_machine:
+            self.state_machine.reset()
+
         if self.tts_queue:
             self.tts_queue.stop()
+
+        if self.parallel_stt:
+            self.parallel_stt.shutdown()
 
         if self.audio_capture:
             self.audio_capture.stop()
 
         if self.feedback:
             self.feedback.cleanup()
+
+        # Disconnect MQTT
+        if self.mqtt_client:
+            try:
+                self.mqtt_client.loop_stop()
+                self.mqtt_client.disconnect()
+            except Exception:
+                pass
 
         logger.info("Shutdown complete")
 

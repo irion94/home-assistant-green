@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from app.models import AskRequest, AskResponse, Config
 from app.services.conversation_client import ConversationClient, get_conversation_client
+from app.services.database import db_service
 from app.services.entity_discovery import EntityDiscovery, get_entity_discovery
 from app.services.ha_client import HomeAssistantClient
 from app.services.intent_matcher import IntentMatcher, get_intent_matcher
@@ -220,7 +221,8 @@ async def ask(
             try:
                 # Import conversation client here to avoid circular imports
                 from app.services.conversation_client import get_conversation_client
-                conv_client = get_conversation_client(Config())
+                db = db_service if db_service.pool is not None else None
+                conv_client = get_conversation_client(Config(), db)
                 ai_response = await conv_client.chat(request.text, "ask_fallback")
                 logger.info(f"[{correlation_id}] AI fallback response: {len(ai_response)} chars")
                 return AskResponse(
@@ -335,15 +337,17 @@ def get_stt_pipeline_dependency(config: Config = Depends(get_config)) -> STTPipe
 
 
 def get_conversation_client_dependency(config: Config = Depends(get_config)) -> ConversationClient:
-    """Dependency to get conversation client.
+    """Dependency to get conversation client with database persistence.
 
     Args:
         config: Application configuration
 
     Returns:
-        Initialized conversation client
+        Initialized conversation client with db_service for persistence
     """
-    return get_conversation_client(config)
+    # Pass db_service only if connected (pool is not None)
+    db = db_service if db_service.pool is not None else None
+    return get_conversation_client(config, db)
 
 
 @router.post("/voice", response_model=AskResponse)

@@ -130,6 +130,12 @@ services:
       # - /dev/spidev0.1:/dev/spidev0.1
       # - /dev/gpiomem:/dev/gpiomem
     environment:
+      # Room identification for multi-device support
+      - ROOM_ID=${ROOM_ID:-salon}
+      # MQTT broker connection
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      # Audio device configuration
       - AUDIO_DEVICE=hw:2,0
       - CHANNELS=6
       - SAMPLE_RATE=16000
@@ -145,10 +151,19 @@ services:
       - LOG_LEVEL=INFO
       # Vosk local transcription (only Polish model available, 50MB on SSD)
       - VOSK_MODEL_PATH=/app/models/vosk/vosk-model-small-pl-0.22
+      # Use Whisper for parallel STT (set to false for faster, Vosk-only mode)
+      - USE_WHISPER=true
+      # Whisper timeout in seconds (fallback to Vosk if Whisper takes longer)
+      - WHISPER_TIMEOUT=6.0
       # TTS cache directory (persists XTTS v2 model across rebuilds)
       - TTS_HOME=/app/tts-cache
+      # Conversation mode configuration (false = single command, true = multi-turn)
+      - CONVERSATION_MODE_DEFAULT=false
+      # Conversation timeout in seconds
+      - CONVERSATION_TIMEOUT=30
     depends_on:
       - ai-gateway
+      - mosquitto
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"

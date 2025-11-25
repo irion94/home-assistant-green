@@ -12,6 +12,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.models import AskRequest, AskResponse, Config
+from app.services.database import db_service
 from app.services.entity_discovery import EntityDiscovery
 from app.services.ha_client import HomeAssistantClient
 from app.services.intent_matcher import IntentMatcher
@@ -110,7 +111,8 @@ async def ask(
             logger.info(f"[{correlation_id}] No HA action - falling back to AI conversation")
             try:
                 from app.services.conversation_client import get_conversation_client
-                conv_client = get_conversation_client(Config())
+                db = db_service if db_service.pool is not None else None
+                conv_client = get_conversation_client(Config(), db)
                 ai_response = await conv_client.chat(request.text, "ask_fallback")
                 logger.info(f"[{correlation_id}] AI fallback response: {len(ai_response)} chars")
                 return AskResponse(

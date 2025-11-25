@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pythonjsonlogger import jsonlogger
 
 from app.models import Config
-from app.routers import ask, voice, conversation, memory
+from app.routers import ask, voice, conversation, memory, session
 from app.services.database import db_service
 from app.services.embeddings import embedding_service
 
@@ -118,6 +118,7 @@ app.include_router(ask.router, tags=["ask"])
 app.include_router(voice.router, tags=["voice"])
 app.include_router(conversation.router, tags=["conversation"])
 app.include_router(memory.router)
+app.include_router(session.router)
 
 
 @app.get("/")

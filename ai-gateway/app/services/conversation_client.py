@@ -5,6 +5,11 @@ with session memory and streaming output for TTS.
 
 Supports action detection during conversation - if user says "turn on lights",
 it will execute the HA action and continue the conversation.
+
+Database Integration (Phase 2):
+- Conversations are persisted to PostgreSQL for history/analytics
+- In-memory cache provides fast access during active session
+- Session history can be restored after container restarts
 """
 
 from __future__ import annotations
@@ -12,7 +17,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncIterator
+from typing import TYPE_CHECKING, AsyncIterator, Any
 from collections import defaultdict
 
 import httpx
@@ -20,6 +25,7 @@ import json
 
 if TYPE_CHECKING:
     from app.models import Config
+    from app.services.database import DatabaseService
 
 from app.services.llm_tools import get_tools, get_tool_executor
 
@@ -93,19 +99,25 @@ CONVERSATION_SYSTEM_PROMPT = _load_personality()
 
 
 class ConversationClient:
-    """Client for conversational AI using OpenAI streaming."""
+    """Client for conversational AI using OpenAI streaming.
 
-    def __init__(self, config: Config):
+    Supports optional database persistence for conversation history.
+    When db_service is provided, all messages are saved to PostgreSQL.
+    """
+
+    def __init__(self, config: Config, db_service: DatabaseService | None = None):
         """Initialize conversation client.
 
         Args:
             config: Application configuration
+            db_service: Optional database service for persistence
         """
         self.config = config
         self.api_key = config.openai_api_key
         self.model = config.openai_model
         self.base_url = "https://api.openai.com/v1"
         self.timeout = config.conversation_timeout
+        self.db = db_service
 
         if not self.api_key:
             raise ValueError("OpenAI API key required for conversation mode")
@@ -114,7 +126,11 @@ class ConversationClient:
         self._ha_client = None
         self._intent_matcher = None
 
-        logger.info(f"ConversationClient initialized with model={self.model}")
+        # Track which sessions have been loaded from DB
+        self._db_loaded_sessions: set[str] = set()
+
+        db_status = "enabled" if db_service else "disabled"
+        logger.info(f"ConversationClient initialized with model={self.model}, db={db_status}")
 
     def _get_action_handlers(self):
         """Lazy load HA client and intent matcher for action detection.
@@ -156,12 +172,81 @@ class ConversationClient:
         if session_id in _sessions:
             del _sessions[session_id]
             logger.info(f"Cleared conversation session: {session_id}")
+        # Also remove from loaded tracking
+        self._db_loaded_sessions.discard(session_id)
+
+    async def _ensure_session_loaded(self, session_id: str) -> None:
+        """Load session history from database if not already loaded.
+
+        This ensures we have any previous conversation context when
+        resuming a session after container restart.
+
+        Args:
+            session_id: Session identifier
+        """
+        # Skip if already loaded or no DB
+        if session_id in self._db_loaded_sessions or not self.db:
+            return
+
+        # Skip if session already has in-memory messages
+        if _sessions[session_id]:
+            self._db_loaded_sessions.add(session_id)
+            return
+
+        try:
+            # Load recent history from database
+            history = await self.db.get_conversation_history(session_id, limit=20)
+            if history:
+                # Convert DB format to in-memory format
+                for msg in history:
+                    _sessions[session_id].append({
+                        "role": msg["role"],
+                        "content": msg["content"]
+                    })
+                logger.info(f"Loaded {len(history)} messages from DB for session {session_id}")
+            self._db_loaded_sessions.add(session_id)
+        except Exception as e:
+            logger.warning(f"Failed to load session from DB: {e}")
+            self._db_loaded_sessions.add(session_id)  # Mark as loaded to avoid retries
+
+    async def _save_message_to_db(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        metadata: dict[str, Any] | None = None
+    ) -> None:
+        """Save a message to the database.
+
+        Args:
+            session_id: Session identifier
+            role: Message role (user/assistant)
+            content: Message content
+            metadata: Optional metadata (e.g., tool calls)
+        """
+        if not self.db:
+            return
+
+        try:
+            await self.db.save_conversation(
+                session_id=session_id,
+                role=role,
+                content=content,
+                language=None,  # Could detect language later
+                intent=None,
+                metadata=metadata
+            )
+            logger.debug(f"Saved {role} message to DB: session={session_id}")
+        except Exception as e:
+            logger.warning(f"Failed to save message to DB: {e}")
 
     async def chat(self, text: str, session_id: str) -> str:
         """Send message and get response with function calling.
 
         Uses OpenAI function calling to let the LLM decide when to use tools
         like web search, device control, etc.
+
+        Messages are persisted to database if db_service is configured.
 
         Args:
             text: User message
@@ -170,12 +255,18 @@ class ConversationClient:
         Returns:
             AI response text
         """
+        # Load session history from DB if this is a resumed session
+        await self._ensure_session_loaded(session_id)
+
         # Get HA client for tool execution
         _, ha_client = self._get_action_handlers()
         tool_executor = get_tool_executor(ha_client)
 
         # Add user message to history
         _sessions[session_id].append({"role": "user", "content": text})
+
+        # Save user message to database
+        await self._save_message_to_db(session_id, "user", text)
 
         # Build messages with history
         messages = [
@@ -259,6 +350,22 @@ class ConversationClient:
                     "content": assistant_message
                 })
 
+                # Save assistant message to database (include tool call info in metadata)
+                tool_calls_metadata = None
+                if message.get("tool_calls"):
+                    tool_calls_metadata = {
+                        "tool_calls": [
+                            {
+                                "name": tc["function"]["name"],
+                                "arguments": tc["function"]["arguments"]
+                            }
+                            for tc in message["tool_calls"]
+                        ]
+                    }
+                await self._save_message_to_db(
+                    session_id, "assistant", assistant_message, tool_calls_metadata
+                )
+
                 logger.info(
                     f"Conversation response: session={session_id}, "
                     f"history_length={len(_sessions[session_id])}"
@@ -283,8 +390,14 @@ class ConversationClient:
         Yields:
             Response text chunks
         """
+        # Load session history from DB if this is a resumed session
+        await self._ensure_session_loaded(session_id)
+
         # Add user message to history
         _sessions[session_id].append({"role": "user", "content": text})
+
+        # Save user message to database
+        await self._save_message_to_db(session_id, "user", text)
 
         # Build messages with history
         messages = [
@@ -335,6 +448,9 @@ class ConversationClient:
                 "content": full_response
             })
 
+            # Save assistant message to database
+            await self._save_message_to_db(session_id, "assistant", full_response)
+
             logger.info(
                 f"Streamed conversation: session={session_id}, "
                 f"response_length={len(full_response)}"
@@ -360,12 +476,18 @@ class ConversationClient:
         Yields:
             Complete sentences as they become available
         """
+        # Load session history from DB if this is a resumed session
+        await self._ensure_session_loaded(session_id)
+
         buffer = ""
         sentence_endings = {'.', '!', '?'}
         full_response = ""
 
         # Add user message to history
         _sessions[session_id].append({"role": "user", "content": text})
+
+        # Save user message to database
+        await self._save_message_to_db(session_id, "user", text)
 
         # Build messages with history
         messages = [
@@ -443,6 +565,9 @@ class ConversationClient:
                 "content": full_response
             })
 
+            # Save assistant message to database
+            await self._save_message_to_db(session_id, "assistant", full_response)
+
             logger.info(
                 f"Streamed sentences: session={session_id}, "
                 f"response_length={len(full_response)}"
@@ -460,16 +585,29 @@ class ConversationClient:
 _conversation_client: ConversationClient | None = None
 
 
-def get_conversation_client(config: Config) -> ConversationClient:
+def get_conversation_client(
+    config: Config,
+    db_service: DatabaseService | None = None
+) -> ConversationClient:
     """Get or create conversation client.
 
     Args:
         config: Application configuration
+        db_service: Optional database service for persistence
 
     Returns:
         ConversationClient instance
     """
     global _conversation_client
     if _conversation_client is None:
-        _conversation_client = ConversationClient(config)
+        _conversation_client = ConversationClient(config, db_service)
     return _conversation_client
+
+
+def reset_conversation_client() -> None:
+    """Reset the global conversation client.
+
+    Useful for testing or when reconfiguring with different db_service.
+    """
+    global _conversation_client
+    _conversation_client = None

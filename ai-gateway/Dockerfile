@@ -43,6 +43,9 @@ COPY --from=builder /opt/venv /opt/venv
 # Copy application code
 COPY app/ ./app/
 
+# Copy database migrations
+COPY migrations/ ./migrations/
+
 # Set environment variables
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
