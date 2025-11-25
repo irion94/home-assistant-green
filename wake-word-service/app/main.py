@@ -638,6 +638,28 @@ class WakeWordService:
 
             result.response = response.get("text", "")
 
+            # Check for conversation mode action from AI
+            action = response.get("action")
+            if action == "conversation_start":
+                logger.info("AI triggered conversation mode")
+                self.conversation_mode_enabled = True
+                # Publish mode change to MQTT
+                self.mqtt_client.publish(
+                    f"voice_assistant/room/{self.room_id}/config/conversation_mode",
+                    "true",
+                    retain=True
+                )
+                result.should_continue = True  # Continue in conversation mode
+            elif action == "conversation_end":
+                logger.info("AI ended conversation mode")
+                self.conversation_mode_enabled = False
+                self.mqtt_client.publish(
+                    f"voice_assistant/room/{self.room_id}/config/conversation_mode",
+                    "false",
+                    retain=True
+                )
+                result.should_continue = False
+
             # SPEAKING - Play TTS response
             if result.response:
                 self.state_machine.transition(VoiceState.SPEAKING)

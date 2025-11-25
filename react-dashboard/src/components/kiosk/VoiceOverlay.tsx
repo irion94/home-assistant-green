@@ -128,21 +128,29 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
           )}
         </div>
 
-        {/* Mode indicator - read-only, AI decides mode */}
+        {/* Mode indicator - click to start conversation mode */}
         <div className="flex items-center gap-3">
-          <div
+          <button
+            onClick={() => {
+              if (!conversationMode) {
+                // Start conversation mode via MQTT
+                mqttService.startSession('conversation')
+                console.log('[VoiceOverlay] User started conversation mode')
+              }
+            }}
+            disabled={conversationMode}
             className={classNames(
               "flex items-center gap-2 px-4 py-2 rounded-full transition-colors",
               conversationMode
-                ? "bg-primary/20 text-primary"
-                : "bg-surface-light/30 text-text-secondary"
+                ? "bg-primary/20 text-primary cursor-default"
+                : "bg-surface-light/30 text-text-secondary hover:bg-surface-light/50 cursor-pointer"
             )}
           >
             <MessageCircle className="w-4 h-4" />
             <span className="text-sm font-medium">
-              {conversationMode ? "In conversation" : "Command mode"}
+              {conversationMode ? "In conversation" : "Tap to start conversation"}
             </span>
-          </div>
+          </button>
 
           {/* Close button */}
           <button
