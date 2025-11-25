@@ -16,9 +16,15 @@
  *   │   └── stop                    # End current session
  *   └── config/
  *       └── conversation_mode       # Room preference
+ *
+ * Now with Zustand integration (Phase 5):
+ * - Writes directly to voiceStore for centralized state management
+ * - Eliminates callback conflicts between KioskHome and VoiceOverlay
+ * - Callbacks still available for backward compatibility
  */
 
 import mqtt, { MqttClient } from 'mqtt'
+import { useVoiceStore } from '../stores/voiceStore'
 
 export interface VoiceMessage {
   type: 'transcript' | 'response'
@@ -97,6 +103,8 @@ class MqttService {
     }
 
     this.roomId = roomId
+    // Sync to store
+    useVoiceStore.getState().setRoomId(roomId)
     console.log(`[MQTT] Room ID set to: ${roomId}`)
 
     if (wasConnected) {
@@ -141,6 +149,9 @@ class MqttService {
     this.client.on('connect', () => {
       console.log('[MQTT] Connected')
       this.reconnectAttempts = 0
+      // Write to store
+      useVoiceStore.getState().setMqttConnected(true)
+      // Legacy callback
       this.callbacks.onConnectionChange?.(true)
       this.subscribeRoom()
     })
@@ -151,6 +162,9 @@ class MqttService {
 
     this.client.on('close', () => {
       console.log('[MQTT] Connection closed')
+      // Write to store
+      useVoiceStore.getState().setMqttConnected(false)
+      // Legacy callback
       this.callbacks.onConnectionChange?.(false)
     })
 
@@ -247,12 +261,18 @@ class MqttService {
 
   /**
    * Handle room-scoped messages.
+   * Writes directly to Zustand store AND calls legacy callbacks.
    */
   private handleRoomMessage(subTopic: string, payload: string): void {
+    const store = useVoiceStore.getState()
+
     // session/active
     if (subTopic === 'session/active') {
       const sessionId = payload === 'none' ? null : payload
       this.currentSessionId = sessionId
+      // Write to store
+      store.setSessionId(sessionId)
+      // Legacy callback
       this.callbacks.onActiveSessionChange?.(sessionId)
       console.log(`[MQTT] Active session: ${sessionId ?? 'none'}`)
       return
@@ -270,6 +290,18 @@ class MqttService {
       } catch {
         state = payload as VoiceState
       }
+
+      // Write to store - this handles auto-opening overlay
+      store.setVoiceState(state)
+
+      // Auto-open overlay on voice activity (replaces KioskHome callback logic)
+      const { overlayOpen } = store
+      if ((state === 'wake_detected' || state === 'listening' || state === 'waiting') && !overlayOpen) {
+        console.log(`[MQTT] Voice activity detected (${state}), opening overlay via store`)
+        store.openOverlay(false, state)  // false = don't start session (wake-word already did)
+      }
+
+      // Legacy callback
       this.callbacks.onStateChange?.(state, sessionId)
       return
     }
@@ -279,26 +311,29 @@ class MqttService {
     if (transcriptMatch) {
       const sessionId = transcriptMatch[1]
       console.log(`[MQTT] Transcript received for session ${sessionId}:`, payload)
+      let message: VoiceMessage
       try {
         const data = JSON.parse(payload)
-        const message: VoiceMessage = {
+        message = {
           type: 'transcript',
           text: data.text || payload,
           session_id: sessionId,
           timestamp: data.timestamp || Date.now(),
         }
-        console.log('[MQTT] Calling onTranscript callback with:', message)
-        this.callbacks.onTranscript?.(message)
       } catch {
         // Plain text payload
-        const message: VoiceMessage = {
+        message = {
           type: 'transcript',
           text: payload,
           session_id: sessionId,
           timestamp: Date.now(),
         }
-        this.callbacks.onTranscript?.(message)
       }
+      // Write to store
+      store.addTranscript(message)
+      // Legacy callback
+      console.log('[MQTT] Calling onTranscript callback with:', message)
+      this.callbacks.onTranscript?.(message)
       return
     }
 
@@ -306,25 +341,28 @@ class MqttService {
     const responseMatch = subTopic.match(/^session\/([^/]+)\/response$/)
     if (responseMatch) {
       const sessionId = responseMatch[1]
+      let message: VoiceMessage
       try {
         const data = JSON.parse(payload)
-        const message: VoiceMessage = {
+        message = {
           type: 'response',
           text: data.text || payload,
           session_id: sessionId,
           timestamp: data.timestamp || Date.now(),
         }
-        this.callbacks.onResponse?.(message)
       } catch {
         // Plain text payload
-        const message: VoiceMessage = {
+        message = {
           type: 'response',
           text: payload,
           session_id: sessionId,
           timestamp: Date.now(),
         }
-        this.callbacks.onResponse?.(message)
       }
+      // Write to store
+      store.addResponse(message)
+      // Legacy callback
+      this.callbacks.onResponse?.(message)
       return
     }
 
@@ -332,11 +370,14 @@ class MqttService {
     const endedMatch = subTopic.match(/^session\/([^/]+)\/ended$/)
     if (endedMatch) {
       const sessionId = endedMatch[1]
-      this.callbacks.onSessionEnd?.(sessionId)
+      // Write to store - handles overlay close
+      store.endSession()
+      // Update local tracking
       if (this.currentSessionId === sessionId) {
         this.currentSessionId = null
-        this.callbacks.onActiveSessionChange?.(null)
       }
+      // Legacy callback
+      this.callbacks.onSessionEnd?.(sessionId)
       console.log(`[MQTT] Session ended: ${sessionId}`)
       return
     }
@@ -344,6 +385,9 @@ class MqttService {
     // config/conversation_mode
     if (subTopic === 'config/conversation_mode') {
       const enabled = payload.toLowerCase() === 'true'
+      // Write to store
+      store.setConversationMode(enabled)
+      // Legacy callback
       this.callbacks.onConversationModeChange?.(enabled)
       console.log(`[MQTT] Conversation mode synced: ${enabled}`)
       return
@@ -352,6 +396,9 @@ class MqttService {
     // stt_comparison
     if (subTopic === 'stt_comparison') {
       const comparison = JSON.parse(payload) as STTComparison
+      // Write to store
+      store.setLastComparison(comparison)
+      // Legacy callback
       this.callbacks.onSTTComparison?.(comparison)
       return
     }

@@ -1,15 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { Mic, X, Loader2, Volume2, Wifi, WifiOff, MessageCircle, Radio } from 'lucide-react'
-import { mqttService, VoiceState, VoiceMessage, STTComparison } from '../../services/mqttService'
+import { mqttService, VoiceState } from '../../services/mqttService'
 import { classNames } from '../../utils/formatters'
-
-interface ConversationMessage {
-  id: string
-  type: 'user' | 'assistant'
-  text: string
-  timestamp: number
-  sttEngine?: string
-}
+import { useVoiceStore } from '../../stores/voiceStore'
 
 interface VoiceOverlayProps {
   isOpen: boolean
@@ -44,30 +37,23 @@ const stateLabels: Record<VoiceState, string> = {
 }
 
 export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', startOnOpen = false, initialState = 'idle' }: VoiceOverlayProps) {
-  const [state, setState] = useState<VoiceState>(initialState)
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<ConversationMessage[]>([])
-  const [connected, setConnected] = useState(false)
-  const [lastComparison, setLastComparison] = useState<STTComparison | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  // Zustand store - single source of truth
+  const {
+    state,
+    sessionId,
+    messages,
+    conversationMode,
+    mqttConnected: connected,
+    lastComparison,
+    setVoiceState
+  } = useVoiceStore()
 
-  // Conversation mode toggle state (persisted to localStorage, default to single-command)
-  const [conversationMode, setConversationMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('conversationMode')
-    // Default to false (single-command mode) if not set
-    return saved === 'true'
-  })
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
-
-  // Persist conversation mode to localStorage (mode is AI-controlled, not user-toggled)
-  useEffect(() => {
-    localStorage.setItem('conversationMode', conversationMode.toString())
-    console.log(`[VoiceOverlay] Mode indicator: ${conversationMode ? 'conversation' : 'command'}`)
-  }, [conversationMode])
 
   // Set room ID when it changes
   useEffect(() => {
@@ -77,138 +63,28 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
   // Sync state when initialState prop changes (for wake-word triggered opening)
   useEffect(() => {
     if (isOpen && initialState !== 'idle') {
-      setState(initialState)
+      setVoiceState(initialState)
     }
-  }, [isOpen, initialState])
+  }, [isOpen, initialState, setVoiceState])
 
-  // Handle transcript message
-  const handleTranscript = useCallback((message: VoiceMessage) => {
-    console.log('[VoiceOverlay] Transcript received:', message)
-    setMessages(prev => [...prev, {
-      id: `user-${message.timestamp}`,
-      type: 'user',
-      text: message.text,
-      timestamp: message.timestamp
-    }])
-  }, [])
-
-  // Handle response message
-  const handleResponse = useCallback((message: VoiceMessage) => {
-    setMessages(prev => [...prev, {
-      id: `assistant-${message.timestamp}`,
-      type: 'assistant',
-      text: message.text,
-      timestamp: message.timestamp
-    }])
-  }, [])
-
-  // Handle state change
-  const handleStateChange = useCallback((newState: VoiceState, _sessionId: string | null) => {
-    setState(newState)
-
-    // Auto-close only in single-command mode when returning to idle
-    if (newState === 'idle' && messages.length > 0 && !conversationMode) {
-      // Keep overlay open for 3 seconds to show final state, then close
-      const timeoutId = setTimeout(() => {
-        onClose()
-      }, 3000)
-
-      // Store timeout ID for potential cleanup
-      return () => clearTimeout(timeoutId)
-    }
-  }, [messages.length, conversationMode, onClose])
-
-  // Handle STT comparison
-  const handleSTTComparison = useCallback((comparison: STTComparison) => {
-    setLastComparison(comparison)
-  }, [])
-
-  // Handle conversation mode change from MQTT (sync across devices)
-  const handleConversationModeChange = useCallback((enabled: boolean) => {
-    setConversationMode(enabled)
-    localStorage.setItem('conversationMode', enabled.toString())
-  }, [])
-
-  // Handle active session change
-  const handleActiveSessionChange = useCallback((newSessionId: string | null) => {
-    setSessionId(newSessionId)
-    if (newSessionId) {
-      console.log(`[VoiceOverlay] Active session: ${newSessionId}`)
-    }
-  }, [])
-
-  // Handle session end
-  const handleSessionEnd = useCallback((endedSessionId: string) => {
-    console.log(`[VoiceOverlay] Session ended: ${endedSessionId}`)
-    setSessionId(null)
-    setState('idle')
-    // Always close overlay when session ends (both modes)
-    // Single mode: command completed, Conversation mode: user said "koniec"
-    setTimeout(() => onClose(), 1500)
-  }, [onClose])
-
-  // Connect to MQTT when overlay opens
+  // Start session when overlay opens via button click
+  // Note: MQTT service now writes directly to Zustand store
+  // No callbacks needed - eliminates all race conditions!
   useEffect(() => {
-    if (isOpen) {
-      // Reset state when opening (but preserve message history)
-      if (startOnOpen) {
-        // Don't clear messages - preserve conversation history
-        setLastComparison(null)
-        setState('idle')
-      }
-
-      // Set up MQTT callbacks
-      mqttService.setCallbacks({
-        onStateChange: handleStateChange,
-        onTranscript: handleTranscript,
-        onResponse: handleResponse,
-        onSTTComparison: handleSTTComparison,
-        onConnectionChange: setConnected,
-        onConversationModeChange: handleConversationModeChange,
-        onActiveSessionChange: handleActiveSessionChange,
-        onSessionEnd: handleSessionEnd,
-      })
-
-      // Check if already connected, if not connect
-      const mqttHost = import.meta.env.VITE_MQTT_URL || `ws://${window.location.hostname}:9001`
-      if (!mqttService.isConnected()) {
-        mqttService.connect(mqttHost)
-      }
-
-      // Get current session if any
-      setSessionId(mqttService.getCurrentSessionId())
-
-      // If startOnOpen is true, start a session (wait for connection if needed)
-      if (startOnOpen) {
-        const tryStartSession = () => {
-          if (mqttService.isConnected()) {
-            mqttService.startSession('single')
-            console.log(`[VoiceOverlay] Starting command session via MQTT (AI will decide mode)`)
-          } else {
-            // Not connected yet, retry after short delay
-            console.log(`[VoiceOverlay] Waiting for MQTT connection...`)
-            setTimeout(tryStartSession, 100)
-          }
+    if (isOpen && startOnOpen) {
+      const tryStartSession = () => {
+        if (mqttService.isConnected()) {
+          mqttService.startSession('single')
+          console.log(`[VoiceOverlay] Starting command session via MQTT (AI will decide mode)`)
+        } else {
+          console.log(`[VoiceOverlay] Waiting for MQTT connection...`)
+          setTimeout(tryStartSession, 100)
         }
-        // Small delay to ensure callbacks are registered before messages arrive
-        setTimeout(tryStartSession, 50)
       }
+      // Small delay to ensure store is ready
+      setTimeout(tryStartSession, 50)
     }
-
-    return () => {
-      // Cleanup on unmount (connection remains active, managed by KioskHome)
-    }
-  }, [
-    isOpen,
-    startOnOpen,
-    handleStateChange,
-    handleTranscript,
-    handleResponse,
-    handleSTTComparison,
-    handleConversationModeChange,
-    handleActiveSessionChange,
-    handleSessionEnd,
-  ])
+  }, [isOpen, startOnOpen])
 
   // Handle manual close
   const handleClose = () => {

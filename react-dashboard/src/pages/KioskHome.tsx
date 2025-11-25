@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Mic } from 'lucide-react'
 import HorizontalScroller from '../components/kiosk/HorizontalScroller'
@@ -10,7 +10,8 @@ import SensorsPanel from '../components/kiosk/panels/SensorsPanel'
 import VoicePanel from '../components/kiosk/panels/VoicePanel'
 import MediaPanel from '../components/kiosk/panels/MediaPanel'
 import VoiceOverlay from '../components/kiosk/VoiceOverlay'
-import { mqttService, VoiceState } from '../services/mqttService'
+import { mqttService } from '../services/mqttService'
+import { useVoiceStore } from '../stores/voiceStore'
 
 // Panel width configurations (in viewport width units)
 const PANEL_WIDTHS = {
@@ -26,20 +27,22 @@ export default function KioskHome() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [initialOffset, setInitialOffset] = useState(0)
-  const [voiceOverlayOpen, setVoiceOverlayOpen] = useState(false)
-  const [startSessionOnOpen, setStartSessionOnOpen] = useState(false)
-  const [triggerState, setTriggerState] = useState<VoiceState>('idle')
 
-  // Ref to track overlay state for callbacks (avoids stale closure)
-  const voiceOverlayOpenRef = useRef(voiceOverlayOpen)
-  voiceOverlayOpenRef.current = voiceOverlayOpen
+  // Zustand store - single source of truth for voice state
+  const {
+    overlayOpen,
+    startSessionOnOpen,
+    triggerState,
+    openOverlay,
+    closeOverlay,
+    setRoomId
+  } = useVoiceStore()
 
   // Get room ID from URL param, env var, or localStorage (priority order)
   const roomId = useMemo(() => {
     // 1. URL parameter (?room=living_room)
     const urlRoom = searchParams.get('room')
     if (urlRoom) {
-      localStorage.setItem('roomId', urlRoom)
       return urlRoom
     }
     // 2. Environment variable
@@ -60,43 +63,27 @@ export default function KioskHome() {
     setInitialOffset(menuWidthPx)
   }, [])
 
-  // Listen for wake-word detection via MQTT (stable connection, doesn't reconnect on overlay state)
+  // Connect to MQTT broker - Zustand store handles all state updates
   useEffect(() => {
     const mqttHost = import.meta.env.VITE_MQTT_URL || `ws://${window.location.hostname}:9001`
 
-    // Set room ID before connecting
+    // Set room ID before connecting (syncs to store)
     mqttService.setRoomId(roomId)
+    // Also update store directly for URL params
+    setRoomId(roomId)
 
     // Connect to MQTT broker
+    // MQTT service now writes directly to Zustand store:
+    // - State changes → store.setVoiceState() → auto-opens overlay
+    // - Session end → store.endSession() → auto-closes overlay
+    // No callbacks needed - eliminates race conditions!
     mqttService.connect(mqttHost)
-
-    // Set initial callback to auto-open overlay when wake-word detected
-    // Note: VoiceOverlay will override this when open, but that's OK
-    mqttService.setCallbacks({
-      onStateChange: (state: VoiceState, _sessionId: string | null) => {
-        // Open overlay when wake-word detected or listening starts
-        // This works for both single-command and multi-turn modes
-        // Use ref to get current overlay state (avoid stale closure)
-        if ((state === 'wake_detected' || state === 'listening' || state === 'waiting') && !voiceOverlayOpenRef.current) {
-          console.log(`[KioskHome] Voice activity detected (${state}), opening voice overlay`)
-          setTriggerState(state)  // Pass the triggering state to overlay
-          setStartSessionOnOpen(false)  // Don't start session - wake-word already did
-          setVoiceOverlayOpen(true)
-        }
-      },
-      onSessionEnd: (_sessionId: string) => {
-        // Close overlay when session ends (e.g., "koniec" detected)
-        console.log(`[KioskHome] Session ended, closing overlay`)
-        setVoiceOverlayOpen(false)
-        setTriggerState('idle')
-      }
-    })
 
     return () => {
       // Disconnect on unmount
       mqttService.disconnect()
     }
-  }, [roomId])  // Only reconnect if room changes, NOT on overlay state change
+  }, [roomId, setRoomId])  // Only reconnect if room changes
 
   const handleNavigate = (path: string) => {
     navigate(path)
@@ -142,22 +129,18 @@ export default function KioskHome() {
       {/* Floating Voice Button */}
       <button
         onClick={() => {
-          setStartSessionOnOpen(true)  // Start session via MQTT when button clicked
-          setVoiceOverlayOpen(true)
+          // Open overlay and start session via MQTT
+          openOverlay(true)  // true = start session when opened
         }}
         className="fixed bottom-6 right-6 w-16 h-16 rounded-full bg-primary shadow-lg shadow-primary/30 flex items-center justify-center hover:bg-primary-dark transition-colors z-50"
       >
         <Mic className="w-7 h-7 text-white" />
       </button>
 
-      {/* Voice Overlay */}
+      {/* Voice Overlay - Now reads from Zustand store */}
       <VoiceOverlay
-        isOpen={voiceOverlayOpen}
-        onClose={() => {
-          setVoiceOverlayOpen(false)
-          setStartSessionOnOpen(false)
-          setTriggerState('idle')
-        }}
+        isOpen={overlayOpen}
+        onClose={closeOverlay}
         roomId={roomId}
         startOnOpen={startSessionOnOpen}
         initialState={triggerState}
