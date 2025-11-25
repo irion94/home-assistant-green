@@ -197,6 +197,14 @@ class MqttService {
       `${roomPrefix}/session/+/transcript`,
       `${roomPrefix}/session/+/response`,
       `${roomPrefix}/session/+/ended`,
+      // Streaming STT topics (Phase 8)
+      `${roomPrefix}/session/+/transcript/interim`,
+      `${roomPrefix}/session/+/transcript/final`,
+      `${roomPrefix}/session/+/transcript/refined`,
+      // Streaming response topics (Phase 9)
+      `${roomPrefix}/session/+/response/stream/start`,
+      `${roomPrefix}/session/+/response/stream/chunk`,
+      `${roomPrefix}/session/+/response/stream/complete`,
       // Configuration
       `${roomPrefix}/config/conversation_mode`,
       // STT comparison (optional debug)
@@ -225,6 +233,14 @@ class MqttService {
       `${roomPrefix}/session/+/transcript`,
       `${roomPrefix}/session/+/response`,
       `${roomPrefix}/session/+/ended`,
+      // Streaming STT topics (Phase 8)
+      `${roomPrefix}/session/+/transcript/interim`,
+      `${roomPrefix}/session/+/transcript/final`,
+      `${roomPrefix}/session/+/transcript/refined`,
+      // Streaming response topics (Phase 9)
+      `${roomPrefix}/session/+/response/stream/start`,
+      `${roomPrefix}/session/+/response/stream/chunk`,
+      `${roomPrefix}/session/+/response/stream/complete`,
       `${roomPrefix}/config/conversation_mode`,
       `${roomPrefix}/stt_comparison`,
     ]
@@ -311,7 +327,130 @@ class MqttService {
       return
     }
 
-    // session/{session_id}/transcript
+    // session/{session_id}/transcript/interim (streaming STT - Debug Panel only)
+    const interimMatch = subTopic.match(/^session\/([^/]+)\/transcript\/interim$/)
+    if (interimMatch) {
+      try {
+        const data = JSON.parse(payload)
+        const text = data.text || ''
+        const sequence = data.sequence || 0
+        // Debug Panel only (per user preference) - not added to chat messages
+        store.addDebugLog('MQTT', `[STT interim #${sequence}] "${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`)
+        console.log(`[MQTT] Interim transcript [${sequence}]: "${text}"`)
+      } catch (e) {
+        console.error('[MQTT] Failed to parse interim transcript:', e)
+      }
+      return
+    }
+
+    // session/{session_id}/transcript/final (streaming STT - final result)
+    const finalMatch = subTopic.match(/^session\/([^/]+)\/transcript\/final$/)
+    if (finalMatch) {
+      const sessionId = finalMatch[1]
+      try {
+        const data = JSON.parse(payload)
+        const text = data.text || ''
+        const confidence = data.confidence || 0
+        const engine = data.engine || 'vosk'
+
+        // Add debug log with confidence info
+        store.addDebugLog('MQTT', `[STT final] "${text.slice(0, 50)}${text.length > 50 ? '...' : ''}" (${engine}, conf=${confidence.toFixed(2)})`)
+
+        // Add to chat messages (like regular transcript)
+        const message: VoiceMessage = {
+          type: 'transcript',
+          text: text,
+          session_id: sessionId,
+          timestamp: data.timestamp || Date.now(),
+        }
+        store.addTranscript(message)
+
+        // Legacy callback
+        this.callbacks.onTranscript?.(message)
+        console.log(`[MQTT] Final transcript: "${text}" (confidence=${confidence.toFixed(2)}, engine=${engine})`)
+      } catch (e) {
+        console.error('[MQTT] Failed to parse final transcript:', e)
+      }
+      return
+    }
+
+    // session/{session_id}/transcript/refined (Whisper refinement when Vosk confidence was low)
+    const refinedMatch = subTopic.match(/^session\/([^/]+)\/transcript\/refined$/)
+    if (refinedMatch) {
+      const sessionId = refinedMatch[1]
+      try {
+        const data = JSON.parse(payload)
+        const text = data.text || ''
+
+        // Debug log for refinement (includes sessionId for traceability)
+        store.addDebugLog('MQTT', `[STT refined] Whisper: "${text.slice(0, 50)}${text.length > 50 ? '...' : ''}" (session=${sessionId.slice(0, 8)})`)
+
+        // Note: Refined transcript replaces the previous final transcript
+        // For now, just add to debug panel - the final transcript is already in chat
+        // If we wanted to update the last message, we'd need an updateLastTranscript action
+        console.log(`[MQTT] Refined transcript (Whisper) for session ${sessionId}: "${text}"`)
+      } catch (e) {
+        console.error('[MQTT] Failed to parse refined transcript:', e)
+      }
+      return
+    }
+
+    // session/{session_id}/response/stream/start (Phase 9 - streaming response start)
+    const streamStartMatch = subTopic.match(/^session\/([^/]+)\/response\/stream\/start$/)
+    if (streamStartMatch) {
+      const sessionId = streamStartMatch[1]
+      try {
+        // Initialize streaming state in store
+        store.startStreaming()
+        store.addDebugLog('MQTT', `[Stream start] session=${sessionId.slice(0, 8)}`)
+        console.log(`[MQTT] Streaming response started for session ${sessionId}`)
+      } catch (e) {
+        console.error('[MQTT] Failed to parse stream start:', e)
+      }
+      return
+    }
+
+    // session/{session_id}/response/stream/chunk (Phase 9 - streaming response token)
+    const streamChunkMatch = subTopic.match(/^session\/([^/]+)\/response\/stream\/chunk$/)
+    if (streamChunkMatch) {
+      try {
+        const data = JSON.parse(payload)
+        const token = data.content || ''
+        const sequence = data.sequence || 0
+
+        // Append token to streaming message
+        store.appendStreamingToken(token, sequence)
+
+        // Debug log only every 10 tokens to avoid spam
+        if (sequence % 10 === 0 || sequence === 1) {
+          store.addDebugLog('MQTT', `[Stream chunk #${sequence}] "${token.slice(0, 20)}${token.length > 20 ? '...' : ''}"`)
+        }
+      } catch (e) {
+        console.error('[MQTT] Failed to parse stream chunk:', e)
+      }
+      return
+    }
+
+    // session/{session_id}/response/stream/complete (Phase 9 - streaming response complete)
+    const streamCompleteMatch = subTopic.match(/^session\/([^/]+)\/response\/stream\/complete$/)
+    if (streamCompleteMatch) {
+      try {
+        const data = JSON.parse(payload)
+        const fullText = data.text || ''
+        const duration = data.duration || 0
+        const totalTokens = data.total_tokens || 0
+
+        // Finalize streaming message
+        store.finishStreaming(fullText)
+        store.addDebugLog('MQTT', `[Stream complete] ${totalTokens} tokens in ${duration.toFixed(2)}s`)
+        console.log(`[MQTT] Streaming response complete: ${totalTokens} tokens in ${duration.toFixed(2)}s`)
+      } catch (e) {
+        console.error('[MQTT] Failed to parse stream complete:', e)
+      }
+      return
+    }
+
+    // session/{session_id}/transcript (legacy - plain transcript without streaming info)
     const transcriptMatch = subTopic.match(/^session\/([^/]+)\/transcript$/)
     if (transcriptMatch) {
       const sessionId = transcriptMatch[1]

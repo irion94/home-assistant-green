@@ -21,6 +21,7 @@ export interface ConversationMessage {
   text: string
   timestamp: number
   sttEngine?: string
+  isStreaming?: boolean  // True while tokens are being received
 }
 
 export type DebugLogType = 'STATE' | 'MQTT' | 'TIMING' | 'ERROR'
@@ -41,6 +42,12 @@ interface VoiceStore {
   messages: ConversationMessage[]
   conversationMode: boolean
   lastComparison: STTComparison | null
+
+  // Streaming state
+  isStreaming: boolean
+  streamingContent: string
+  streamingSequence: number
+  streamingStartedAt: number | null
 
   // Connection state
   mqttConnected: boolean
@@ -66,6 +73,12 @@ interface VoiceStore {
   addResponse: (voiceMessage: VoiceMessage) => void
   clearMessages: () => void
   setLastComparison: (comparison: STTComparison | null) => void
+
+  // Actions - Streaming
+  startStreaming: () => void
+  appendStreamingToken: (token: string, sequence: number) => void
+  finishStreaming: (fullText: string) => void
+  cancelStreaming: () => void
 
   // Actions - Connection
   setMqttConnected: (connected: boolean) => void
@@ -93,6 +106,10 @@ export const useVoiceStore = create<VoiceStore>()(
       messages: [],
       conversationMode: false,
       lastComparison: null,
+      isStreaming: false,
+      streamingContent: '',
+      streamingSequence: 0,
+      streamingStartedAt: null,
       mqttConnected: false,
       roomId: 'salon', // Default room
       overlayOpen: false,
@@ -105,10 +122,11 @@ export const useVoiceStore = create<VoiceStore>()(
       setSessionId: (sessionId) => set({ sessionId }),
 
       setVoiceState: (state) => {
-        const { overlayOpen, messages, conversationMode, closeOverlay } = get()
+        const { overlayOpen, messages, conversationMode, isStreaming, closeOverlay } = get()
 
         // Auto-close in single-command mode when returning to idle with messages
-        if (state === 'idle' && messages.length > 0 && !conversationMode && overlayOpen) {
+        // BUT: Don't close if streaming is active (response is still being received)
+        if (state === 'idle' && messages.length > 0 && !conversationMode && overlayOpen && !isStreaming) {
           // Delay close to show final state
           setTimeout(() => {
             closeOverlay()
@@ -146,6 +164,94 @@ export const useVoiceStore = create<VoiceStore>()(
       clearMessages: () => set({ messages: [], lastComparison: null }),
 
       setLastComparison: (comparison) => set({ lastComparison: comparison }),
+
+      // Streaming actions
+      startStreaming: () => {
+        const timestamp = Date.now()
+
+        // Create new streaming message
+        const streamingMessage: ConversationMessage = {
+          id: `assistant-${timestamp}`,
+          type: 'assistant',
+          text: '',
+          timestamp,
+          isStreaming: true
+        }
+
+        set((state) => ({
+          isStreaming: true,
+          streamingContent: '',
+          streamingSequence: 0,
+          streamingStartedAt: timestamp,
+          messages: [...state.messages, streamingMessage]
+        }))
+      },
+
+      appendStreamingToken: (token, sequence) => {
+        set((state) => {
+          if (!state.isStreaming) {
+            return state // Ignore tokens if not streaming
+          }
+
+          const newContent = state.streamingContent + token
+
+          // Update the last message (which should be the streaming one)
+          const updatedMessages = state.messages.map((msg, idx) => {
+            if (idx === state.messages.length - 1 && msg.isStreaming) {
+              return {
+                ...msg,
+                text: newContent
+              }
+            }
+            return msg
+          })
+
+          return {
+            streamingContent: newContent,
+            streamingSequence: sequence,
+            messages: updatedMessages
+          }
+        })
+      },
+
+      finishStreaming: (fullText) => {
+        set((state) => {
+          // Mark streaming message as complete
+          const updatedMessages = state.messages.map((msg, idx) => {
+            if (idx === state.messages.length - 1 && msg.isStreaming) {
+              return {
+                ...msg,
+                text: fullText,
+                isStreaming: false
+              }
+            }
+            return msg
+          })
+
+          return {
+            isStreaming: false,
+            streamingContent: '',
+            streamingSequence: 0,
+            streamingStartedAt: null,
+            messages: updatedMessages
+          }
+        })
+      },
+
+      cancelStreaming: () => {
+        set((state) => {
+          // Remove incomplete streaming message
+          const filteredMessages = state.messages.filter(msg => !msg.isStreaming)
+
+          return {
+            isStreaming: false,
+            streamingContent: '',
+            streamingSequence: 0,
+            streamingStartedAt: null,
+            messages: filteredMessages
+          }
+        })
+      },
 
       // Connection actions
       setMqttConnected: (connected) => set({ mqttConnected: connected }),
@@ -226,6 +332,8 @@ export const useVoiceState = () => useVoiceStore((state) => state.state)
 export const useSessionId = () => useVoiceStore((state) => state.sessionId)
 export const useMessages = () => useVoiceStore((state) => state.messages)
 export const useConversationMode = () => useVoiceStore((state) => state.conversationMode)
+export const useIsStreaming = () => useVoiceStore((state) => state.isStreaming)
+export const useStreamingContent = () => useVoiceStore((state) => state.streamingContent)
 export const useMqttConnected = () => useVoiceStore((state) => state.mqttConnected)
 export const useRoomId = () => useVoiceStore((state) => state.roomId)
 export const useOverlayOpen = () => useVoiceStore((state) => state.overlayOpen)
