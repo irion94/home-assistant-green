@@ -132,10 +132,12 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
+              console.log('[VoiceOverlay] Button clicked, conversationMode:', conversationMode, 'connected:', connected)
               if (!conversationMode) {
                 // Start conversation mode via MQTT
+                console.log('[VoiceOverlay] Calling mqttService.startSession("conversation")')
                 mqttService.startSession('conversation')
-                console.log('[VoiceOverlay] User started conversation mode')
+                console.log('[VoiceOverlay] startSession called')
               }
             }}
             disabled={conversationMode}

@@ -526,6 +526,14 @@ class WakeWordService:
                     if "mode" in data:
                         self.conversation_mode_enabled = data["mode"] == "multi"
                         logger.info(f"Session mode set to: {'multi-turn' if self.conversation_mode_enabled else 'single'}")
+                        # Publish mode change back to dashboard for UI update
+                        if self.mqtt_client:
+                            self.mqtt_client.publish(
+                                f"voice_assistant/room/{self.room_id}/config/conversation_mode",
+                                "true" if self.conversation_mode_enabled else "false",
+                                retain=True
+                            )
+                            logger.info(f"Published conversation mode: {self.conversation_mode_enabled}")
                 except json.JSONDecodeError:
                     pass
         elif command == "stop":

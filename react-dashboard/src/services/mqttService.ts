@@ -425,12 +425,14 @@ class MqttService {
    * Publish a message to a topic.
    */
   publish(topic: string, payload: string): void {
+    console.log(`[MQTT] publish called: topic=${topic}, connected=${this.client?.connected}`)
     if (!this.client?.connected) {
       console.warn('[MQTT] Not connected, cannot publish')
       return
     }
 
     this.client.publish(topic, payload)
+    console.log(`[MQTT] Message published to ${topic}`)
   }
 
   /**
