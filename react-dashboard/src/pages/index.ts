@@ -1,5 +1,2 @@
-export { default as Overview } from './Overview'
-export { default as Lights } from './Lights'
-export { default as Climate } from './Climate'
-export { default as Sensors } from './Sensors'
-export { default as VoiceAssistant } from './VoiceAssistant'
+// Old pages removed - using KioskHome with horizontal panels
+export { default as KioskHome } from './KioskHome'

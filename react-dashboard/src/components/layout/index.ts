@@ -1,3 +1,1 @@
-export { default as KioskLayout } from './KioskLayout'
-export { default as Header } from './Header'
-export { default as Navigation } from './Navigation'
+// Old layout components removed - using KioskHome with HorizontalScroller instead
