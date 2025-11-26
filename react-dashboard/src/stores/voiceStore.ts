@@ -14,6 +14,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { VoiceState, STTComparison, VoiceMessage } from '../services/mqttService'
+import { DisplayAction } from '../components/kiosk/voice-overlay/types'
 
 export interface ConversationMessage {
   id: string
@@ -62,6 +63,9 @@ interface VoiceStore {
   debugEnabled: boolean
   debugLogs: DebugLogEntry[]
 
+  // Display action state
+  displayAction: DisplayAction | null
+
   // Actions - Session
   setSessionId: (sessionId: string | null) => void
   setVoiceState: (state: VoiceState) => void
@@ -95,6 +99,10 @@ interface VoiceStore {
   addDebugLog: (type: DebugLogType, message: string) => void
   clearDebugLogs: () => void
   toggleDebug: () => void
+
+  // Actions - Display
+  setDisplayAction: (action: DisplayAction | null) => void
+  clearDisplayAction: () => void
 }
 
 export const useVoiceStore = create<VoiceStore>()(
@@ -117,6 +125,7 @@ export const useVoiceStore = create<VoiceStore>()(
       triggerState: 'idle',
       debugEnabled: false,
       debugLogs: [],
+      displayAction: null,
 
       // Session actions
       setSessionId: (sessionId) => set({ sessionId }),
@@ -313,7 +322,15 @@ export const useVoiceStore = create<VoiceStore>()(
 
       clearDebugLogs: () => set({ debugLogs: [] }),
 
-      toggleDebug: () => set((state) => ({ debugEnabled: !state.debugEnabled }))
+      toggleDebug: () => set((state) => ({ debugEnabled: !state.debugEnabled })),
+
+      // Display actions
+      setDisplayAction: (action) => {
+        set({ displayAction: action })
+        get().addDebugLog('MQTT', `display_action: ${action?.type ?? 'null'}`)
+      },
+
+      clearDisplayAction: () => set({ displayAction: null })
     }),
     {
       name: 'voice-store',
@@ -340,3 +357,4 @@ export const useOverlayOpen = () => useVoiceStore((state) => state.overlayOpen)
 export const useLastComparison = () => useVoiceStore((state) => state.lastComparison)
 export const useDebugEnabled = () => useVoiceStore((state) => state.debugEnabled)
 export const useDebugLogs = () => useVoiceStore((state) => state.debugLogs)
+export const useDisplayAction = () => useVoiceStore((state) => state.displayAction)

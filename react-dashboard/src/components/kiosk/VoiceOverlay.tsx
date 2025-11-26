@@ -1,9 +1,15 @@
-import { useEffect, useRef } from 'react'
-import { Mic, X, Loader2, Volume2, Wifi, WifiOff, MessageCircle, Radio, Bug } from 'lucide-react'
+import { useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { mqttService, VoiceState } from '../../services/mqttService'
-import { classNames } from '../../utils/formatters'
-import { useVoiceStore, useDebugEnabled } from '../../stores/voiceStore'
+import { useVoiceStore, useDisplayAction } from '../../stores/voiceStore'
+import DisplayPanel from './voice-overlay/DisplayPanel'
+import ChatSection from './voice-overlay/ChatSection'
+import StatusIndicator from './voice-overlay/StatusIndicator'
+import ToolPanel from './voice-overlay/ToolPanel'
 import { DebugLogPanel } from './DebugLogPanel'
+
+// Feature flag for Phase 4 Tool Dashboard
+const TOOL_DASHBOARD_ENABLED = import.meta.env.VITE_TOOL_DASHBOARD_ENABLED === 'true'
 
 interface VoiceOverlayProps {
   isOpen: boolean
@@ -15,48 +21,15 @@ interface VoiceOverlayProps {
   initialState?: VoiceState
 }
 
-// Map VoiceState to display colors
-const stateColors: Record<VoiceState, string> = {
-  idle: 'bg-surface-light',
-  wake_detected: 'bg-info',
-  listening: 'bg-error shadow-lg shadow-error/50',
-  transcribing: 'bg-warning',
-  processing: 'bg-warning',
-  speaking: 'bg-success animate-pulse',
-  waiting: 'bg-primary',
-}
-
-// Map VoiceState to display text
-const stateLabels: Record<VoiceState, string> = {
-  idle: 'Ready',
-  wake_detected: 'Wake word detected!',
-  listening: 'Listening...',
-  transcribing: 'Transcribing...',
-  processing: 'Processing...',
-  speaking: 'Speaking...',
-  waiting: 'Waiting for response...',
-}
-
 export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', startOnOpen = false, initialState = 'idle' }: VoiceOverlayProps) {
   // Zustand store - single source of truth
   const {
     state,
-    sessionId,
     messages,
     conversationMode,
-    mqttConnected: connected,
-    lastComparison,
-    setVoiceState,
-    toggleDebug
+    setVoiceState
   } = useVoiceStore()
-  const debugEnabled = useDebugEnabled()
-
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  const displayAction = useDisplayAction()
 
   // Set room ID when it changes
   useEffect(() => {
@@ -95,219 +68,48 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
     onClose()
   }
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-black/90 backdrop-blur-sm">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4">
-        {/* Connection status and room info */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-light/50 text-sm">
-            {connected ? (
-              <>
-                <Wifi className="w-4 h-4 text-success" />
-                <span className="text-success">Connected</span>
-              </>
-            ) : (
-              <>
-                <WifiOff className="w-4 h-4 text-error" />
-                <span className="text-error">Connecting...</span>
-              </>
-            )}
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[100] flex flex-col bg-black/90 backdrop-blur-sm"
+        >
+          {/* Row 1: Header - Statuses, buttons, etc */}
+          <div className="flex-shrink-0">
+            <DisplayPanel
+              displayAction={displayAction}
+              roomId={roomId}
+              onClose={handleClose}
+            />
           </div>
 
-          {/* Room indicator */}
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-surface-light/30 text-sm text-text-secondary">
-            <Radio className="w-4 h-4" />
-            <span>{roomId}</span>
-          </div>
-
-          {/* Session ID (if active) */}
-          {sessionId && (
-            <div className="px-3 py-1 rounded-full bg-primary/20 text-sm text-primary">
-              Session: {sessionId.slice(-8)}
-            </div>
-          )}
-        </div>
-
-        {/* Mode indicator - click to start conversation mode */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => {
-              console.log('[VoiceOverlay] Button clicked, conversationMode:', conversationMode, 'connected:', connected)
-              if (!conversationMode) {
-                // Start conversation mode via MQTT
-                console.log('[VoiceOverlay] Calling mqttService.startSession("conversation")')
-                mqttService.startSession('conversation')
-                console.log('[VoiceOverlay] startSession called')
-              }
-            }}
-            disabled={conversationMode}
-            className={classNames(
-              "flex items-center gap-3 px-5 py-3 rounded-full transition-all duration-300",
-              conversationMode
-                ? "bg-orange-500 text-white shadow-xl shadow-orange-500/50 animate-pulse cursor-default ring-4 ring-orange-400/50"
-                : "bg-surface-light/30 text-text-secondary hover:bg-surface-light/50 cursor-pointer border-2 border-transparent hover:border-orange-400/50"
-            )}
-          >
-            <MessageCircle className={classNames("w-5 h-5", conversationMode && "animate-bounce")} />
-            <span className="text-base font-semibold">
-              {conversationMode ? "🔥 In conversation" : "Start conversation"}
-            </span>
-          </button>
-
-          {/* Debug toggle button */}
-          <button
-            onClick={toggleDebug}
-            className={classNames(
-              "p-3 rounded-full transition-colors",
-              debugEnabled
-                ? "bg-yellow-500/30 text-yellow-400"
-                : "bg-surface-light/30 text-text-secondary hover:bg-surface-light/50"
-            )}
-            title="Toggle debug log"
-          >
-            <Bug className="w-5 h-5" />
-          </button>
-
-          {/* Close button */}
-          <button
-            onClick={handleClose}
-            className="p-4 rounded-full bg-surface-light/50 hover:bg-red-500/80 hover:text-white transition-colors"
-          >
-            <X className="w-7 h-7" />
-          </button>
-        </div>
-      </div>
-
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-2">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-            <Mic className="w-16 h-16 mb-4 opacity-50" />
-            <p className="text-lg">Say "Hey Jarvis" to start</p>
-            <p className="text-sm mt-2">or wait for wake-word detection</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={classNames(
-                  'max-w-[85%] p-4 rounded-2xl',
-                  message.type === 'user'
-                    ? 'ml-auto bg-primary/20 rounded-br-sm'
-                    : 'mr-auto bg-surface rounded-bl-sm'
-                )}
-              >
-                <p className="text-sm text-text-secondary mb-1">
-                  {message.type === 'user' ? 'You' : 'Assistant'}
-                  {message.sttEngine && (
-                    <span className="ml-2 text-xs opacity-70">({message.sttEngine})</span>
-                  )}
-                </p>
-                <p className="text-lg whitespace-pre-wrap break-words">
-                  {message.text}
-                  {/* Blinking cursor for streaming messages */}
-                  {message.isStreaming && (
-                    <span className="inline-block w-[3px] h-5 ml-1 bg-primary animate-pulse align-middle" />
-                  )}
-                </p>
-                {/* Streaming indicator */}
-                {message.isStreaming && (
-                  <div className="flex items-center gap-2 mt-2 text-xs text-text-secondary">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Streaming...</span>
-                  </div>
-                )}
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-        )}
-      </div>
-
-      {/* Status indicator */}
-      <div className="p-6">
-        <div className="flex flex-col items-center gap-4">
-          {/* Pulsing indicator */}
-          <div className="relative">
-            {state === 'listening' && (
-              <>
-                <div className="absolute inset-0 rounded-full bg-error/30 animate-ping" style={{ animationDuration: '1.5s' }} />
-                <div className="absolute -inset-4 rounded-full bg-error/20 animate-ping" style={{ animationDuration: '2s' }} />
-              </>
-            )}
-
-            {state === 'wake_detected' && (
-              <>
-                <div className="absolute inset-0 rounded-full bg-info/30 animate-ping" style={{ animationDuration: '0.5s' }} />
-              </>
-            )}
-
-            <div
-              className={classNames(
-                'relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300',
-                stateColors[state]
-              )}
-            >
-              {(state === 'processing' || state === 'transcribing') ? (
-                <Loader2 className="w-8 h-8 text-white animate-spin" />
-              ) : state === 'speaking' ? (
-                <Volume2 className="w-8 h-8 text-white" />
+          {/* Row 2: Three-column layout */}
+          <div className="flex-1 flex overflow-hidden">
+            {/* Left Panel: Tool Dashboard (Phase 4) or Debug Logs (legacy) - flex to take available space */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {TOOL_DASHBOARD_ENABLED ? (
+                <ToolPanel roomId={roomId} />
               ) : (
-                <Mic className="w-8 h-8 text-white" />
+                <DebugLogPanel />
               )}
             </div>
-          </div>
 
-          {/* Status text */}
-          <div className="text-center">
-            <p className={classNames(
-              'text-lg font-medium',
-              state === 'listening' && 'text-error animate-pulse',
-              state === 'wake_detected' && 'text-info',
-              (state === 'processing' || state === 'transcribing') && 'text-warning',
-              state === 'speaking' && 'text-success',
-              state === 'waiting' && 'text-primary',
-              state === 'idle' && 'text-text-secondary'
-            )}>
-              {stateLabels[state]}
-            </p>
-            {state === 'idle' && conversationMode && (
-              <p className="text-sm text-text-secondary mt-1">
-                Say 'koniec' to end conversation
-              </p>
-            )}
-            {state === 'idle' && !conversationMode && messages.length > 0 && (
-              <p className="text-sm text-text-secondary mt-1">
-                Done - closing shortly...
-              </p>
-            )}
-          </div>
-
-          {/* STT Comparison (debug info) */}
-          {lastComparison && (
-            <div className="w-full max-w-md p-3 bg-surface/50 rounded-lg text-xs">
-              <div className="flex justify-between mb-1">
-                <span className={lastComparison.selected === 'vosk' ? 'text-success font-bold' : 'text-text-secondary'}>
-                  Vosk: {lastComparison.vosk.duration}s
-                </span>
-                <span className={lastComparison.selected === 'whisper' ? 'text-success font-bold' : 'text-text-secondary'}>
-                  Whisper: {lastComparison.whisper.duration}s
-                </span>
-              </div>
-              <p className="text-text-secondary text-center">
-                Selected: {lastComparison.selected} ({lastComparison.reason})
-              </p>
+            {/* Center Panel: Status indicator (fixed width) */}
+            <div className="flex items-end justify-center p-6" style={{ flexBasis: '200px', flexShrink: 0, flexGrow: 0 }}>
+              <StatusIndicator state={state} conversationMode={conversationMode} />
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* Debug Log Panel */}
-      <DebugLogPanel />
-    </div>
+            {/* Right Panel: Chat messages - flex to take available space */}
+            <div className="flex-1 flex flex-col overflow-y-auto scrollbar-hide">
+              <ChatSection messages={messages} />
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }

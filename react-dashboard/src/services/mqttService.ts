@@ -205,6 +205,8 @@ class MqttService {
       `${roomPrefix}/session/+/response/stream/start`,
       `${roomPrefix}/session/+/response/stream/chunk`,
       `${roomPrefix}/session/+/response/stream/complete`,
+      // Display action topics (Phase 12)
+      `${roomPrefix}/session/+/display_action`,
       // Configuration
       `${roomPrefix}/config/conversation_mode`,
       // STT comparison (optional debug)
@@ -241,6 +243,8 @@ class MqttService {
       `${roomPrefix}/session/+/response/stream/start`,
       `${roomPrefix}/session/+/response/stream/chunk`,
       `${roomPrefix}/session/+/response/stream/complete`,
+      // Display action topics (Phase 12)
+      `${roomPrefix}/session/+/display_action`,
       `${roomPrefix}/config/conversation_mode`,
       `${roomPrefix}/stt_comparison`,
     ]
@@ -446,6 +450,19 @@ class MqttService {
         console.log(`[MQTT] Streaming response complete: ${totalTokens} tokens in ${duration.toFixed(2)}s`)
       } catch (e) {
         console.error('[MQTT] Failed to parse stream complete:', e)
+      }
+      return
+    }
+
+    // session/{session_id}/display_action (Phase 12 - action-dependent display panels)
+    const displayActionMatch = subTopic.match(/^session\/([^/]+)\/display_action$/)
+    if (displayActionMatch) {
+      try {
+        const action = JSON.parse(payload)
+        store.setDisplayAction(action)
+        console.log(`[MQTT] Display action: ${action.type}`, action.data)
+      } catch (e) {
+        console.error('[MQTT] Failed to parse display_action:', e)
       }
       return
     }

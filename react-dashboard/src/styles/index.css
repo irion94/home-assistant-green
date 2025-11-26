@@ -162,14 +162,3 @@
 .animate-pulse-ring {
   animation: pulse-ring 2s ease-in-out infinite;
 }
-
-
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-}

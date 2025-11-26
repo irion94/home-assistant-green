@@ -52,8 +52,8 @@ export function DebugLogPanel() {
   }
 
   return (
-    <div className="border-t border-white/10 p-3 bg-black/30">
-      <div className="flex justify-between items-center mb-2">
+    <div className="flex-1 flex flex-col p-3 bg-black/30">
+      <div className="flex justify-between items-center mb-2 flex-shrink-0">
         <span className="text-xs text-gray-400 font-medium">
           Debug Log ({debugLogs.length})
         </span>
@@ -64,7 +64,7 @@ export function DebugLogPanel() {
           Clear
         </button>
       </div>
-      <div className="h-32 overflow-y-auto bg-black/60 rounded-lg font-mono text-xs p-2 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
+      <div className="flex-1 overflow-y-auto bg-black/60 rounded-lg font-mono text-xs p-2 scrollbar-hide">
         {debugLogs.length === 0 ? (
           <div className="text-gray-500 italic">No logs yet...</div>
         ) : (

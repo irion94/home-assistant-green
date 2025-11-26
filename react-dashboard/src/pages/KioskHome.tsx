@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { Mic } from 'lucide-react'
 import HorizontalScroller from '../components/kiosk/HorizontalScroller'
 import KioskPanel from '../components/kiosk/KioskPanel'
@@ -126,16 +127,26 @@ export default function KioskHome() {
         </KioskPanel>
       </HorizontalScroller>
 
-      {/* Floating Voice Button */}
-      <button
-        onClick={() => {
-          // Open overlay and start session via MQTT
-          openOverlay(true)  // true = start session when opened
-        }}
-        className="fixed bottom-6 right-6 w-16 h-16 rounded-full bg-primary shadow-lg shadow-primary/30 flex items-center justify-center hover:bg-primary-dark transition-colors z-50"
-      >
-        <Mic className="w-7 h-7 text-white" />
-      </button>
+      {/* Floating Voice Button - morphs to StatusIndicator when overlay opens */}
+      {!overlayOpen && (
+        <motion.button
+          layoutId="voice-button"
+          onClick={() => {
+            // Open overlay and start session via MQTT
+            openOverlay(true)  // true = start session when opened
+          }}
+          className="fixed bottom-6 right-6 w-16 h-16 rounded-full bg-primary shadow-lg shadow-primary/30 flex items-center justify-center hover:bg-primary-dark transition-colors z-50"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{
+            type: "spring",
+            stiffness: 300,
+            damping: 30
+          }}
+        >
+          <Mic className="w-7 h-7 text-white" />
+        </motion.button>
+      )}
 
       {/* Voice Overlay - Now reads from Zustand store */}
       <VoiceOverlay
