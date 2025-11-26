@@ -13,6 +13,7 @@ from typing import Any
 from app.services.web_search import get_web_search_client
 from app.services.ha_client import HomeAssistantClient
 from app.services.entities import ROOM_ENTITIES, ROOM_NAMES, SENSOR_ENTITIES
+from app.services.mqtt_client import get_mqtt_client, ensure_mqtt_connected
 
 logger = logging.getLogger(__name__)
 
@@ -98,14 +99,23 @@ class ToolExecutor:
     def __init__(self, ha_client: HomeAssistantClient | None = None):
         self.ha_client = ha_client
         self.web_search = get_web_search_client()
+        self.mqtt_client = get_mqtt_client()
 
-    async def execute(self, tool_name: str, arguments: dict) -> str:
+    async def execute(
+        self,
+        tool_name: str,
+        arguments: dict,
+        room_id: str | None = None,
+        session_id: str | None = None
+    ) -> str:
         """
         Execute a tool and return the result.
 
         Args:
             tool_name: Name of the tool to execute
             arguments: Tool arguments
+            room_id: Room identifier for MQTT display actions (Phase 12)
+            session_id: Session identifier for MQTT display actions (Phase 12)
 
         Returns:
             Result string to be sent back to the LLM
@@ -114,9 +124,9 @@ class ToolExecutor:
 
         try:
             if tool_name == "web_search":
-                return await self._execute_web_search(arguments)
+                return await self._execute_web_search(arguments, room_id, session_id)
             elif tool_name == "control_light":
-                return await self._execute_control_light(arguments)
+                return await self._execute_control_light(arguments, room_id, session_id)
             elif tool_name == "get_time":
                 return self._execute_get_time(arguments)
             elif tool_name == "get_home_data":
@@ -128,7 +138,12 @@ class ToolExecutor:
             logger.error(f"Tool execution error: {e}")
             return f"Error executing {tool_name}: {str(e)}"
 
-    async def _execute_web_search(self, arguments: dict) -> str:
+    async def _execute_web_search(
+        self,
+        arguments: dict,
+        room_id: str | None = None,
+        session_id: str | None = None
+    ) -> str:
         """Execute web search and return formatted results."""
         query = arguments.get("query", "")
 
@@ -146,10 +161,36 @@ class ToolExecutor:
         if not result.get("results"):
             return f"No results found for: {query}"
 
+        # Publish display action for React Dashboard (Phase 12)
+        if room_id and session_id:
+            ensure_mqtt_connected()
+            search_results = result.get("results", [])[:5]  # Top 5 results
+            self.mqtt_client.publish_display_action(
+                action_type="search_results",
+                action_data={
+                    "query": query,
+                    "results": [
+                        {
+                            "title": r.get("title", ""),
+                            "url": r.get("url", ""),
+                            "snippet": r.get("snippet", "")
+                        }
+                        for r in search_results
+                    ]
+                },
+                room_id=room_id,
+                session_id=session_id
+            )
+
         # Format results for LLM
         return self.web_search.format_for_llm(result)
 
-    async def _execute_control_light(self, arguments: dict) -> str:
+    async def _execute_control_light(
+        self,
+        arguments: dict,
+        room_id: str | None = None,
+        session_id: str | None = None
+    ) -> str:
         """Execute light control command."""
         room = arguments.get("room", "")
         action = arguments.get("action", "")
@@ -194,6 +235,23 @@ class ToolExecutor:
             )
 
         result = await self.ha_client.call_service(ha_action)
+
+        # Publish display action for React Dashboard (Phase 12)
+        if room_id and session_id and result is not None:
+            ensure_mqtt_connected()
+            # Get list of entities that were controlled
+            entities = all_light_entities if entity_id == "all" else [entity_id]
+
+            self.mqtt_client.publish_display_action(
+                action_type="light_control",
+                action_data={
+                    "room": room,
+                    "entities": entities,
+                    "action": action
+                },
+                room_id=room_id,
+                session_id=session_id
+            )
 
         # call_service returns None on failure, empty list [] on success
         if result is not None:
@@ -269,10 +327,57 @@ class ToolExecutor:
 
 
 def get_tools() -> list:
-    """Get list of available tools in OpenAI format."""
+    """Get list of available tools in OpenAI format.
+
+    Returns old TOOLS list by default. When NEW_TOOLS_ENABLED=true,
+    returns schemas from ToolRegistry instead (managed in main.py).
+    """
+    import os
+    if os.getenv("NEW_TOOLS_ENABLED", "false").lower() == "true":
+        from app.services.tools.registry import tool_registry
+        return tool_registry.get_schemas()
     return TOOLS
 
 
-def get_tool_executor(ha_client: HomeAssistantClient = None) -> ToolExecutor:
-    """Get tool executor instance."""
+class ToolRegistryAdapter:
+    """Adapter to make ToolRegistry compatible with old ToolExecutor interface.
+
+    Converts ToolResult to string for backward compatibility.
+    """
+
+    def __init__(self, registry):
+        self.registry = registry
+
+    async def execute(
+        self,
+        tool_name: str,
+        arguments: dict,
+        room_id: str | None = None,
+        session_id: str | None = None
+    ) -> str:
+        """Execute tool and return string result (not ToolResult).
+
+        Args:
+            tool_name: Name of tool to execute
+            arguments: Tool arguments
+            room_id: Room identifier
+            session_id: Session identifier
+
+        Returns:
+            String result for backward compatibility
+        """
+        result = await self.registry.execute(tool_name, arguments, room_id, session_id)
+        return result.content  # Extract string content from ToolResult
+
+
+def get_tool_executor(ha_client: HomeAssistantClient = None) -> ToolExecutor | ToolRegistryAdapter:
+    """Get tool executor instance.
+
+    Returns old ToolExecutor by default. When NEW_TOOLS_ENABLED=true,
+    returns ToolRegistry wrapped in compatibility adapter.
+    """
+    import os
+    if os.getenv("NEW_TOOLS_ENABLED", "false").lower() == "true":
+        from app.services.tools.registry import tool_registry
+        return ToolRegistryAdapter(tool_registry)
     return ToolExecutor(ha_client)

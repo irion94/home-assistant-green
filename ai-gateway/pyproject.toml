@@ -15,6 +15,7 @@ dependencies = [
     "rapidfuzz>=3.0.0",
     "vosk>=0.3.45",
     "pytz>=2023.3",
+    "paho-mqtt>=1.6.1",
     # Database
     "asyncpg>=0.29.0",
     "pgvector>=0.2.0",
