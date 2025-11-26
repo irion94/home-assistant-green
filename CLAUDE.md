@@ -25,19 +25,28 @@ All services run via Docker with persistent SSD storage.
 - ✅ Custom components (Strava Coach, Daikin, Solarman, etc.)
 - ✅ **Wake-Word Detection (OpenWakeWord - "Hey Jarvis", 90-98% accuracy)**
 - ✅ **Audio Recording (7 seconds after wake-word)**
-- ✅ **Audio Transcription (Vosk - offline speech-to-text)**
+- ✅ **Audio Transcription (Vosk - offline speech-to-text, Whisper fallback)**
 - ✅ **Conversation Mode (multi-turn dialogue with interrupt support)**
 - ✅ **TTS Response (Coqui TTS local playback via ReSpeaker)**
 - ✅ **Display Notifications (transcriptions shown on Nest Hub)**
 - ✅ **LLM Function Calling (OpenAI tools for web search, device control, sensors)**
 - ✅ **Web Search Integration (Brave Search API)**
 - ✅ **TTS Text Normalization (units like °C, km/h spoken correctly)**
-- ✅ **React Dashboard (browser-based voice interface with Web Speech API)**
-- ✅ **Browser STT/TTS (Web Speech API for local speech recognition & synthesis)**
+- ✅ **React Dashboard (browser-based voice interface with MQTT integration)**
+- ✅ **Zustand State Management (centralized voice state, eliminates race conditions)**
+- ✅ **Streaming TTS (sentence-by-sentence SSE for reduced latency)**
+- ✅ **Dynamic Entity Discovery (AI semantic matching for HA entities)**
+- ✅ **Advanced Entity Control (brightness, color, ambient moods)**
+- ✅ **Fallback Pipeline (Vosk→Whisper STT, Pattern→LLM intent, VITS→XTTS TTS)**
+- ✅ **Technical Debt Refactoring (consolidated entities, split routers, improved tests)**
+- ✅ **Streaming STT (real-time interim transcripts, 0.5-1s first feedback, confidence-based Whisper fallback)**
+- ✅ **Enhanced STT Accuracy (comprehensive Polish vocabulary hints, configurable confidence threshold)**
+- ✅ **Conversation Streaming with Function Calling (LLM tools execute during voice interactions)**
+- ✅ **Multi-Entity Light Control (all 7 lights controlled via "all lights" command)**
 
 **Missing Components:**
 - ❌ Custom wake-word model (Rico - needs retraining)
-- ❌ Streaming with Function Calling (`/voice/stream` endpoint)
+- ❌ Dedicated Kiosk Display (currently using Nest Hub as interim)
 
 ## Architecture
 
@@ -100,23 +109,43 @@ All services run via Docker with persistent SSD storage.
 - Ollama runs on host, accessed via `host.docker.internal:11434`
 
 **Key Files:**
+
+*AI Gateway:*
 - `ai-gateway/app/main.py` — FastAPI application entry point
-- `ai-gateway/app/routers/gateway.py` — `/ask`, `/conversation`, `/conversation/voice` endpoints
+- `ai-gateway/app/routers/ask.py` — `/ask` endpoint
+- `ai-gateway/app/routers/voice.py` — `/voice`, `/voice/stream` SSE endpoints
+- `ai-gateway/app/routers/conversation.py` — `/conversation` endpoints
 - `ai-gateway/app/services/ollama_client.py` — Ollama LLM integration
+- `ai-gateway/app/services/openai_client.py` — OpenAI API integration
 - `ai-gateway/app/services/ha_client.py` — Home Assistant API client
 - `ai-gateway/app/services/intent_matcher.py` — Pattern matching for commands
-- `ai-gateway/app/services/conversation_client.py` — Conversation state management with function calling
-- `ai-gateway/app/services/llm_tools.py` — LLM tool definitions (web_search, control_light, get_home_data, get_time)
+- `ai-gateway/app/services/conversation_client.py` — Conversation state + function calling
+- `ai-gateway/app/services/entity_discovery.py` — Dynamic HA entity discovery
+- `ai-gateway/app/services/entities.py` — Centralized entity mappings (single source of truth)
+- `ai-gateway/app/services/llm_tools.py` — LLM tool definitions
 - `ai-gateway/app/services/web_search.py` — Brave Search API client
-- `ai-gateway/docker-compose.yml` — Service orchestration (HA, MQTT, AI Gateway, Wake-word)
-- `wake-word-service/app/main.py` — Wake-word detection loop with conversation mode
+- `ai-gateway/app/services/pipeline/executor.py` — Intent pipeline execution
+- `ai-gateway/app/services/pipeline/stt_pipeline.py` — Vosk→Whisper STT cascade
+- `ai-gateway/docker-compose.yml` — Service orchestration
+
+*Wake-Word Service:*
+- `wake-word-service/app/main.py` — Detection loop + conversation mode + streaming STT
 - `wake-word-service/app/detector.py` — OpenWakeWord TFLite/ONNX detection
-- `wake-word-service/app/tts_service.py` — TTS with text normalization for units
-- `wake-word-service/app/ai_gateway_client.py` — HTTP client for AI Gateway
-- `react-dashboard/src/pages/VoiceAssistant.tsx` — Voice interface with Web Speech API STT/TTS
+- `wake-word-service/app/streaming_transcriber.py` — Vosk streaming STT with interim results
+- `wake-word-service/app/tts_service.py` — TTS with text normalization
+- `wake-word-service/app/audio_capture.py` — Audio recording with VAD + streaming callback
+- `wake-word-service/app/feedback.py` — LED feedback states
+
+*React Dashboard:*
+- `react-dashboard/src/stores/voiceStore.ts` — Zustand state management
+- `react-dashboard/src/services/mqttService.ts` — MQTT client with Zustand integration
+- `react-dashboard/src/components/kiosk/VoiceOverlay.tsx` — Voice interaction overlay
+- `react-dashboard/src/components/kiosk/KioskHome.tsx` — Kiosk main view
 - `react-dashboard/src/api/gatewayClient.ts` — AI Gateway API client
 - `react-dashboard/src/api/haWebSocket.ts` — Home Assistant WebSocket client
-- `react-dashboard/src/types/api.ts` — API response types
+
+*Documentation:*
+- `docs/FALLBACK_PIPELINE.md` — Detailed pipeline architecture and phases
 
 ## Development Phases
 
@@ -232,45 +261,140 @@ All services run via Docker with persistent SSD storage.
 - Toggle TTS on/off
 - Stop speaking with volume button
 
-### Phase 4: Integration 🔲 (Planned)
+### Phase 4: Integration ✅ (COMPLETE)
 
 **Objective**: Connect all components into unified system
 
-**Integration Flow**:
-1. User speaks wake word
-2. Voice module detects → triggers AI Gateway
-3. AI Gateway captures audio → transcribes (Whisper/Vosk)
-4. Transcription → Ollama for intent extraction
-5. Ollama returns JSON plan → AI Gateway executes HA service
-6. Home Assistant performs action
-7. State update → Display UI reflects change
-8. Audio/visual feedback to user
+**What's Working**:
+- ✅ Wake-word triggers AI Gateway via HTTP
+- ✅ Vosk→Whisper STT cascade with confidence thresholds
+- ✅ Pattern→LLM intent pipeline with fallback to AI conversation
+- ✅ Home Assistant service execution
+- ✅ MQTT-based state sync between services
+- ✅ React Dashboard with Zustand state management
+- ✅ Streaming TTS (sentence-by-sentence SSE)
 
-**Docker Orchestration**:
-- Unified `docker-compose.yml` in project root
+**Docker Orchestration** (`ai-gateway/docker-compose.yml`):
 - All services with proper dependencies (`depends_on`)
 - Shared network for inter-service communication
-- Persistent volumes on SSD:
-  - `/mnt/ssd/ha-config` → Home Assistant config
-  - `/mnt/ssd/ollama-models` → Ollama model storage
-  - `/mnt/ssd/mqtt-data` → MQTT persistence
+- Persistent volumes on SSD
+- Health checks for all services
 
-### Phase 5: Production Hardening 🔲 (Planned)
+### Phase 5: Voice UX Refinement ✅ (COMPLETE)
 
-**Objective**: Make system reliable and production-ready
+**Objective**: Improve voice interaction user experience
 
-**Components**:
-- Auto-recovery on failures (restart policies)
-- Centralized logging (Loki/Grafana or simple journald)
-- Monitoring (Prometheus + HA integrations)
-- Backup strategy:
-  - Daily HA backups
-  - Ollama model snapshots
-  - Configuration backups to Git
-- Documentation:
-  - Setup guide
-  - Troubleshooting playbook
-  - Architecture diagrams
+**What's Working**:
+- ✅ Zustand state management (eliminates callback race conditions)
+- ✅ MQTT topic structure: `voice_assistant/room/{room_id}/...`
+- ✅ Conversation mode via voice ("porozmawiajmy") or UI button
+- ✅ Orange animated conversation mode indicator
+- ✅ Auto-overlay on wake-word detection
+- ✅ Session-based message history
+
+### Phase 6-8: Advanced Features ✅ (COMPLETE)
+
+**Phase 6 - Streaming TTS**:
+- ✅ SSE endpoint `/voice/stream` for sentence-by-sentence streaming
+- ✅ TTS queue management with interrupt support
+- ✅ Reduced first-word latency (2-4s → 0.5-1s)
+
+**Phase 7 - Dynamic Entity Discovery**:
+- ✅ Automatic entity mapping using AI semantic matching
+- ✅ No manual entity configuration required
+- ✅ LLM caching + pattern auto-learning
+- ✅ Brightness, color (RGB, kelvin), transition control
+- ✅ Ambient mood creation ("romantyczny klimat", "tryb kino")
+- ✅ Multi-action scene execution
+- ✅ Polish color name mapping
+
+**Phase 8 - Streaming STT**:
+- ✅ Real-time interim transcripts via Vosk streaming API
+- ✅ MQTT topics: `transcript/interim`, `transcript/final`, `transcript/refined`
+- ✅ Confidence-based Whisper fallback (< 70% threshold)
+- ✅ Reduced perceived latency: 8-13s → 0.5-1s for first feedback
+- ✅ Debug Panel integration for interim results
+- ✅ Feature flag for easy rollback (`STREAMING_STT_ENABLED`)
+- ✅ `StreamingTranscriber` class with `process_chunk()` and `finalize()`
+- ✅ `record_streaming()` method with per-chunk callbacks
+- ✅ Sequence tracking for interim result ordering
+- ✅ 70% CPU savings when Whisper refinement not needed
+
+**Documentation**: `docs/STREAMING_STT.md`
+
+### Phase 9: Streaming Response Integration ✅ (COMPLETE)
+
+**Objective**: Token-by-token streaming responses integrated with VoiceOverlay via MQTT
+
+**Implementation**:
+- ✅ Backend streaming client (`send_conversation_stream()` in wake-word service)
+- ✅ Zustand streaming state management (`isStreaming`, `streamingContent`, etc.)
+- ✅ MQTT streaming topics: `response/stream/start`, `response/stream/chunk`, `response/stream/complete`
+- ✅ VoiceOverlay UI with blinking cursor and streaming indicator
+- ✅ Removed legacy response publishing to prevent duplicate messages
+- ✅ Auto-close delay during streaming to prevent premature overlay closure
+
+**Architecture**:
+```
+Wake-word service → AI Gateway /conversation/stream (SSE)
+     ↓
+Token-by-token callback → Publish to MQTT topics
+     ↓
+React Dashboard MQTT handlers → Zustand store updates
+     ↓
+VoiceOverlay renders streaming message with blinking cursor
+```
+
+**What's Working**:
+- Token-by-token streaming with 0.5-1s first token latency
+- Real-time UI updates via MQTT pub/sub
+- Blinking cursor visual feedback during streaming
+- Single message bubble (no duplicates)
+- Overlay stays open until streaming completes
+
+**Key Files**:
+- `wake-word-service/app/ai_gateway_client.py` — Async streaming client
+- `wake-word-service/app/main.py` — Streaming integration in `process_interaction()`
+- `react-dashboard/src/stores/voiceStore.ts` — Streaming state management
+- `react-dashboard/src/services/mqttService.ts` — MQTT streaming handlers
+- `react-dashboard/src/components/kiosk/VoiceOverlay.tsx` — Streaming UI
+
+### Phase 10: Technical Debt ✅ (COMPLETE)
+
+- ✅ Consolidated entity mappings (`entities.py`)
+- ✅ Split `gateway.py` into modular routers
+- ✅ Created `.env.example` template
+- ✅ Improved test coverage (intent_matcher, llm_tools, web_search)
+- ✅ Docker security improvements (capabilities vs privileged)
+- ⚠️ Manual: Rotate exposed API keys
+
+### Phase 11: STT Enhancements & Function Calling ✅ (COMPLETE)
+
+**Objective**: Improve STT accuracy and enable function calling in conversation streaming
+
+**What's Working**:
+- ✅ Enhanced Whisper vocabulary hints (comprehensive Polish home automation phrases)
+- ✅ Configurable STT confidence threshold (environment variable `STT_CONFIDENCE_THRESHOLD`)
+- ✅ Word boundary matching for end command detection (fixes false positives like "pa" in "sypialni")
+- ✅ Function calling in `/conversation/stream` endpoint (LLM can execute tools during streaming)
+- ✅ Multi-entity light control (all 7 lights controlled when room="all")
+
+**Key Files Updated**:
+- `ai-gateway/app/services/whisper_client.py` - Enhanced vocabulary hints
+- `ai-gateway/app/services/conversation_client.py` - Tool calling in both `chat_stream()` and `chat_stream_sentences()`
+- `ai-gateway/app/services/llm_tools.py` - Fixed "all lights" to control 7 individual entities
+- `wake-word-service/app/main.py` - Word boundary regex for end command detection
+
+### Phase 12: Dedicated Kiosk Display 🔲 (PLANNED)
+
+**Objective**: Replace Nest Hub with dedicated RPi display
+
+- 🔲 Chromium kiosk mode on RPi5
+- 🔲 Custom Lovelace voice feedback card
+- 🔲 SSE integration for real-time updates
+- 🔲 Touch screen support
+
+See `docs/FALLBACK_PIPELINE.md` for detailed implementation notes.
 
 ## AI Assistant Operation Rules
 
@@ -412,6 +536,27 @@ docker-compose restart wake-word
 
 # Check current configuration
 docker-compose exec wake-word env | grep -E "WAKE_WORD|THRESHOLD|FRAMEWORK"
+
+# Check streaming STT status
+docker-compose logs wake-word | grep "Streaming STT"
+# Should see: "Streaming STT initialized (Vosk, confidence threshold: 0.7)"
+
+# Monitor interim transcripts via MQTT
+docker-compose exec mosquitto mosquitto_sub -t "voice_assistant/room/+/session/+/transcript/#" -v
+
+# Disable streaming STT (rollback to batch mode)
+# In docker-compose.yml, add: STREAMING_STT_ENABLED=false
+# Then: docker-compose restart wake-word
+
+# Adjust STT confidence threshold (AI Gateway)
+# Controls when Vosk triggers Whisper fallback (0.0-1.0)
+# Lower = more Whisper (slower, more accurate), Higher = more Vosk (faster)
+# In docker-compose.yml: STT_CONFIDENCE_THRESHOLD=0.6
+# Then: docker-compose restart ai-gateway
+
+# Adjust streaming STT confidence threshold (Wake-Word Service)
+# In docker-compose.yml: STREAMING_STT_CONFIDENCE_THRESHOLD=0.6
+# Then: docker-compose restart wake-word
 ```
 
 ### React Dashboard
@@ -445,24 +590,47 @@ npm run dev
 /mnt/data-ssd/
 ├── home-assistant-green/               # Main repository (on SSD)
     ├── README.md                       # Repository documentation
-    ├── CLAUDE.md                       # Repository-specific Claude guide
     ├── ai-gateway/                     # AI Gateway subproject
-    │   ├── docker-compose.yml          # HA + MQTT + AI Gateway orchestration
+    │   ├── docker-compose.yml          # HA + MQTT + AI Gateway + Wake-word orchestration
     │   ├── Dockerfile                  # AI Gateway container image
+    │   ├── .env.example                # Environment template
     │   ├── app/
     │   │   ├── main.py                 # FastAPI app entry point
-    │   │   ├── routers/gateway.py      # /ask endpoint
+    │   │   ├── models.py               # Pydantic models + Config
+    │   │   ├── routers/
+    │   │   │   ├── ask.py              # /ask endpoint
+    │   │   │   ├── voice.py            # /voice, /voice/stream endpoints
+    │   │   │   ├── conversation.py     # /conversation endpoints
+    │   │   │   └── dependencies.py     # Shared FastAPI dependencies
     │   │   ├── services/
     │   │   │   ├── ollama_client.py    # Ollama LLM integration
-    │   │   │   └── ha_client.py        # Home Assistant API client
+    │   │   │   ├── openai_client.py    # OpenAI API integration
+    │   │   │   ├── ha_client.py        # Home Assistant API client
+    │   │   │   ├── intent_matcher.py   # Pattern matching
+    │   │   │   ├── conversation_client.py  # Conversation + function calling
+    │   │   │   ├── entity_discovery.py # Dynamic entity discovery
+    │   │   │   ├── entities.py         # Centralized entity mappings
+    │   │   │   ├── llm_tools.py        # LLM tool definitions
+    │   │   │   ├── web_search.py       # Brave Search client
+    │   │   │   └── pipeline/
+    │   │   │       ├── executor.py     # Intent pipeline
+    │   │   │       └── stt_pipeline.py # STT cascade
     │   │   └── utils/
-    │   └── tests/                      # AI Gateway tests
-    ├── react-dashboard/                 # React voice dashboard
+    │   │       └── text.py             # Language detection, formatting
+    │   ├── tests/                      # AI Gateway tests
+    │   └── docs/
+    │       └── FALLBACK_PIPELINE.md    # Pipeline architecture
+    ├── react-dashboard/                # React voice dashboard
     │   ├── Dockerfile                  # Production container
     │   ├── src/
-    │   │   ├── pages/
-    │   │   │   ├── VoiceAssistant.tsx  # Voice UI with Web Speech API
-    │   │   │   └── Dashboard.tsx       # Entity controls
+    │   │   ├── stores/
+    │   │   │   └── voiceStore.ts       # Zustand state management
+    │   │   ├── services/
+    │   │   │   └── mqttService.ts      # MQTT client
+    │   │   ├── components/
+    │   │   │   └── kiosk/
+    │   │   │       ├── KioskHome.tsx   # Main kiosk view
+    │   │   │       └── VoiceOverlay.tsx # Voice interaction UI
     │   │   ├── api/
     │   │   │   ├── gatewayClient.ts    # AI Gateway client
     │   │   │   └── haWebSocket.ts      # HA WebSocket client
@@ -471,9 +639,12 @@ npm run dev
     ├── wake-word-service/              # Wake-word detection service
     │   ├── Dockerfile                  # Service container
     │   ├── app/
-    │   │   ├── main.py                 # Detection loop
-    │   │   ├── detector.py             # OpenWakeWord
-    │   │   └── tts_service.py          # TTS playback
+    │   │   ├── main.py                 # Detection loop + conversation mode
+    │   │   ├── detector.py             # OpenWakeWord detection
+    │   │   ├── audio_capture.py        # Audio recording with VAD
+    │   │   ├── tts_service.py          # TTS playback + normalization
+    │   │   ├── feedback.py             # LED states
+    │   │   └── ai_gateway_client.py    # HTTP client
     │   └── README.md                   # Setup documentation
     ├── kiosk-service/                  # Chromium kiosk (alternative)
     │   ├── kiosk.service               # Systemd unit file
@@ -488,54 +659,60 @@ npm run dev
     └── docs/                           # Additional documentation
 ```
 
+## Recent Updates (2025-11-26)
+
+### STT Enhancements & Bug Fixes
+- **Enhanced Whisper Vocabulary**: Added comprehensive Polish home automation vocabulary hints covering lights, climate, media, sensors, and conversation commands. Expected 15-25% improvement in domain-specific recognition.
+- **Configurable STT Threshold**: Added `STT_CONFIDENCE_THRESHOLD` environment variable (default: 0.7) to tune Vosk→Whisper fallback behavior.
+- **End Command Fix**: Fixed false positive detection where "pa" in words like "sypialni" (bedroom) was incorrectly triggering conversation end. Now uses word boundary regex matching.
+
+### Function Calling in Conversation
+- **Streaming Tool Execution**: LLM can now execute tools (control_light, web_search, etc.) during streaming conversations via `/conversation/stream` endpoint.
+- **Dual Method Support**: Function calling implemented in both `chat_stream()` (token-by-token) and `chat_stream_sentences()` (sentence-by-sentence) methods.
+- **Proper Error Handling**: Tool executor uses `.execute()` method correctly, with full error logging and recovery.
+
+### Light Control Improvements
+- **Multi-Entity Control**: "All lights" command now properly controls all 7 individual light entities instead of invalid "all" entity.
+- **Correct API Usage**: Multi-entity commands now pass list in `data["entity_id"]` field per HA API conventions.
+
+**Commits:**
+- `0885cc9` feat: enhance Whisper vocabulary hints for Polish home automation
+- `11cc091` feat: add configurable STT confidence threshold
+- `a8b35aa` fix: use word boundary matching for end command detection
+- `519bf8f` feat: add function calling support to conversation streaming
+- `b0ed56c` fix: control all 7 lights when room="all" requested
+
 ## Next Steps
 
-1. **Custom Wake-Word Training**:
-   - Retrain "Rico" wake-word model with better parameters
+### Short-Term (Phase 12)
+
+1. **Dedicated Kiosk Display**:
+   - Configure Chromium kiosk on RPi5 with 7" touchscreen
+   - Create custom Lovelace card for voice feedback
+   - Integrate SSE streaming for real-time updates
+   - Replace Nest Hub dependency
+
+### Future Enhancements
+
+3. **Custom Wake-Word**:
+   - Retrain "Rico" model with better parameters
    - Test ONNX vs TFLite performance
-   - Adjust detection thresholds
 
-2. **TTS Voice Improvement**:
-   - Try different Coqui TTS models for more natural conversation
-   - Consider XTTS v2 (requires more storage, moved Docker to SSD)
-   - Test multi-language support (Polish/English)
-   - Evaluate voice quality vs. performance trade-offs
+4. **Multi-Room Support**:
+   - Room-based entity discovery
+   - Location-aware commands
+   - Cross-room audio routing
 
-3. **Conversation Mode Refinement**:
-   - Fine-tune TTS wait time calculations
-   - Improve interrupt detection accuracy
-   - Test notify entity for different displays
-   - Add visual feedback during processing
+5. **Additional LLM Tools**:
+   - Climate control (set temperature, HVAC modes)
+   - Media playback (Spotify, local media)
+   - Calendar integration
+   - Reminder/timer functionality
 
-4. **Kiosk Display** 🚧:
-   - ✅ Basic kiosk setup complete (systemd service, Chromium)
-   - ⏳ Voice feedback panel (custom Lovelace card)
-   - ⏳ AI Gateway SSE integration
-   - ⏳ Touch screen calibration
-
-5. **Production Hardening**:
-   - Add monitoring/alerting
-   - Implement backup strategy
-   - Document troubleshooting procedures
-   - Optimize resource usage
-
-5. **Advanced Features**:
-   - Context-aware responses (remember previous commands)
-   - Proactive notifications
-   - Multi-room audio support
-
-6. **LLM Function Calling Enhancements**:
-   - ✅ Basic function calling implemented (web_search, control_light, get_time, get_home_data)
-   - ✅ Brave Search API integration
-   - ⏳ Add streaming with function calling for `/voice/stream` endpoint
-   - ⏳ Configure sensor entity mappings for `get_home_data` tool
-   - Future: Add more tools (climate control, media playback, calendar)
-
-7. **Streaming with Function Calling** (Phase 11):
-   - Implement tool calling in `chat_stream_sentences` method
-   - Handle tool calls within SSE streaming response
-   - Allow LLM to decide tools in `/voice/stream` endpoint
-   - This enables natural tool usage in all voice interactions
+6. **Production Hardening**:
+   - Monitoring/alerting (Prometheus + Grafana)
+   - Automated backups
+   - ⚠️ Rotate exposed API keys (HA_TOKEN, OPENAI_API_KEY, BRAVE_API_KEY)
 
 ## Important Considerations
 
