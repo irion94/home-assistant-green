@@ -74,12 +74,59 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if config.stt_provider.lower() == "whisper":
         logger.info(f"Whisper Model: {config.whisper_model}")
 
-    # Connect to database
-    try:
-        await db_service.connect()
-        logger.info("Database connected successfully")
-    except Exception as e:
-        logger.warning(f"Database connection failed: {e}. Memory features disabled.")
+    # Connect to database (if enabled via feature flag)
+    import os
+    if os.getenv("DATABASE_ENABLED", "false").lower() == "true":
+        try:
+            await db_service.connect()
+            logger.info("Database connected successfully")
+        except Exception as e:
+            logger.warning(f"Database connection failed: {e}. Memory features disabled.")
+    else:
+        logger.info("Database disabled (DATABASE_ENABLED=false)")
+
+    # Register new tool architecture (if enabled via feature flag - Phase 2)
+    if os.getenv("NEW_TOOLS_ENABLED", "false").lower() == "true":
+        from app.services.tools.registry import tool_registry
+        from app.services.tools.web_search_tool import WebSearchTool
+        from app.services.tools.control_light_tool import ControlLightTool
+        from app.services.tools.time_tool import GetTimeTool
+        from app.services.tools.home_data_tool import GetHomeDataTool
+        from app.services.tools.entity_tool import GetEntityTool
+        from app.services.ha_client import HomeAssistantClient
+
+        # Initialize HA client for tools
+        ha_client = HomeAssistantClient(config)
+
+        # Register all tools
+        tool_registry.register(WebSearchTool())
+        tool_registry.register(ControlLightTool(ha_client))
+        tool_registry.register(GetTimeTool())
+        tool_registry.register(GetHomeDataTool(ha_client))
+        tool_registry.register(GetEntityTool(ha_client))
+
+        logger.info(f"New tool architecture enabled: {len(tool_registry)} tools registered")
+        logger.info(f"Registered tools: {', '.join(tool_registry.list_tools())}")
+    else:
+        logger.info("Using legacy tool architecture (NEW_TOOLS_ENABLED=false)")
+
+    # Initialize learning systems (if enabled via feature flag - Phase 3)
+    if os.getenv("LEARNING_ENABLED", "false").lower() == "true":
+        if db_service.pool:
+            from app.services.learning.context_engine import ContextEngine
+            from app.services.learning.intent_analyzer import IntentAnalyzer
+            from app.services.learning.suggestion_engine import SuggestionEngine
+
+            # Store learning services in app state for access by routers
+            app.state.context_engine = ContextEngine(db_service)
+            app.state.intent_analyzer = IntentAnalyzer()
+            app.state.suggestion_engine = SuggestionEngine(db_service)
+
+            logger.info("Learning systems enabled: ContextEngine, IntentAnalyzer, SuggestionEngine")
+        else:
+            logger.warning("Learning systems require database. Enable DATABASE_ENABLED=true first.")
+    else:
+        logger.info("Learning systems disabled (LEARNING_ENABLED=false)")
 
     yield
 

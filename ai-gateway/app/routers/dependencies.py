@@ -6,7 +6,7 @@ used across multiple routers.
 
 from __future__ import annotations
 
-from fastapi import Depends
+from fastapi import Depends, Request
 
 from app.models import Config
 from app.services.conversation_client import ConversationClient, get_conversation_client
@@ -154,3 +154,47 @@ def is_valid_input(text: str) -> bool:
     if all(len(w) <= 2 for w in words):
         return False
     return True
+
+
+# Phase 3: Learning Systems Dependencies
+
+def get_context_engine(request: Request):
+    """Dependency to get context engine from app state (Phase 3).
+
+    Returns None if learning systems are disabled.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        ContextEngine instance or None
+    """
+    return getattr(request.app.state, "context_engine", None)
+
+
+def get_intent_analyzer(request: Request):
+    """Dependency to get intent analyzer from app state (Phase 3).
+
+    Returns None if learning systems are disabled.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        IntentAnalyzer instance or None
+    """
+    return getattr(request.app.state, "intent_analyzer", None)
+
+
+def get_suggestion_engine(request: Request):
+    """Dependency to get suggestion engine from app state (Phase 3).
+
+    Returns None if learning systems are disabled.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        SuggestionEngine instance or None
+    """
+    return getattr(request.app.state, "suggestion_engine", None)
