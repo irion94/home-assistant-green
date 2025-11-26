@@ -78,6 +78,75 @@ Smart fallback + actions in conversation.
 ### Phase 5: Input Validation & Personality ✅
 Smart input validation + refined Jarvis personality.
 
+### Phase 6: VoiceOverlay UI Redesign ✅ (COMPLETE)
+Complete UI rebuild with action-dependent displays and animations.
+
+**Goals** (All Achieved):
+- ✅ 2-row layout (Header + 3-column content)
+- ✅ Framer Motion shared element transition (FAB → StatusIndicator)
+- ✅ Action-dependent display system via MQTT
+- ✅ Glass-morphism transparent chat design
+- ✅ Bottom-up message layout (like mobile apps)
+- ✅ Debug logs panel with terminal-style display
+- ✅ Hidden scrollbars for clean appearance
+- ✅ Consistent FAB color (blue primary theme)
+
+**Final Architecture**:
+```
+┌──────────────────────────────────────────────────────────┐
+│ Row 1: Header (DisplayPanel - dynamic based on action)   │
+│  - Default: Status + controls                            │
+│  - Search: Web results                                   │
+│  - Light: Entity controls                                │
+│  - Web: Embedded iframe                                  │
+├─────────────────────┬──────────┬─────────────────────────┤
+│                     │          │                         │
+│ Left: Debug Logs    │  Center  │  Right: Chat Messages   │
+│ (flex-1, scrollable)│  200px   │  (flex-1, bottom-up)   │
+│                     │  fixed   │                         │
+│ Terminal-style      │  Status  │  Glass-morphism bubbles │
+│ with timestamps     │  Indic.  │  User: right-aligned    │
+│ and log types       │          │  AI: left-aligned       │
+│                     │          │                         │
+└─────────────────────┴──────────┴─────────────────────────┘
+```
+
+**MQTT Protocol Extension**:
+- Topic: `voice_assistant/room/{room_id}/session/{session_id}/display_action`
+- Payload: `{ type: "web_view" | "light_control" | "search_results" | "default", data: {...}, timestamp: number }`
+
+**Implementation Details**:
+
+**Backend Changes**:
+1. ✅ Created `mqtt_client.py` - Paho MQTT client wrapper
+2. ✅ Updated `llm_tools.py` - Publish display actions after tool execution
+3. ✅ Modified `conversation.py` router - Added room_id parameter
+4. ✅ Updated `conversation_client.py` - Pass room_id/session_id to tools
+5. ✅ Added `paho-mqtt>=1.6.1` dependency
+
+**Frontend Changes**:
+1. ✅ Refactored `VoiceOverlay.tsx` - 2-row layout with 3 columns
+2. ✅ Created `voice-overlay/types.ts` - TypeScript interfaces
+3. ✅ Extended `voiceStore.ts` - displayAction state management
+4. ✅ Updated `mqttService.ts` - Display action subscription
+5. ✅ Created `StatusIndicator.tsx` - Framer Motion indicator with layoutId
+6. ✅ Created `ChatSection.tsx` - Bottom-up chat with glass-morphism
+7. ✅ Created `DisplayPanel.tsx` - Action-based panel switcher
+8. ✅ Updated `DebugLogPanel.tsx` - Full-height flex layout
+9. ✅ Created `display-panels/` - DefaultDisplay, SearchResults, LightControl, WebView
+10. ✅ Created `display-panels/index.tsx` - Panel registry pattern
+
+**Key Features**:
+- **Shared Element Animation**: FAB button morphs into StatusIndicator using Framer Motion layoutId
+- **Panel Registry**: Extensible system for adding new display types
+- **Flex Layout**: Equal-width edges (flex-1) with fixed 200px center
+- **Hidden Scrollbars**: Clean appearance with scrollbar-hide class
+- **Responsive Colors**: State-based colors for StatusIndicator (idle, listening, processing, speaking)
+- **Bottom-up Chat**: Messages grow from bottom like mobile messaging apps
+- **Debug Visibility**: Real-time MQTT, STATE, TIMING, ERROR logs
+
+**Completed**: 2025-11-26
+
 **Goal**: Filter gibberish before AI, define consistent Jarvis character.
 
 #### 5.1 Text Validator
@@ -324,6 +393,7 @@ async with httpx.AsyncClient() as client:
 | 2025-11-22 | Phase 8 | Done | Advanced entity control + ambient mood |
 | 2025-11-23 | Phase 9 | Done | Conversation mode refinement |
 | 2025-11-25 | Phase 9 Streaming | Done | MQTT-based streaming responses |
+| 2025-11-26 | Phase 12 (VoiceOverlay UI) | Done | 2-row layout with MQTT display actions |
 
 ### Phase 7: Dynamic Entity Discovery ✅
 Automatic entity mapping using AI semantic matching.
@@ -941,15 +1011,20 @@ User hears response with current news
 - Latency increase during tool execution
 - Error handling in streaming context
 
-### Phase 12: Kiosk Display UI 🔲
-Dedicated visual interface for Home Assistant dashboards and voice interaction feedback.
+### Phase 12: Dedicated Kiosk Display Hardware 🔲
+Physical kiosk setup with RPi5 display for Home Assistant dashboards.
 
-**Goal**: Create kiosk display on RPi5 to replace interim Nest Hub solution, providing real-time feedback for voice interactions and HA dashboard display.
+**Note**: The VoiceOverlay UI software (Phase 6 above) is **complete** ✅. This phase focuses on the **dedicated hardware** kiosk setup to replace the interim Nest Hub solution.
 
-**Technology**: Chromium Kiosk Mode + Home Assistant Lovelace (simplest approach)
+**Goal**: Set up dedicated Raspberry Pi 5 display with Chromium kiosk mode, providing physical touchscreen interface for the React Dashboard.
+
+**Technology**: Chromium Kiosk Mode + React Dashboard (already built)
 
 **Current State**:
-- Nest Hub used as interim display solution
+- ✅ React Dashboard with VoiceOverlay UI fully operational
+- ✅ MQTT-based display actions working
+- ⏳ Using React Dashboard in regular browser (interim)
+- 🔲 Dedicated RPi5 touchscreen kiosk not yet configured
 - Transcriptions sent via notify entity
 - TTS playback via HA media_player service
 - YAML-based dashboard already configured
@@ -977,29 +1052,29 @@ TTS playback → Sync audio with displayed text
 - [ ] Handle screen timeout/power management
 - [ ] Test with official Raspberry Pi 7" touchscreen
 
-#### 12.2 Voice Feedback Panel
-- [ ] Create custom Lovelace card for voice interaction status
-- [ ] Display wake-word detection indicator (listening/idle state)
-- [ ] Show real-time transcription text
-- [ ] Add processing/thinking indicator animation
-- [ ] Display AI response text before/during TTS playback
-- [ ] Handle conversation history in multi-turn mode
+#### 12.2 Voice Feedback Panel (SOFTWARE - COMPLETE ✅)
+- [x] ~~Create custom Lovelace card~~ → **React VoiceOverlay component built**
+- [x] Display wake-word detection indicator (listening/idle state)
+- [x] Show real-time transcription text (in chat bubbles)
+- [x] Add processing/thinking indicator animation (StatusIndicator)
+- [x] Display AI response text before/during TTS playback
+- [x] Handle conversation history in multi-turn mode (ChatSection)
 
-#### 12.3 AI Gateway Integration
-- [ ] Connect to `/voice/stream` SSE endpoint for streaming responses
-- [ ] Display sentences as they arrive (sentence-by-sentence)
-- [ ] Show tool execution status (web_search, control_light, get_home_data)
-- [ ] Add WebSocket connection for real-time HA state updates
-- [ ] Create notification endpoint for display updates from wake-word service
-- [ ] Sync displayed text with TTS audio playback
+#### 12.3 AI Gateway Integration (SOFTWARE - COMPLETE ✅)
+- [x] Connect to streaming responses via MQTT (not SSE on frontend)
+- [x] Display sentences as they arrive (sentence-by-sentence streaming)
+- [x] ~~Show tool execution status~~ → **Display action panels** (SearchResults, LightControl)
+- [x] Add MQTT connection for real-time state updates (mqttService)
+- [x] MQTT-based display updates from wake-word service
+- [x] Visual sync with TTS audio playback states
 
-#### 12.4 Advanced Features
-- [ ] Touch interaction support for manual control
-- [ ] Custom themes/animations for voice states
-- [ ] Context-based dashboard view switching
-- [ ] Idle screen/screensaver mode
-- [ ] Integration with existing dashboard cards (mushroom, button-card)
-- [ ] Support for multiple kiosk displays (future)
+#### 12.4 Advanced Features (SOFTWARE)
+- [x] Touch interaction support (FAB button, close button)
+- [x] Custom themes/animations (Framer Motion, glass-morphism)
+- [x] ~~Context-based view switching~~ → **Display action panels**
+- [ ] Idle screen/screensaver mode (not implemented)
+- [ ] Integration with existing dashboard cards (using React, not Lovelace)
+- [ ] Support for multiple kiosk displays (future - room_id in MQTT ready)
 
 #### Hardware Options
 
