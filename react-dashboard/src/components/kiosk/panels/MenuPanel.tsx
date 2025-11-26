@@ -3,7 +3,8 @@ import { Mic, Settings, Power, PowerOff, Wifi, WifiOff, Thermometer, Sun } from 
 import { useHomeAssistant } from '../../../hooks/useHomeAssistant'
 import { useSensorEntity } from '../../../hooks/useEntity'
 import { getAllLightIds, SENSORS } from '../../../config/entities'
-import { Button, Slider } from '../../common'
+import { Button } from '../../ui/button'
+import { Slider } from '../../ui/slider'
 import { formatTemperature } from '../../../utils/formatters'
 
 // Color wheel component for menu
@@ -220,10 +221,11 @@ export default function MenuPanel({ onNavigate }: MenuPanelProps) {
               <span className="ml-auto text-sm text-text-secondary">{globalBrightness}%</span>
             </div>
             <Slider
-              value={globalBrightness}
-              onChange={handleGlobalBrightnessChange}
-              onChangeEnd={handleGlobalBrightnessChangeEnd}
-              trackColor="bg-primary"
+              value={[globalBrightness]}
+              onValueChange={([v]) => handleGlobalBrightnessChange(v)}
+              onValueCommit={([v]) => handleGlobalBrightnessChangeEnd(v)}
+              max={100}
+              step={1}
             />
           </div>
 
@@ -236,10 +238,11 @@ export default function MenuPanel({ onNavigate }: MenuPanelProps) {
               </span>
             </div>
             <Slider
-              value={globalColorTemp}
-              onChange={handleGlobalColorTempChange}
-              onChangeEnd={handleGlobalColorTempChangeEnd}
-              trackColor="bg-gradient-to-r from-blue-200 via-white to-orange-300"
+              value={[globalColorTemp]}
+              onValueChange={([v]) => handleGlobalColorTempChange(v)}
+              onValueCommit={([v]) => handleGlobalColorTempChangeEnd(v)}
+              max={100}
+              step={1}
             />
           </div>
 
@@ -267,7 +270,7 @@ export default function MenuPanel({ onNavigate }: MenuPanelProps) {
         </h3>
         <div className="grid grid-cols-2 gap-3">
           <Button
-            variant="primary"
+            variant="default"
             className="flex items-center justify-center gap-2 py-4"
             onClick={handleAllLightsOn}
           >
@@ -276,7 +279,7 @@ export default function MenuPanel({ onNavigate }: MenuPanelProps) {
           </Button>
 
           <Button
-            variant="secondary"
+            variant="outline"
             className="flex items-center justify-center gap-2 py-4"
             onClick={handleAllLightsOff}
           >

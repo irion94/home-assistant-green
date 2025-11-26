@@ -1,7 +1,7 @@
-import { useState } from 'react'
 import { Lightbulb, LightbulbOff } from 'lucide-react'
 import { useLightEntity } from '../../../hooks/useEntity'
-import { Toggle, Slider } from '../../common'
+import { Switch } from '../../ui/switch'
+import { BrightnessControl } from '../../molecules'
 import { classNames } from '../../../utils/formatters'
 
 interface LightPanelProps {
@@ -20,25 +20,7 @@ export default function LightPanel({ entityId, name }: LightPanelProps) {
     setBrightness,
   } = useLightEntity(entityId)
 
-  const [localBrightness, setLocalBrightness] = useState(brightness)
-  const [isDragging, setIsDragging] = useState(false)
-
   const displayName = name || entity?.attributes.friendly_name || entityId
-  const displayBrightness = isDragging ? localBrightness : brightness
-
-  const handleBrightnessChange = (value: number) => {
-    setLocalBrightness(value)
-    setIsDragging(true)
-  }
-
-  const handleBrightnessChangeEnd = async (value: number) => {
-    setIsDragging(false)
-    if (value > 0) {
-      await setBrightness(Math.round((value / 100) * 255))
-    } else {
-      await toggle()
-    }
-  }
 
   if (!isAvailable) {
     return (
@@ -69,32 +51,38 @@ export default function LightPanel({ entityId, name }: LightPanelProps) {
 
         {supportsBrightness && isOn && (
           <p className="text-kiosk-lg text-text-secondary mt-2">
-            {displayBrightness}%
+            {brightness}%
           </p>
         )}
       </div>
 
       {/* Controls */}
       <div className="mt-auto space-y-4">
-        {/* Brightness Slider */}
+        {/* Brightness Control */}
         {supportsBrightness && (
           <div className="px-2">
-            <Slider
-              value={displayBrightness}
-              onChange={handleBrightnessChange}
-              onChangeEnd={handleBrightnessChangeEnd}
-              disabled={!isOn}
-              trackColor={isOn ? 'bg-primary' : 'bg-surface-light'}
+            <BrightnessControl
+              value={brightness}
+              onChange={() => {}}
+              onChangeEnd={(value) => {
+                if (value > 0) {
+                  setBrightness(Math.round((value / 100) * 255))
+                } else {
+                  toggle()
+                }
+              }}
+              variant="inline"
+              showLabel={false}
             />
           </div>
         )}
 
         {/* Toggle Switch */}
         <div className="flex items-center justify-center pt-4 border-t border-surface-light">
-          <Toggle
+          <Switch
             checked={isOn}
-            onChange={() => toggle()}
-            size="lg"
+            onCheckedChange={() => toggle()}
+            className="scale-150"
           />
         </div>
       </div>
