@@ -79,10 +79,31 @@ class WhisperSTTClient(STTClient):
 
                 # Transcribe with initial prompt for better Polish recognition
                 # The initial prompt provides vocabulary hints to improve accuracy
+                # Enhanced with comprehensive home automation vocabulary
                 initial_prompt = (
+                    # Lights - basic commands
                     "Zapal światło w salonie. Zgaś światło w kuchni. "
-                    "Zapal lampkę. Zgaś lampę. Włącz światło w sypialni. "
-                    "Wyłącz światło. Powiedz cześć. Ustaw jasność."
+                    "Włącz lampkę nocną. Wyłącz wszystkie światła. "
+                    "Ustaw jasność na pięćdziesiąt procent. Przyciemnij światło. Rozjaśnij. "
+                    # Lights - colors and modes
+                    "Ustaw kolor na niebieski. Zmień na czerwony. Zrób białe światło. "
+                    "Ciepłe światło. Zimne światło. Romantyczny klimat. Tryb kino. "
+                    # Climate control
+                    "Ustaw temperaturę na dwadzieścia jeden stopni. Włącz klimatyzację. "
+                    "Wyłącz ogrzewanie. Jaka jest temperatura w domu? "
+                    "Podgrzej salon. Schłódź sypialnię. Jaka wilgotność? "
+                    # Media playback
+                    "Włącz telewizor. Wyłącz głośnik. Ścisz muzykę. "
+                    "Pogłoś. Następny utwór. Poprzedni. Pauza. Wznów odtwarzanie. "
+                    # Sensors and status queries
+                    "Jaka jest pogoda? Czy pada deszcz? Sprawdź temperaturę. "
+                    "Pokaż zużycie energii. Stan baterii. Jakość powietrza. "
+                    # Conversation and assistance
+                    "Porozmawiajmy. Pomóż mi. Opowiedz mi o. Wyjaśnij. "
+                    "Zakończ rozmowę. Dziękuję. Do widzenia. Przerwij. Stop. "
+                    # Common room names
+                    "w salonie, w kuchni, w sypialni, w łazience, w gabinecie, "
+                    "na korytarzu, w garażu, na zewnątrz, w pokoju dziecięcym, w holu"
                 )
 
                 segments, info = model.transcribe(
@@ -132,9 +153,31 @@ class WhisperSTTClient(STTClient):
                 model = self._get_model()
 
                 # Transcribe with initial prompt
+                # Enhanced with comprehensive home automation vocabulary
                 initial_prompt = (
+                    # Lights - basic commands
                     "Zapal światło w salonie. Zgaś światło w kuchni. "
-                    "Zapal lampkę. Zgaś lampę. Włącz światło w sypialni."
+                    "Włącz lampkę nocną. Wyłącz wszystkie światła. "
+                    "Ustaw jasność na pięćdziesiąt procent. Przyciemnij światło. Rozjaśnij. "
+                    # Lights - colors and modes
+                    "Ustaw kolor na niebieski. Zmień na czerwony. Zrób białe światło. "
+                    "Ciepłe światło. Zimne światło. Romantyczny klimat. Tryb kino. "
+                    # Climate control
+                    "Ustaw temperaturę na dwadzieścia jeden stopni. Włącz klimatyzację. "
+                    "Wyłącz ogrzewanie. Jaka jest temperatura w domu? "
+                    "Podgrzej salon. Schłódź sypialnię. Jaka wilgotność? "
+                    # Media playback
+                    "Włącz telewizor. Wyłącz głośnik. Ścisz muzykę. "
+                    "Pogłoś. Następny utwór. Poprzedni. Pauza. Wznów odtwarzanie. "
+                    # Sensors and status queries
+                    "Jaka jest pogoda? Czy pada deszcz? Sprawdź temperaturę. "
+                    "Pokaż zużycie energii. Stan baterii. Jakość powietrza. "
+                    # Conversation and assistance
+                    "Porozmawiajmy. Pomóż mi. Opowiedz mi o. Wyjaśnij. "
+                    "Zakończ rozmowę. Dziękuję. Do widzenia. Przerwij. Stop. "
+                    # Common room names
+                    "w salonie, w kuchni, w sypialni, w łazience, w gabinecie, "
+                    "na korytarzu, w garażu, na zewnątrz, w pokoju dziecięcym, w holu"
                 )
 
                 segments, info = model.transcribe(
