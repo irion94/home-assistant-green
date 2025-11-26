@@ -407,6 +407,10 @@ class ConversationClient:
 
         full_response = ""
 
+        # Tool calling support
+        tool_calls = []
+        tool_call_buffer = {}
+
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 async with client.stream(
@@ -422,6 +426,7 @@ class ConversationClient:
                         "max_tokens": 150,
                         "temperature": 0.7,
                         "stream": True,
+                        "tools": get_tools(),  # Enable function calling
                     },
                 ) as response:
                     response.raise_for_status()
@@ -435,6 +440,29 @@ class ConversationClient:
                             try:
                                 chunk = json.loads(data)
                                 delta = chunk["choices"][0].get("delta", {})
+
+                                # Handle tool calls
+                                if "tool_calls" in delta:
+                                    for tool_call_delta in delta["tool_calls"]:
+                                        idx = tool_call_delta.get("index", 0)
+                                        if idx not in tool_call_buffer:
+                                            tool_call_buffer[idx] = {
+                                                "id": tool_call_delta.get("id", ""),
+                                                "function": {
+                                                    "name": "",
+                                                    "arguments": ""
+                                                }
+                                            }
+
+                                        if "id" in tool_call_delta:
+                                            tool_call_buffer[idx]["id"] = tool_call_delta["id"]
+                                        if "function" in tool_call_delta:
+                                            if "name" in tool_call_delta["function"]:
+                                                tool_call_buffer[idx]["function"]["name"] = tool_call_delta["function"]["name"]
+                                            if "arguments" in tool_call_delta["function"]:
+                                                tool_call_buffer[idx]["function"]["arguments"] += tool_call_delta["function"]["arguments"]
+
+                                # Handle regular content
                                 content = delta.get("content", "")
                                 if content:
                                     full_response += content
@@ -442,18 +470,55 @@ class ConversationClient:
                             except json.JSONDecodeError:
                                 continue
 
-            # Add full response to history
-            _sessions[session_id].append({
-                "role": "assistant",
-                "content": full_response
-            })
+            # Execute any tool calls
+            if tool_call_buffer:
+                logger.info(f"Tool calls detected: {list(tool_call_buffer.values())}")
 
-            # Save assistant message to database
-            await self._save_message_to_db(session_id, "assistant", full_response)
+                # Execute each tool
+                for tool_call in tool_call_buffer.values():
+                    function_name = tool_call["function"]["name"]
+                    try:
+                        arguments = json.loads(tool_call["function"]["arguments"])
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to parse tool arguments: {tool_call['function']['arguments']}")
+                        continue
+
+                    logger.info(f"Executing tool: {function_name}({arguments})")
+
+                    # Get tool executor and execute
+                    _, ha_client = self._get_action_handlers()
+                    if not ha_client:
+                        logger.error("HA client not available for tool execution")
+                        continue
+
+                    executor = get_tool_executor(ha_client)
+                    result = await executor.execute(function_name, arguments)
+
+                    logger.info(f"Tool {function_name} result: {result}")
+
+                    # Yield confirmation message
+                    yield "Gotowe!"
+
+            # Add full response to history (or tool call if that's what happened)
+            if full_response:
+                _sessions[session_id].append({
+                    "role": "assistant",
+                    "content": full_response
+                })
+                # Save assistant message to database
+                await self._save_message_to_db(session_id, "assistant", full_response)
+            elif tool_call_buffer:
+                # If there were only tool calls, save a generic confirmation
+                _sessions[session_id].append({
+                    "role": "assistant",
+                    "content": "Gotowe!"
+                })
+                await self._save_message_to_db(session_id, "assistant", "Gotowe!")
 
             logger.info(
                 f"Streamed conversation: session={session_id}, "
-                f"response_length={len(full_response)}"
+                f"response_length={len(full_response)}, "
+                f"tools_executed={len(tool_call_buffer)}"
             )
 
         except httpx.HTTPStatusError as e:
@@ -495,6 +560,10 @@ class ConversationClient:
             *_sessions[session_id]
         ]
 
+        # Tool calling support
+        tool_calls = []
+        tool_call_buffer = {}
+
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 async with client.stream(
@@ -510,6 +579,7 @@ class ConversationClient:
                         "max_tokens": 150,
                         "temperature": 0.7,
                         "stream": True,
+                        "tools": get_tools(),  # Enable function calling
                     },
                 ) as response:
                     response.raise_for_status()
@@ -523,6 +593,29 @@ class ConversationClient:
                             try:
                                 chunk = json.loads(data)
                                 delta = chunk["choices"][0].get("delta", {})
+
+                                # Handle tool calls
+                                if "tool_calls" in delta:
+                                    for tool_call_delta in delta["tool_calls"]:
+                                        idx = tool_call_delta.get("index", 0)
+                                        if idx not in tool_call_buffer:
+                                            tool_call_buffer[idx] = {
+                                                "id": tool_call_delta.get("id", ""),
+                                                "function": {
+                                                    "name": "",
+                                                    "arguments": ""
+                                                }
+                                            }
+
+                                        if "id" in tool_call_delta:
+                                            tool_call_buffer[idx]["id"] = tool_call_delta["id"]
+                                        if "function" in tool_call_delta:
+                                            if "name" in tool_call_delta["function"]:
+                                                tool_call_buffer[idx]["function"]["name"] = tool_call_delta["function"]["name"]
+                                            if "arguments" in tool_call_delta["function"]:
+                                                tool_call_buffer[idx]["function"]["arguments"] += tool_call_delta["function"]["arguments"]
+
+                                # Handle regular content
                                 content = delta.get("content", "")
                                 if content:
                                     buffer += content
@@ -559,18 +652,55 @@ class ConversationClient:
                 logger.debug(f"Yielding remaining: {buffer.strip()[:50]}...")
                 yield buffer.strip()
 
-            # Add full response to history
-            _sessions[session_id].append({
-                "role": "assistant",
-                "content": full_response
-            })
+            # Execute any tool calls
+            if tool_call_buffer:
+                logger.info(f"Tool calls detected: {list(tool_call_buffer.values())}")
 
-            # Save assistant message to database
-            await self._save_message_to_db(session_id, "assistant", full_response)
+                # Execute each tool
+                for tool_call in tool_call_buffer.values():
+                    function_name = tool_call["function"]["name"]
+                    try:
+                        arguments = json.loads(tool_call["function"]["arguments"])
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to parse tool arguments: {tool_call['function']['arguments']}")
+                        continue
+
+                    logger.info(f"Executing tool: {function_name}({arguments})")
+
+                    # Get tool executor and execute
+                    _, ha_client = self._get_action_handlers()
+                    if not ha_client:
+                        logger.error("HA client not available for tool execution")
+                        continue
+
+                    executor = get_tool_executor(ha_client)
+                    result = await executor.execute(function_name, arguments)
+
+                    logger.info(f"Tool {function_name} result: {result}")
+
+                    # Yield confirmation message
+                    yield "Gotowe!"
+
+            # Add full response to history (or tool call if that's what happened)
+            if full_response:
+                _sessions[session_id].append({
+                    "role": "assistant",
+                    "content": full_response
+                })
+                # Save assistant message to database
+                await self._save_message_to_db(session_id, "assistant", full_response)
+            elif tool_call_buffer:
+                # If there were only tool calls, save a generic confirmation
+                _sessions[session_id].append({
+                    "role": "assistant",
+                    "content": "Gotowe!"
+                })
+                await self._save_message_to_db(session_id, "assistant", "Gotowe!")
 
             logger.info(
                 f"Streamed sentences: session={session_id}, "
-                f"response_length={len(full_response)}"
+                f"response_length={len(full_response)}, "
+                f"tools_executed={len(tool_call_buffer)}"
             )
 
         except httpx.HTTPStatusError as e:
