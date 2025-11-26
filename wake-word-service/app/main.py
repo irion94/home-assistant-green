@@ -14,6 +14,7 @@ import queue
 import threading
 import json
 import asyncio
+import re
 from typing import Optional
 from pathlib import Path
 
@@ -941,6 +942,8 @@ class WakeWordService:
     def _is_end_command(self, text: str) -> bool:
         """Check if text contains conversation end keywords.
 
+        Uses word boundary matching to avoid false positives (e.g., "pa" in "sypialni").
+
         Args:
             text: User transcript
 
@@ -953,7 +956,12 @@ class WakeWordService:
             "end conversation", "zakończ", "dziękuję", "dzięki", "pa",
             "do widzenia", "skończ", "koniec rozmowy", "end"
         ]
-        return any(keyword in text_lower for keyword in end_keywords)
+        # Use word boundary regex to avoid substring false positives
+        for keyword in end_keywords:
+            pattern = r'\b' + re.escape(keyword) + r'\b'
+            if re.search(pattern, text_lower):
+                return True
+        return False
 
     def _publish_stt_comparison(self, stt_result, session_id: str) -> None:
         """Publish STT comparison results for debugging.
