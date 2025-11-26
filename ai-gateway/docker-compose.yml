@@ -83,7 +83,8 @@ services:
       - SEARCH_RESULTS_LIMIT=${SEARCH_RESULTS_LIMIT:-5}
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      # Database configuration
+      # Database configuration (Phase 1)
+      - DATABASE_ENABLED=${DATABASE_ENABLED:-false}  # Feature flag for Phase 1
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=ai_assistant
@@ -94,6 +95,10 @@ services:
       - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-384}
       # Cache
       - CACHE_TTL_SECONDS=${CACHE_TTL_SECONDS:-3600}
+      # Tool Architecture (Phase 2)
+      - NEW_TOOLS_ENABLED=${NEW_TOOLS_ENABLED:-false}  # Feature flag for new BaseTool/ToolRegistry
+      # Learning Systems (Phase 3)
+      - LEARNING_ENABLED=${LEARNING_ENABLED:-false}  # Feature flag for ContextEngine/IntentAnalyzer/SuggestionEngine
     volumes:
       - ./config:/app/config:ro
     depends_on:
