@@ -168,12 +168,22 @@ class ToolExecutor:
         from app.models import HAAction
 
         if entity_id == "all":
-            # Control all lights
+            # Control all lights - pass list of entities in data field
+            all_light_entities = [
+                "light.yeelight_color_0x80156a9",  # salon
+                "light.yeelight_color_0x49c27e1",  # kuchnia
+                "light.yeelight_color_0x80147dd",  # sypialnia
+                "light.yeelight_lamp15_0x1b37d19d_ambilight",  # biurko
+                "light.yeelight_lamp15_0x1b37d19d",  # biurko ambient
+                "light.yeelight_color_0x801498b",  # lamp 1
+                "light.yeelight_color_0x8015154",  # lamp 2
+            ]
+
             ha_action = HAAction(
                 action="call_service",
                 service=f"light.turn_{action}",
-                entity_id="all",
-                data={"entity_id": "all"},
+                entity_id=None,  # Set to None when using multiple entities
+                data={"entity_id": all_light_entities},  # Pass list in data field
             )
         else:
             ha_action = HAAction(
