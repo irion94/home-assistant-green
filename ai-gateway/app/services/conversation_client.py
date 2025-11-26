@@ -240,7 +240,12 @@ class ConversationClient:
         except Exception as e:
             logger.warning(f"Failed to save message to DB: {e}")
 
-    async def chat(self, text: str, session_id: str) -> str:
+    async def chat(
+        self,
+        text: str,
+        session_id: str,
+        room_id: str | None = None
+    ) -> str:
         """Send message and get response with function calling.
 
         Uses OpenAI function calling to let the LLM decide when to use tools
@@ -251,6 +256,7 @@ class ConversationClient:
         Args:
             text: User message
             session_id: Session identifier for memory
+            room_id: Room identifier for MQTT display actions
 
         Returns:
             AI response text
@@ -313,7 +319,12 @@ class ConversationClient:
                             arguments = {}
 
                         # Execute the tool
-                        result = await tool_executor.execute(tool_name, arguments)
+                        result = await tool_executor.execute(
+                            tool_name,
+                            arguments,
+                            room_id=room_id,
+                            session_id=session_id
+                        )
                         logger.info(f"Tool {tool_name} result: {result[:100]}...")
 
                         # Add tool result to messages
@@ -380,12 +391,18 @@ class ConversationClient:
             logger.error(f"Conversation error: {e}", exc_info=True)
             raise
 
-    async def chat_stream(self, text: str, session_id: str) -> AsyncIterator[str]:
+    async def chat_stream(
+        self,
+        text: str,
+        session_id: str,
+        room_id: str | None = None
+    ) -> AsyncIterator[str]:
         """Send message and stream response.
 
         Args:
             text: User message
             session_id: Session identifier for memory
+            room_id: Room identifier for MQTT display actions
 
         Yields:
             Response text chunks
@@ -492,7 +509,12 @@ class ConversationClient:
                         continue
 
                     executor = get_tool_executor(ha_client)
-                    result = await executor.execute(function_name, arguments)
+                    result = await executor.execute(
+                        function_name,
+                        arguments,
+                        room_id=room_id,
+                        session_id=session_id
+                    )
 
                     logger.info(f"Tool {function_name} result: {result}")
 
@@ -528,7 +550,12 @@ class ConversationClient:
             logger.error(f"Conversation streaming error: {e}", exc_info=True)
             raise
 
-    async def chat_stream_sentences(self, text: str, session_id: str) -> AsyncIterator[str]:
+    async def chat_stream_sentences(
+        self,
+        text: str,
+        session_id: str,
+        room_id: str | None = None
+    ) -> AsyncIterator[str]:
         """Stream response sentence by sentence for TTS.
 
         Buffers streaming chunks until a complete sentence is detected,
@@ -537,6 +564,7 @@ class ConversationClient:
         Args:
             text: User message
             session_id: Session identifier for memory
+            room_id: Room identifier for MQTT display actions
 
         Yields:
             Complete sentences as they become available
@@ -674,7 +702,12 @@ class ConversationClient:
                         continue
 
                     executor = get_tool_executor(ha_client)
-                    result = await executor.execute(function_name, arguments)
+                    result = await executor.execute(
+                        function_name,
+                        arguments,
+                        room_id=room_id,
+                        session_id=session_id
+                    )
 
                     logger.info(f"Tool {function_name} result: {result}")
 

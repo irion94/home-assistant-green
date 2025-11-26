@@ -18,11 +18,15 @@ from app.models import HAAction
 from app.services.conversation_client import ConversationClient
 from app.services.ha_client import HomeAssistantClient
 from app.services.stt_client import STTClient
+from app.services.mqtt_client import get_mqtt_client
 
 from app.routers.dependencies import (
     get_conversation_client_dependency,
     get_ha_client,
     get_stt_client_dependency,
+    get_context_engine,
+    get_intent_analyzer,
+    get_suggestion_engine,
 )
 from app.utils.text import detect_language
 
@@ -34,6 +38,7 @@ class ConversationRequest(BaseModel):
     """Request schema for /conversation endpoint."""
     text: str = Field(..., description="User message text")
     session_id: str = Field(..., description="Conversation session ID")
+    room_id: str = Field(default="default", description="Room identifier for display actions")
     end_session: bool = Field(default=False, description="End the conversation session")
 
 
@@ -56,6 +61,7 @@ class ChatRequest(BaseModel):
     """Request schema for /conversation/stream endpoint (Vercel AI SDK format)."""
     messages: list[Message] = Field(..., description="Conversation message history")
     session_id: str = Field(default="default", description="Conversation session ID")
+    room_id: str = Field(default="default", description="Room identifier for display actions")
 
 
 @router.post("/conversation", response_model=ConversationResponse)
@@ -63,6 +69,8 @@ async def conversation(
     request: ConversationRequest,
     conversation_client: ConversationClient = Depends(get_conversation_client_dependency),
     ha_client: HomeAssistantClient = Depends(get_ha_client),
+    context_engine=Depends(get_context_engine),
+    intent_analyzer=Depends(get_intent_analyzer),
 ) -> ConversationResponse:
     """Process conversation message and return AI response.
 
@@ -70,6 +78,7 @@ async def conversation(
         request: Conversation request with text and session_id
         conversation_client: Conversation client instance
         ha_client: Home Assistant client for TTS
+        context_engine: Context engine for pattern learning (Phase 3)
 
     Returns:
         ConversationResponse with AI response text
@@ -88,8 +97,59 @@ async def conversation(
                 message="Conversation ended",
             )
 
+        # Phase 3: Get context from learning engine (if enabled)
+        if context_engine:
+            try:
+                context = await context_engine.get_context(
+                    session_id=request.session_id,
+                    room_id=request.room_id
+                )
+                logger.debug(f"[{correlation_id}] Context retrieved: {len(context.get('conversation_history', []))} messages")
+            except Exception as e:
+                logger.warning(f"[{correlation_id}] Context retrieval failed: {e}")
+
         # Get AI response with function calling (LLM decides when to use tools)
-        response_text = await conversation_client.chat(request.text, request.session_id)
+        response_text = await conversation_client.chat(
+            request.text,
+            request.session_id,
+            room_id=request.room_id
+        )
+
+        # Phase 3: Learn pattern from successful interaction (if enabled)
+        if context_engine:
+            try:
+                # Detect language for pattern learning
+                language = detect_language(request.text)
+
+                # Store this interaction as a pattern
+                # Intent is derived from the response (could be enhanced with actual intent detection)
+                intent = "conversation" if "?" in response_text else "command"
+
+                await context_engine.learn_pattern(
+                    user_input=request.text,
+                    intent=intent,
+                    session_id=request.session_id,
+                    language=language
+                )
+                logger.debug(f"[{correlation_id}] Pattern learned: {intent}")
+            except Exception as e:
+                logger.warning(f"[{correlation_id}] Pattern learning failed: {e}")
+
+        # Phase 3: Analyze response and publish overlay hint (if enabled)
+        if intent_analyzer:
+            try:
+                should_keep_open = intent_analyzer.should_keep_overlay_open(response_text)
+                logger.debug(f"[{correlation_id}] Intent analysis: keep_overlay_open={should_keep_open}")
+
+                # Publish hint to MQTT for React Dashboard
+                mqtt_client = get_mqtt_client()
+                mqtt_client.publish_overlay_hint(
+                    keep_open=should_keep_open,
+                    room_id=request.room_id,
+                    session_id=request.session_id
+                )
+            except Exception as e:
+                logger.warning(f"[{correlation_id}] Overlay hint publishing failed: {e}")
 
         logger.info(f"[{correlation_id}] Conversation response: {len(response_text)} chars")
 
@@ -131,6 +191,7 @@ async def conversation(
 async def conversation_voice(
     audio: UploadFile = File(..., description="Audio file in WAV format"),
     session_id: str = "default",
+    room_id: str = "default",
     stt_client: STTClient = Depends(get_stt_client_dependency),
     conversation_client: ConversationClient = Depends(get_conversation_client_dependency),
     ha_client: HomeAssistantClient = Depends(get_ha_client),
@@ -166,7 +227,7 @@ async def conversation_voice(
         logger.info(f"[{correlation_id}] Transcribed: {text}")
 
         # Get AI response with function calling (LLM decides when to use tools)
-        response_text = await conversation_client.chat(text, session_id)
+        response_text = await conversation_client.chat(text, session_id, room_id=room_id)
 
         # Show transcription on display
         try:
@@ -222,6 +283,8 @@ async def conversation_voice(
 async def conversation_stream(
     request: ChatRequest,
     conversation_client: ConversationClient = Depends(get_conversation_client_dependency),
+    context_engine=Depends(get_context_engine),
+    intent_analyzer=Depends(get_intent_analyzer),
 ) -> StreamingResponse:
     """Stream AI response using Server-Sent Events (SSE) - Vercel AI SDK compatible.
 
@@ -231,6 +294,8 @@ async def conversation_stream(
     Args:
         request: Chat request with message history and session ID
         conversation_client: Conversation client instance
+        context_engine: Context engine for pattern learning (Phase 3)
+        intent_analyzer: Intent analyzer for overlay hints (Phase 3)
 
     Returns:
         StreamingResponse with SSE events containing response tokens
@@ -278,19 +343,74 @@ async def conversation_stream(
             },
         )
 
+    # Phase 3: Get context from learning engine (if enabled)
+    if context_engine:
+        try:
+            context = await context_engine.get_context(
+                session_id=request.session_id,
+                room_id=request.room_id
+            )
+            logger.debug(f"[{correlation_id}] Context retrieved: {len(context.get('conversation_history', []))} messages")
+        except Exception as e:
+            logger.warning(f"[{correlation_id}] Context retrieval failed: {e}")
+
     async def generate():
         """Generate SSE stream of response tokens."""
+        full_response = ""  # Accumulate response for pattern learning
+
         try:
             logger.info(f"[{correlation_id}] Streaming response for: '{user_message[:50]}...'")
 
             # Stream response token by token using existing chat_stream method
             token_count = 0
-            async for token in conversation_client.chat_stream(user_message, request.session_id):
+            async for token in conversation_client.chat_stream(
+                user_message,
+                request.session_id,
+                room_id=request.room_id
+            ):
+                # Accumulate full response for learning
+                full_response += token
+
                 # Vercel AI SDK format: {"content": "token"}
                 yield f"data: {json.dumps({'content': token})}\n\n"
                 token_count += 1
 
             logger.info(f"[{correlation_id}] Stream complete: {token_count} tokens")
+
+            # Phase 3: Learn pattern from successful interaction (if enabled)
+            if context_engine and full_response:
+                try:
+                    # Detect language for pattern learning
+                    language = detect_language(user_message)
+
+                    # Store this interaction as a pattern
+                    intent = "conversation" if "?" in full_response else "command"
+
+                    await context_engine.learn_pattern(
+                        user_input=user_message,
+                        intent=intent,
+                        session_id=request.session_id,
+                        language=language
+                    )
+                    logger.debug(f"[{correlation_id}] Pattern learned: {intent}")
+                except Exception as e:
+                    logger.warning(f"[{correlation_id}] Pattern learning failed: {e}")
+
+            # Phase 3: Analyze response and publish overlay hint (if enabled)
+            if intent_analyzer and full_response:
+                try:
+                    should_keep_open = intent_analyzer.should_keep_overlay_open(full_response)
+                    logger.debug(f"[{correlation_id}] Intent analysis: keep_overlay_open={should_keep_open}")
+
+                    # Publish hint to MQTT for React Dashboard
+                    mqtt_client = get_mqtt_client()
+                    mqtt_client.publish_overlay_hint(
+                        keep_open=should_keep_open,
+                        room_id=request.room_id,
+                        session_id=request.session_id
+                    )
+                except Exception as e:
+                    logger.warning(f"[{correlation_id}] Overlay hint publishing failed: {e}")
 
             # Signal completion (Vercel AI SDK expects this)
             yield "data: [DONE]\n\n"
@@ -308,3 +428,54 @@ async def conversation_stream(
             "X-Accel-Buffering": "no",  # Disable nginx buffering
         },
     )
+
+
+class SuggestionsRequest(BaseModel):
+    """Request schema for /conversation/suggestions endpoint."""
+    room_id: str | None = Field(None, description="Room identifier for context-aware suggestions")
+    limit: int = Field(default=3, ge=1, le=10, description="Maximum number of suggestions to return")
+
+
+class SuggestionsResponse(BaseModel):
+    """Response schema for /conversation/suggestions endpoint."""
+    suggestions: list[str] = Field(..., description="List of proactive command suggestions")
+    room_id: str | None = Field(None, description="Room context")
+
+
+@router.post("/conversation/suggestions", response_model=SuggestionsResponse)
+async def get_suggestions(
+    request: SuggestionsRequest,
+    suggestion_engine=Depends(get_suggestion_engine),
+) -> SuggestionsResponse:
+    """Get proactive command suggestions based on time and room context.
+
+    Phase 3: Learning Systems - Proactive suggestions endpoint.
+
+    Args:
+        request: Suggestions request with optional room_id
+        suggestion_engine: Suggestion engine instance (Phase 3)
+
+    Returns:
+        List of suggested commands
+    """
+    # If learning systems disabled, return empty list
+    if not suggestion_engine:
+        return SuggestionsResponse(suggestions=[], room_id=request.room_id)
+
+    try:
+        suggestions = await suggestion_engine.get_suggestions(
+            room_id=request.room_id,
+            limit=request.limit
+        )
+
+        logger.info(f"Generated {len(suggestions)} suggestions for room={request.room_id}")
+
+        return SuggestionsResponse(
+            suggestions=suggestions,
+            room_id=request.room_id
+        )
+
+    except Exception as e:
+        logger.error(f"Suggestions error: {e}", exc_info=True)
+        # Return empty list on error (graceful degradation)
+        return SuggestionsResponse(suggestions=[], room_id=request.room_id)
