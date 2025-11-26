@@ -491,6 +491,9 @@ class ConversationClient:
             if tool_call_buffer:
                 logger.info(f"Tool calls detected: {list(tool_call_buffer.values())}")
 
+                # Collect tool results
+                tool_results = []
+
                 # Execute each tool
                 for tool_call in tool_call_buffer.values():
                     function_name = tool_call["function"]["name"]
@@ -518,10 +521,79 @@ class ConversationClient:
 
                     logger.info(f"Tool {function_name} result: {result}")
 
-                    # Yield confirmation message
-                    yield "Gotowe!"
+                    tool_results.append({
+                        "tool_call": tool_call,
+                        "result": result
+                    })
 
-            # Add full response to history (or tool call if that's what happened)
+                # If tools were executed, get LLM's response incorporating the results
+                if tool_results:
+                    # Add assistant's tool calls to history
+                    tool_calls_for_history = [{
+                        "id": tr["tool_call"]["id"],
+                        "type": "function",
+                        "function": {
+                            "name": tr["tool_call"]["function"]["name"],
+                            "arguments": tr["tool_call"]["function"]["arguments"]
+                        }
+                    } for tr in tool_results]
+
+                    _sessions[session_id].append({
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": tool_calls_for_history
+                    })
+
+                    # Add tool results to history
+                    for tr in tool_results:
+                        _sessions[session_id].append({
+                            "role": "tool",
+                            "tool_call_id": tr["tool_call"]["id"],
+                            "name": tr["tool_call"]["function"]["name"],
+                            "content": tr["result"]
+                        })
+
+                    # Call LLM again to get natural language response
+                    messages_with_tools = [
+                        {"role": "system", "content": CONVERSATION_SYSTEM_PROMPT},
+                        *_sessions[session_id]
+                    ]
+
+                    async with httpx.AsyncClient(timeout=self.timeout) as client:
+                        async with client.stream(
+                            "POST",
+                            f"{self.base_url}/chat/completions",
+                            headers={
+                                "Authorization": f"Bearer {self.api_key}",
+                                "Content-Type": "application/json",
+                            },
+                            json={
+                                "model": self.model,
+                                "messages": messages_with_tools,
+                                "max_tokens": 150,
+                                "temperature": 0.7,
+                                "stream": True,
+                            },
+                        ) as final_response:
+                            final_response.raise_for_status()
+
+                            async for line in final_response.aiter_lines():
+                                if line.startswith("data: "):
+                                    data = line[6:]
+                                    if data == "[DONE]":
+                                        break
+
+                                    try:
+                                        chunk = json.loads(data)
+                                        delta = chunk["choices"][0].get("delta", {})
+                                        content = delta.get("content", "")
+                                        if content:
+                                            full_response += content
+                                            yield content
+                                    except json.JSONDecodeError:
+                                        continue
+
+            # Add full response to history
             if full_response:
                 _sessions[session_id].append({
                     "role": "assistant",
@@ -529,13 +601,6 @@ class ConversationClient:
                 })
                 # Save assistant message to database
                 await self._save_message_to_db(session_id, "assistant", full_response)
-            elif tool_call_buffer:
-                # If there were only tool calls, save a generic confirmation
-                _sessions[session_id].append({
-                    "role": "assistant",
-                    "content": "Gotowe!"
-                })
-                await self._save_message_to_db(session_id, "assistant", "Gotowe!")
 
             logger.info(
                 f"Streamed conversation: session={session_id}, "
@@ -711,10 +776,95 @@ class ConversationClient:
 
                     logger.info(f"Tool {function_name} result: {result}")
 
-                    # Yield confirmation message
-                    yield "Gotowe!"
+                    tool_results.append({
+                        "tool_call": tool_call,
+                        "result": result
+                    })
 
-            # Add full response to history (or tool call if that's what happened)
+                # If tools were executed, get LLM's response incorporating the results
+                if tool_results:
+                    # Add assistant's tool calls to history
+                    tool_calls_for_history = [{
+                        "id": tr["tool_call"]["id"],
+                        "type": "function",
+                        "function": {
+                            "name": tr["tool_call"]["function"]["name"],
+                            "arguments": tr["tool_call"]["function"]["arguments"]
+                        }
+                    } for tr in tool_results]
+
+                    _sessions[session_id].append({
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": tool_calls_for_history
+                    })
+
+                    # Add tool results to history
+                    for tr in tool_results:
+                        _sessions[session_id].append({
+                            "role": "tool",
+                            "tool_call_id": tr["tool_call"]["id"],
+                            "name": tr["tool_call"]["function"]["name"],
+                            "content": tr["result"]
+                        })
+
+                    # Call LLM again to get natural language response (sentence-by-sentence)
+                    messages_with_tools = [
+                        {"role": "system", "content": CONVERSATION_SYSTEM_PROMPT},
+                        *_sessions[session_id]
+                    ]
+
+                    buffer = ""
+                    async with httpx.AsyncClient(timeout=self.timeout) as client:
+                        async with client.stream(
+                            "POST",
+                            f"{self.base_url}/chat/completions",
+                            headers={
+                                "Authorization": f"Bearer {self.api_key}",
+                                "Content-Type": "application/json",
+                            },
+                            json={
+                                "model": self.model,
+                                "messages": messages_with_tools,
+                                "max_tokens": 150,
+                                "temperature": 0.7,
+                                "stream": True,
+                            },
+                        ) as final_response:
+                            final_response.raise_for_status()
+
+                            async for line in final_response.aiter_lines():
+                                if line.startswith("data: "):
+                                    data = line[6:]
+                                    if data == "[DONE]":
+                                        break
+
+                                    try:
+                                        chunk = json.loads(data)
+                                        delta = chunk["choices"][0].get("delta", {})
+                                        content = delta.get("content", "")
+                                        if content:
+                                            full_response += content
+                                            buffer += content
+
+                                            # Check for sentence endings
+                                            for char in sentence_endings:
+                                                if char in buffer:
+                                                    sentences = buffer.split(char)
+                                                    for sentence in sentences[:-1]:
+                                                        if sentence.strip():
+                                                            logger.debug(f"Yielding sentence: {sentence.strip()[:50]}...")
+                                                            yield sentence.strip() + char
+                                                    buffer = sentences[-1]
+                                    except json.JSONDecodeError:
+                                        continue
+
+                    # Yield remaining buffer
+                    if buffer.strip():
+                        logger.debug(f"Yielding remaining after tool: {buffer.strip()[:50]}...")
+                        yield buffer.strip()
+
+            # Add full response to history
             if full_response:
                 _sessions[session_id].append({
                     "role": "assistant",
@@ -722,13 +872,6 @@ class ConversationClient:
                 })
                 # Save assistant message to database
                 await self._save_message_to_db(session_id, "assistant", full_response)
-            elif tool_call_buffer:
-                # If there were only tool calls, save a generic confirmation
-                _sessions[session_id].append({
-                    "role": "assistant",
-                    "content": "Gotowe!"
-                })
-                await self._save_message_to_db(session_id, "assistant", "Gotowe!")
 
             logger.info(
                 f"Streamed sentences: session={session_id}, "
