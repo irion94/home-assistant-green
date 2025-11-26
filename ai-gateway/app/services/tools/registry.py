@@ -6,11 +6,57 @@ Provides centralized registration and execution of tools.
 from __future__ import annotations
 
 import logging
+import time
+from dataclasses import dataclass, field
 from typing import Any
 
 from app.services.tools.base import BaseTool, ToolResult
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ToolMetrics:
+    """Metrics for a single tool."""
+
+    tool_name: str
+    total_executions: int = 0
+    successful_executions: int = 0
+    failed_executions: int = 0
+    total_latency_ms: float = 0.0
+    min_latency_ms: float = float("inf")
+    max_latency_ms: float = 0.0
+    last_execution_time: float | None = None
+    error_counts: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def success_rate(self) -> float:
+        """Calculate success rate as percentage."""
+        if self.total_executions == 0:
+            return 0.0
+        return (self.successful_executions / self.total_executions) * 100
+
+    @property
+    def avg_latency_ms(self) -> float:
+        """Calculate average latency in milliseconds."""
+        if self.total_executions == 0:
+            return 0.0
+        return self.total_latency_ms / self.total_executions
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert metrics to dictionary for JSON serialization."""
+        return {
+            "tool_name": self.tool_name,
+            "total_executions": self.total_executions,
+            "successful_executions": self.successful_executions,
+            "failed_executions": self.failed_executions,
+            "success_rate": round(self.success_rate, 2),
+            "avg_latency_ms": round(self.avg_latency_ms, 2),
+            "min_latency_ms": self.min_latency_ms if self.min_latency_ms != float("inf") else 0,
+            "max_latency_ms": round(self.max_latency_ms, 2),
+            "last_execution_time": self.last_execution_time,
+            "error_counts": self.error_counts,
+        }
 
 
 class ToolRegistry:
@@ -25,6 +71,7 @@ class ToolRegistry:
     def __init__(self) -> None:
         """Initialize empty registry."""
         self._tools: dict[str, BaseTool] = {}
+        self._metrics: dict[str, ToolMetrics] = {}
 
     def register(self, tool: BaseTool) -> None:
         """Register a tool in the registry.
@@ -39,6 +86,7 @@ class ToolRegistry:
             logger.warning(f"Tool '{tool.name}' already registered, replacing")
 
         self._tools[tool.name] = tool
+        self._metrics[tool.name] = ToolMetrics(tool_name=tool.name)
         logger.info(f"Registered tool: {tool.name}")
 
     def unregister(self, tool_name: str) -> bool:
@@ -90,7 +138,7 @@ class ToolRegistry:
         room_id: str | None = None,
         session_id: str | None = None,
     ) -> ToolResult:
-        """Execute tool by name.
+        """Execute tool by name and track metrics.
 
         Args:
             tool_name: Name of tool to execute
@@ -111,17 +159,56 @@ class ToolRegistry:
                 metadata={"error": "unknown_tool", "tool_name": tool_name},
             )
 
+        # Start timing
+        start_time = time.time()
+        metrics = self._metrics.get(tool_name)
+
         try:
             logger.info(
                 f"Executing tool '{tool_name}' with arguments: {arguments}"
             )
             result = await tool.execute(arguments, room_id, session_id)
+
+            # Calculate latency
+            latency_ms = (time.time() - start_time) * 1000
+
+            # Update metrics
+            if metrics:
+                metrics.total_executions += 1
+                metrics.last_execution_time = time.time()
+                metrics.total_latency_ms += latency_ms
+                metrics.min_latency_ms = min(metrics.min_latency_ms, latency_ms)
+                metrics.max_latency_ms = max(metrics.max_latency_ms, latency_ms)
+
+                if result.success:
+                    metrics.successful_executions += 1
+                else:
+                    metrics.failed_executions += 1
+                    # Track error type from metadata
+                    error_type = result.metadata.get("error", "unknown_error")
+                    metrics.error_counts[error_type] = metrics.error_counts.get(error_type, 0) + 1
+
             logger.info(
-                f"Tool '{tool_name}' completed: success={result.success}"
+                f"Tool '{tool_name}' completed: success={result.success}, latency={latency_ms:.2f}ms"
             )
             return result
 
         except Exception as e:
+            # Calculate latency even for exceptions
+            latency_ms = (time.time() - start_time) * 1000
+
+            # Update metrics for exception
+            if metrics:
+                metrics.total_executions += 1
+                metrics.failed_executions += 1
+                metrics.last_execution_time = time.time()
+                metrics.total_latency_ms += latency_ms
+                metrics.min_latency_ms = min(metrics.min_latency_ms, latency_ms)
+                metrics.max_latency_ms = max(metrics.max_latency_ms, latency_ms)
+                # Track exception type
+                exception_type = type(e).__name__
+                metrics.error_counts[exception_type] = metrics.error_counts.get(exception_type, 0) + 1
+
             logger.error(
                 f"Error executing tool '{tool_name}': {e}", exc_info=True
             )
@@ -134,6 +221,40 @@ class ToolRegistry:
                     "exception": str(e),
                 },
             )
+
+    def get_metrics(self, tool_name: str | None = None) -> dict[str, Any] | list[dict[str, Any]]:
+        """Get metrics for specific tool or all tools.
+
+        Args:
+            tool_name: Optional tool name. If None, returns all metrics.
+
+        Returns:
+            Metrics dictionary for specific tool, or list of all metrics
+        """
+        if tool_name:
+            metrics = self._metrics.get(tool_name)
+            if not metrics:
+                return {"error": f"Tool '{tool_name}' not found"}
+            return metrics.to_dict()
+
+        # Return all metrics
+        return [metrics.to_dict() for metrics in self._metrics.values()]
+
+    def reset_metrics(self, tool_name: str | None = None) -> None:
+        """Reset metrics for specific tool or all tools.
+
+        Args:
+            tool_name: Optional tool name. If None, resets all metrics.
+        """
+        if tool_name:
+            if tool_name in self._metrics:
+                self._metrics[tool_name] = ToolMetrics(tool_name=tool_name)
+                logger.info(f"Reset metrics for tool: {tool_name}")
+        else:
+            # Reset all metrics
+            for name in self._metrics:
+                self._metrics[name] = ToolMetrics(tool_name=name)
+            logger.info("Reset metrics for all tools")
 
     def __len__(self) -> int:
         """Get number of registered tools."""
