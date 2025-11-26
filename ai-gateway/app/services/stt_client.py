@@ -93,7 +93,10 @@ def get_stt_pipeline(config: Config):
     from app.services.vosk_client import VoskSTTClient
     from app.services.whisper_client import WhisperSTTClient
 
-    logger.info("Creating STT pipeline (Vosk -> Whisper)")
+    logger.info(
+        f"Creating STT pipeline (Vosk -> Whisper, confidence threshold: "
+        f"{config.stt_confidence_threshold})"
+    )
 
     vosk_client = VoskSTTClient(model_path=config.vosk_model_path)
     whisper_client = WhisperSTTClient(
@@ -105,5 +108,5 @@ def get_stt_pipeline(config: Config):
     return STTPipeline(
         vosk_client=vosk_client,
         whisper_client=whisper_client,
-        confidence_threshold=0.7,
+        confidence_threshold=config.stt_confidence_threshold,
     )

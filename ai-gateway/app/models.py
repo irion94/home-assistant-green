@@ -72,6 +72,10 @@ class Config(BaseSettings):
     intent_confidence_threshold: float = Field(
         default=0.8, description="Minimum confidence threshold for intent matching"
     )
+    stt_confidence_threshold: float = Field(
+        default=0.7,
+        description="Minimum Vosk confidence to accept result (triggers Whisper fallback if below)",
+    )
 
     log_level: str = Field(default="INFO", description="Logging level")
 
