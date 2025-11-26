@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { Lightbulb, LightbulbOff, X } from 'lucide-react'
 import { useLightEntity } from '../../../hooks/useEntity'
-import { Slider } from '../../common'
+import { Slider } from '../../ui/slider'
 import { classNames } from '../../../utils/formatters'
 import { LIGHTS } from '../../../config/entities'
 
@@ -359,10 +359,12 @@ function LightModal({ entityId, name, onClose }: LightModalProps) {
               <p className="text-sm">{displayBrightness}%</p>
             </div>
             <Slider
-              value={displayBrightness}
-              onChange={handleBrightnessChange}
-              onChangeEnd={handleBrightnessChangeEnd}
-              trackColor={isOn ? 'bg-primary' : 'bg-surface-light'}
+              value={[displayBrightness]}
+              onValueChange={([v]) => handleBrightnessChange(v)}
+              onValueCommit={([v]) => handleBrightnessChangeEnd(v)}
+              max={100}
+              step={1}
+              disabled={!isOn}
             />
           </div>
         )}
@@ -377,10 +379,11 @@ function LightModal({ entityId, name, onClose }: LightModalProps) {
               </p>
             </div>
             <Slider
-              value={displayColorTemp}
-              onChange={handleColorTempChange}
-              onChangeEnd={handleColorTempChangeEnd}
-              trackColor="bg-gradient-to-r from-blue-200 via-white to-orange-300"
+              value={[displayColorTemp]}
+              onValueChange={([v]) => handleColorTempChange(v)}
+              onValueCommit={([v]) => handleColorTempChangeEnd(v)}
+              max={100}
+              step={1}
             />
           </div>
         )}

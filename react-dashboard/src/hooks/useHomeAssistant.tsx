@@ -154,7 +154,22 @@ export function HomeAssistantProvider({ children }: { children: ReactNode }) {
   )
 }
 
+/**
+ * @deprecated This hook is deprecated. Use entity hooks from useEntity.ts instead.
+ *
+ * Migration guide:
+ * - Replace `useHomeAssistant()` with `useEntity(entityId)` or domain-specific hooks
+ * - Use `useLightEntity()`, `useClimateEntity()`, `useSensorEntity()` instead
+ * - Entity state is now managed by Zustand entityStore instead of React Context
+ *
+ * This hook will be removed in Phase 6 of the refactoring.
+ */
 export function useHomeAssistant() {
+  console.warn(
+    'useHomeAssistant() is deprecated. Migrate to useEntity() hooks. ' +
+    'See src/hooks/useEntity.ts for the new API.'
+  )
+
   const context = useContext(HomeAssistantContext)
   if (!context) {
     throw new Error('useHomeAssistant must be used within HomeAssistantProvider')
