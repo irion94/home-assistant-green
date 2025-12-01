@@ -118,16 +118,42 @@ class GetEntityTool(BaseTool):
             # Format for LLM
             content = self._format_entities(entities, domain)
 
-            # Create display action for dashboard
-            display_action = {
-                "type": "get_entity",
-                "data": {
-                    "domain": domain,
-                    "entity_id": entity_id,
-                    "entities": entities[:20],  # Limit for display
-                    "entity_count": len(entities),
-                },
-            }
+            # Create display action for dashboard (Phase 4: unified data_display)
+            # For single entity, use entity mode; for multiple, use first entity as representative
+            if entity_id and len(entities) == 1:
+                entity = entities[0]
+                display_action = {
+                    "type": "data_display",
+                    "data": {
+                        "mode": "entity",
+                        "content": {
+                            "entity_id": entity.get("entity_id", ""),
+                            "state": entity.get("state", "unknown"),
+                            "friendly_name": entity.get("attributes", {}).get("friendly_name", entity.get("entity_id", "")),
+                            "attributes": entity.get("attributes", {}),
+                            "domain": domain,
+                        },
+                    },
+                }
+            else:
+                # Multiple entities - show first one with count in attributes
+                entity = entities[0]
+                display_action = {
+                    "type": "data_display",
+                    "data": {
+                        "mode": "entity",
+                        "content": {
+                            "entity_id": f"{domain} (showing 1 of {len(entities)})",
+                            "state": entity.get("state", "unknown"),
+                            "friendly_name": entity.get("attributes", {}).get("friendly_name", entity.get("entity_id", "")),
+                            "attributes": {
+                                "total_entities": len(entities),
+                                **entity.get("attributes", {}),
+                            },
+                            "domain": domain,
+                        },
+                    },
+                }
 
             return ToolResult(
                 success=True,

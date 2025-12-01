@@ -121,13 +121,42 @@ class GetHomeDataTool(BaseTool):
 
                 content = self._format_all_sensors(results)
 
-                # Create display action for left panel
+                # Create display action for left panel (Phase 4: unified data_display)
+                # Format sensor data for HomeData interface
+                sensors_list = []
+                temp_val = None
+                humidity_val = None
+
+                for s_type, data in results.items():
+                    if s_type == "lights":
+                        continue  # Handled separately
+                    if "temperature" in s_type:
+                        temp_val = f"{data.get('state', '?')}°C"
+                    elif s_type == "humidity":
+                        humidity_val = f"{data.get('state', '?')}%"
+                    else:
+                        # Format other sensors
+                        state = data.get("state", "?")
+                        unit = data.get("attributes", {}).get("unit_of_measurement", "")
+                        sensors_list.append({
+                            "name": s_type.replace("_", " ").title(),
+                            "value": str(state),
+                            "unit": unit
+                        })
+
+                lights_data = results.get("lights", {"on": 0, "total": 0})
+
                 display_action = {
-                    "type": "get_home_data",
+                    "type": "data_display",
                     "data": {
-                        "sensor_type": "all",
-                        "sensors": results,
-                        "summary": content,
+                        "mode": "home_data",
+                        "content": {
+                            "lights_on": lights_data["on"],
+                            "lights_total": lights_data["total"],
+                            "sensors": sensors_list,
+                            "temperature": temp_val,
+                            "humidity": humidity_val,
+                        },
                     },
                 }
 
@@ -149,14 +178,24 @@ class GetHomeDataTool(BaseTool):
 
                 content = self._format_sensor_data(sensor_type, data)
 
-                # Create display action for left panel
+                # Create display action for left panel (Phase 4: unified data_display)
+                # Single sensor formatted as home_data with one sensor
+                state = data.get("state", "?")
+                unit = data.get("attributes", {}).get("unit_of_measurement", "")
+
                 display_action = {
-                    "type": "get_home_data",
+                    "type": "data_display",
                     "data": {
-                        "sensor_type": sensor_type,
-                        "state": data.get("state"),
-                        "attributes": data.get("attributes", {}),
-                        "summary": content,
+                        "mode": "home_data",
+                        "content": {
+                            "lights_on": 0,
+                            "lights_total": 0,
+                            "sensors": [{
+                                "name": sensor_type.replace("_", " ").title(),
+                                "value": str(state),
+                                "unit": unit
+                            }],
+                        },
                     },
                 }
 

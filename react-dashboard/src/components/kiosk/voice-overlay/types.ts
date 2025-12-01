@@ -11,6 +11,7 @@ export type DisplayActionType =
   | 'get_home_data'
   | 'get_entity'
   | 'research_results'
+  | 'data_display'
 
 export interface DisplayAction {
   type: DisplayActionType
@@ -87,4 +88,40 @@ export interface MediaControlData {
   media_position?: number
   volume_level?: number
   artwork_url?: string
+}
+
+// Data display types (Phase 4: Panel Consolidation)
+export type DataDisplayMode = 'time' | 'home_data' | 'entity'
+
+export interface TimeData {
+  time: string
+  date: string
+  day: string
+  timezone: string
+}
+
+export interface HomeData {
+  lights_on: number
+  lights_total: number
+  sensors: Array<{ name: string; value: string; unit?: string }>
+  temperature?: string
+  humidity?: string
+}
+
+export interface EntityData {
+  entity_id: string
+  state: string
+  friendly_name: string
+  attributes: Record<string, any>
+  domain: string
+}
+
+export type DataDisplayData = TimeData | HomeData | EntityData
+
+export interface DataDisplayAction extends DisplayAction {
+  type: 'data_display'
+  data: {
+    mode: DataDisplayMode
+    content: DataDisplayData
+  }
 }

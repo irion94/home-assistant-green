@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Loader2 } from 'lucide-react'
 import { useVoiceStore } from '@/stores/voiceStore'
 import { panelRegistry } from './display-panels/registry'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import ToolPanel from './ToolPanel'
 
 // Panel loading spinner component
@@ -76,9 +77,11 @@ export const ToolPanelSlider = ({ roomId }: ToolPanelSliderProps) => {
     const PanelComponent = panelConfig.component
 
     return (
-      <Suspense fallback={<PanelLoadingSpinner />}>
-        <PanelComponent action={displayAction} />
-      </Suspense>
+      <ErrorBoundary>
+        <Suspense fallback={<PanelLoadingSpinner />}>
+          <PanelComponent action={displayAction} />
+        </Suspense>
+      </ErrorBoundary>
     )
   }
 

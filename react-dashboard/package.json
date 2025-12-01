@@ -10,7 +10,8 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
-    "test:watch": "vitest --watch"
+    "test:watch": "vitest --watch",
+    "analyze": "vite-bundle-visualizer"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -47,6 +48,7 @@
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.3.0",
     "vite": "^5.0.0",
+    "vite-bundle-visualizer": "^1.2.1",
     "vitest": "^4.0.14",
     "ws": "^8.18.3"
   }

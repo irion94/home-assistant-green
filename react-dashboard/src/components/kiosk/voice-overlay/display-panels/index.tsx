@@ -21,6 +21,7 @@ const TimeDisplayPanel = lazy(() => import('./TimeDisplayPanel'))
 const HomeDataPanel = lazy(() => import('./HomeDataPanel'))
 const EntityDetailPanel = lazy(() => import('./EntityDetailPanel'))
 const ResearchResultsPanel = lazy(() => import('./ResearchResultsPanel'))
+const DataDisplayPanel = lazy(() => import('./DataDisplayPanel'))
 
 // Register all panels with auto-close timeouts
 // This runs at module load time
@@ -72,6 +73,10 @@ panelRegistry.register({
   description: 'Web search results'
 })
 
+// Phase 4: Old panels kept for backward compatibility but not registered
+// Backend now sends 'data_display' type instead of 'get_time', 'get_home_data', 'get_entity'
+// Uncomment these registrations if you need to rollback to old format:
+/*
 panelRegistry.register({
   type: 'get_time',
   component: TimeDisplayPanel,
@@ -95,6 +100,7 @@ panelRegistry.register({
   title: 'Entity Details',
   description: 'Display entity state'
 })
+*/
 
 panelRegistry.register({
   type: 'research_results',
@@ -102,6 +108,14 @@ panelRegistry.register({
   autoCloseTimeout: null, // Never auto-close (map link interaction)
   title: 'Local Search',
   description: 'Nearby places and businesses'
+})
+
+panelRegistry.register({
+  type: 'data_display',
+  component: DataDisplayPanel,
+  autoCloseTimeout: 10000, // 10s
+  title: 'Data Display',
+  description: 'Display time, home status, or entity details (Phase 4)'
 })
 
 /**
@@ -131,4 +145,5 @@ export {
   HomeDataPanel,
   EntityDetailPanel,
   ResearchResultsPanel,
+  DataDisplayPanel,
 }
