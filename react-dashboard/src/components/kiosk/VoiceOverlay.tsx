@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { mqttService, VoiceState } from '../../services/mqttService'
-import { useVoiceStore } from '../../stores/voiceStore'
+import { useConversationStore } from '../../stores/conversationStore'
+import { useUIStore } from '../../stores/uiStore'
 import { useBrowserTTS } from '../../hooks/useBrowserTTS'
 import ChatSection from './voice-overlay/ChatSection'
 import StatusIndicator from './voice-overlay/StatusIndicator'
@@ -19,13 +20,11 @@ interface VoiceOverlayProps {
 }
 
 export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', startOnOpen = false, initialState = 'idle' }: VoiceOverlayProps) {
-  // Zustand store - single source of truth
-  const {
-    state,
-    messages,
-    conversationMode,
-    setVoiceState
-  } = useVoiceStore()
+  // Phase 6: Use split stores for better performance
+  const messages = useConversationStore((state) => state.messages)
+  const conversationMode = useConversationStore((state) => state.conversationMode)
+  const state = useUIStore((state) => state.state)
+  const setVoiceState = useUIStore((state) => state.setVoiceState)
 
   // Browser TTS for dashboard sessions
   const { speak, stop } = useBrowserTTS()

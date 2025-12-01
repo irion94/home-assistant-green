@@ -1,14 +1,14 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Loader2 } from 'lucide-react'
-import { ConversationMessage } from '../../../stores/voiceStore'
+import { ConversationMessage } from '../../../stores/conversationStore'
 import { classNames } from '../../../utils/formatters'
 
 interface ChatSectionProps {
   messages: ConversationMessage[]
 }
 
-export default function ChatSection({ messages }: ChatSectionProps) {
+const ChatSection = memo<ChatSectionProps>(({ messages }: ChatSectionProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom when new messages arrive
@@ -66,4 +66,11 @@ export default function ChatSection({ messages }: ChatSectionProps) {
         </div>
     </div>
   )
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison - only re-render if messages array reference changes
+  return prevProps.messages === nextProps.messages
+})
+
+ChatSection.displayName = 'ChatSection'
+
+export default ChatSection

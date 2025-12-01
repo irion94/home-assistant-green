@@ -17,7 +17,9 @@
  */
 
 import mqtt, { MqttClient } from 'mqtt'
-import { useVoiceStore } from '../stores/voiceStore'
+import { useConversationStore } from '../stores/conversationStore'
+import { useUIStore } from '../stores/uiStore'
+import { useDeviceStore } from '../stores/deviceStore'
 import { mqttTopics } from '../config/mqttTopics'
 
 export interface VoiceMessage {
@@ -97,8 +99,8 @@ class MqttService {
     }
 
     this.roomId = roomId
-    // Sync to store
-    useVoiceStore.getState().setRoomId(roomId)
+    // Sync to store (Phase 6: deviceStore)
+    useDeviceStore.getState().setRoomId(roomId)
     console.log(`[MQTT] Room ID set to: ${roomId}`)
 
     if (wasConnected) {
@@ -144,7 +146,7 @@ class MqttService {
       console.log('[MQTT] Connected')
       this.reconnectAttempts = 0
       // Write to store
-      useVoiceStore.getState().setMqttConnected(true)
+      useDeviceStore.getState().setMqttConnected(true)
       // Legacy callback
       this.callbacks.onConnectionChange?.(true)
       this.subscribeRoom()
@@ -157,7 +159,7 @@ class MqttService {
     this.client.on('close', () => {
       console.log('[MQTT] Connection closed')
       // Write to store
-      useVoiceStore.getState().setMqttConnected(false)
+      useDeviceStore.getState().setMqttConnected(false)
       // Legacy callback
       this.callbacks.onConnectionChange?.(false)
     })
@@ -257,18 +259,21 @@ class MqttService {
 
   /**
    * Handle room-scoped messages.
-   * Writes directly to Zustand store AND calls legacy callbacks.
+   * Writes directly to Zustand stores (Phase 6: split stores) AND calls legacy callbacks.
    */
   private handleRoomMessage(subTopic: string, payload: string): void {
-    const store = useVoiceStore.getState()
+    // Phase 6: Use split stores for better performance
+    const conversationStore = useConversationStore.getState()
+    const uiStore = useUIStore.getState()
+    const deviceStore = useDeviceStore.getState()
 
     // session/active
     if (subTopic === 'session/active') {
       const sessionId = payload === 'none' ? null : payload
       this.currentSessionId = sessionId
       // Write to store
-      store.setSessionId(sessionId)
-      store.addDebugLog('MQTT', `session/active = ${sessionId ?? 'none'}`)
+      conversationStore.setSessionId(sessionId)
+      uiStore.addDebugLog('MQTT', `session/active = ${sessionId ?? 'none'}`)
       // Legacy callback
       this.callbacks.onActiveSessionChange?.(sessionId)
       console.log(`[MQTT] Active session: ${sessionId ?? 'none'}`)
@@ -281,7 +286,7 @@ class MqttService {
       const sessionId = stateMatch[1]
       // State can be JSON object {"status": "listening", ...} or plain string
       let state: VoiceState
-      const prevState = store.state
+      const prevState = uiStore.state
       try {
         const data = JSON.parse(payload)
         state = (data.status || data.state || 'idle') as VoiceState
@@ -290,16 +295,16 @@ class MqttService {
       }
 
       // Debug log state transition
-      store.addDebugLog('STATE', `${prevState} → ${state}`)
+      uiStore.addDebugLog('STATE', `${prevState} → ${state}`)
 
       // Write to store - this handles auto-opening overlay
-      store.setVoiceState(state)
+      uiStore.setVoiceState(state)
 
       // Auto-open overlay on voice activity (replaces KioskHome callback logic)
-      const { overlayOpen } = store
+      const { overlayOpen } = uiStore
       if ((state === 'wake_detected' || state === 'listening' || state === 'waiting') && !overlayOpen) {
         console.log(`[MQTT] Voice activity detected (${state}), opening overlay via store`)
-        store.openOverlay(false, state)  // false = don't start session (wake-word already did)
+        uiStore.openOverlay(false, state)  // false = don't start session (wake-word already did)
       }
 
       // Legacy callback
@@ -315,7 +320,7 @@ class MqttService {
         const text = data.text || ''
         const sequence = data.sequence || 0
         // Debug Panel only (per user preference) - not added to chat messages
-        store.addDebugLog('MQTT', `[STT interim #${sequence}] "${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`)
+        uiStore.addDebugLog('MQTT', `[STT interim #${sequence}] "${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`)
         console.log(`[MQTT] Interim transcript [${sequence}]: "${text}"`)
       } catch (e) {
         console.error('[MQTT] Failed to parse interim transcript:', e)
@@ -334,7 +339,7 @@ class MqttService {
         const engine = data.engine || 'vosk'
 
         // Add debug log with confidence info
-        store.addDebugLog('MQTT', `[STT final] "${text.slice(0, 50)}${text.length > 50 ? '...' : ''}" (${engine}, conf=${confidence.toFixed(2)})`)
+        uiStore.addDebugLog('MQTT', `[STT final] "${text.slice(0, 50)}${text.length > 50 ? '...' : ''}" (${engine}, conf=${confidence.toFixed(2)})`)
 
         // Add to chat messages (like regular transcript)
         const message: VoiceMessage = {
@@ -343,7 +348,7 @@ class MqttService {
           session_id: sessionId,
           timestamp: data.timestamp || Date.now(),
         }
-        store.addTranscript(message)
+        conversationStore.addTranscript(message)
 
         // Legacy callback
         this.callbacks.onTranscript?.(message)
@@ -363,7 +368,7 @@ class MqttService {
         const text = data.text || ''
 
         // Debug log for refinement (includes sessionId for traceability)
-        store.addDebugLog('MQTT', `[STT refined] Whisper: "${text.slice(0, 50)}${text.length > 50 ? '...' : ''}" (session=${sessionId.slice(0, 8)})`)
+        uiStore.addDebugLog('MQTT', `[STT refined] Whisper: "${text.slice(0, 50)}${text.length > 50 ? '...' : ''}" (session=${sessionId.slice(0, 8)})`)
 
         // Note: Refined transcript replaces the previous final transcript
         // For now, just add to debug panel - the final transcript is already in chat
@@ -381,8 +386,8 @@ class MqttService {
       const sessionId = streamStartMatch[1]
       try {
         // Initialize streaming state in store
-        store.startStreaming()
-        store.addDebugLog('MQTT', `[Stream start] session=${sessionId.slice(0, 8)}`)
+        conversationStore.startStreaming()
+        uiStore.addDebugLog('MQTT', `[Stream start] session=${sessionId.slice(0, 8)}`)
         console.log(`[MQTT] Streaming response started for session ${sessionId}`)
       } catch (e) {
         console.error('[MQTT] Failed to parse stream start:', e)
@@ -399,11 +404,11 @@ class MqttService {
         const sequence = data.sequence || 0
 
         // Append token to streaming message
-        store.appendStreamingToken(token, sequence)
+        conversationStore.appendStreamingToken(token, sequence)
 
         // Debug log only every 10 tokens to avoid spam
         if (sequence % 10 === 0 || sequence === 1) {
-          store.addDebugLog('MQTT', `[Stream chunk #${sequence}] "${token.slice(0, 20)}${token.length > 20 ? '...' : ''}"`)
+          uiStore.addDebugLog('MQTT', `[Stream chunk #${sequence}] "${token.slice(0, 20)}${token.length > 20 ? '...' : ''}"`)
         }
       } catch (e) {
         console.error('[MQTT] Failed to parse stream chunk:', e)
@@ -421,8 +426,8 @@ class MqttService {
         const totalTokens = data.total_tokens || 0
 
         // Finalize streaming message
-        store.finishStreaming(fullText)
-        store.addDebugLog('MQTT', `[Stream complete] ${totalTokens} tokens in ${duration.toFixed(2)}s`)
+        conversationStore.finishStreaming(fullText)
+        uiStore.addDebugLog('MQTT', `[Stream complete] ${totalTokens} tokens in ${duration.toFixed(2)}s`)
         console.log(`[MQTT] Streaming response complete: ${totalTokens} tokens in ${duration.toFixed(2)}s`)
       } catch (e) {
         console.error('[MQTT] Failed to parse stream complete:', e)
@@ -435,7 +440,7 @@ class MqttService {
     if (displayActionMatch) {
       try {
         const action = JSON.parse(payload)
-        store.setDisplayAction(action)
+        deviceStore.setDisplayAction(action)
         console.log(`[MQTT] Display action: ${action.type}`, action.data)
       } catch (e) {
         console.error('[MQTT] Failed to parse display_action:', e)
@@ -450,7 +455,7 @@ class MqttService {
         const toolEvent = JSON.parse(payload)
         const status = toolEvent.success ? '✓' : '✗'
         const latency = toolEvent.latency_ms.toFixed(1)
-        store.addDebugLog(
+        uiStore.addDebugLog(
           'MQTT',
           `TOOL ${status} ${toolEvent.tool_name} (${latency}ms) → ${toolEvent.content || 'no result'}`
         )
@@ -485,8 +490,8 @@ class MqttService {
         }
       }
       // Write to store
-      store.addTranscript(message)
-      store.addDebugLog('MQTT', `transcript = "${message.text.slice(0, 50)}${message.text.length > 50 ? '...' : ''}"`)
+      conversationStore.addTranscript(message)
+      uiStore.addDebugLog('MQTT', `transcript = "${message.text.slice(0, 50)}${message.text.length > 50 ? '...' : ''}"`)
       // Legacy callback
       console.log('[MQTT] Calling onTranscript callback with:', message)
       this.callbacks.onTranscript?.(message)
@@ -516,8 +521,8 @@ class MqttService {
         }
       }
       // Write to store
-      store.addResponse(message)
-      store.addDebugLog('MQTT', `response = "${message.text.slice(0, 50)}${message.text.length > 50 ? '...' : ''}"`)
+      conversationStore.addResponse(message)
+      uiStore.addDebugLog('MQTT', `response = "${message.text.slice(0, 50)}${message.text.length > 50 ? '...' : ''}"`)
       // Legacy callback
       this.callbacks.onResponse?.(message)
       return
@@ -527,9 +532,9 @@ class MqttService {
     const endedMatch = subTopic.match(/^session\/([^/]+)\/ended$/)
     if (endedMatch) {
       const sessionId = endedMatch[1]
-      store.addDebugLog('MQTT', `session/ended = ${sessionId}`)
+      uiStore.addDebugLog('MQTT', `session/ended = ${sessionId}`)
       // Write to store - handles overlay close
-      store.endSession()
+      uiStore.endSession()
       // Update local tracking
       if (this.currentSessionId === sessionId) {
         this.currentSessionId = null
@@ -544,8 +549,8 @@ class MqttService {
     if (subTopic === 'config/conversation_mode') {
       const enabled = payload.toLowerCase() === 'true'
       // Write to store
-      store.setConversationMode(enabled)
-      store.addDebugLog('MQTT', `conversation_mode = ${enabled}`)
+      conversationStore.setConversationMode(enabled)
+      uiStore.addDebugLog('MQTT', `conversation_mode = ${enabled}`)
       // Legacy callback
       this.callbacks.onConversationModeChange?.(enabled)
       console.log(`[MQTT] Conversation mode synced: ${enabled}`)
@@ -556,8 +561,8 @@ class MqttService {
     if (subTopic === 'stt_comparison') {
       const comparison = JSON.parse(payload) as STTComparison
       // Write to store
-      store.setLastComparison(comparison)
-      store.addDebugLog('TIMING', `STT: vosk=${comparison.vosk.duration.toFixed(2)}s, whisper=${comparison.whisper.duration.toFixed(2)}s → ${comparison.selected}`)
+      conversationStore.setLastComparison(comparison)
+      uiStore.addDebugLog('TIMING', `STT: vosk=${comparison.vosk.duration.toFixed(2)}s, whisper=${comparison.whisper.duration.toFixed(2)}s → ${comparison.selected}`)
       // Legacy callback
       this.callbacks.onSTTComparison?.(comparison)
       return
