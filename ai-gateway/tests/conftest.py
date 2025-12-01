@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import pytest
+from fastapi.testclient import TestClient
+from unittest.mock import AsyncMock, MagicMock
 
 from app.models import Config, HAAction
+from app.main import app
 
 
 @pytest.fixture
@@ -112,3 +115,51 @@ def json_with_extra_text() -> str:
         JSON string surrounded by additional text
     """
     return 'Sure, here is the action: {"action":"call_service","service":"light.turn_on","entity_id":"light.kitchen","data":{}} - Hope this helps!'
+
+
+@pytest.fixture
+def client():
+    """FastAPI test client."""
+    return TestClient(app)
+
+
+@pytest.fixture
+def mock_ha_states():
+    """Mock Home Assistant states."""
+    return [
+        {
+            "entity_id": "light.living_room",
+            "state": "off",
+            "attributes": {
+                "friendly_name": "Living Room Light",
+                "supported_features": 63,
+            },
+        },
+        {
+            "entity_id": "sensor.temperature",
+            "state": "22.5",
+            "attributes": {
+                "unit_of_measurement": "°C",
+                "friendly_name": "Temperature",
+            },
+        },
+    ]
+
+
+@pytest.fixture
+def mock_ha_client(mock_ha_states):
+    """Mock HomeAssistantClient."""
+    client = MagicMock()
+    client.get_states = AsyncMock(return_value=mock_ha_states)
+    client.call_service = AsyncMock(return_value={"success": True})
+    return client
+
+
+@pytest.fixture
+def mock_mqtt_client():
+    """Mock MQTT client."""
+    client = MagicMock()
+    client.publish = MagicMock()
+    client.publish_display_action = MagicMock()
+    client.publish_transcript = MagicMock()
+    return client
