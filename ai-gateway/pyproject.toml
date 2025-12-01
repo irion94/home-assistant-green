@@ -19,6 +19,9 @@ dependencies = [
     # Database
     "asyncpg>=0.29.0",
     "pgvector>=0.2.0",
+    # Phase 7: Performance optimization
+    "redis>=5.0.0",        # Redis caching client
+    "tenacity>=8.2.0",     # Retry logic with exponential backoff
 ]
 
 [project.optional-dependencies]

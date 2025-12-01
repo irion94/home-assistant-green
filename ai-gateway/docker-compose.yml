@@ -9,6 +9,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}  # Fallback if secrets disabled
       # POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password  # Use secret when SECRETS_MANAGER_ENABLED=true
       POSTGRES_DB: ai_assistant
+      # Phase 7: Performance optimization
+      POSTGRES_MAX_CONNECTIONS: 100
+      POSTGRES_SHARED_BUFFERS: 256MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 1GB
     secrets:
       - postgres_password
     volumes:
@@ -19,6 +23,22 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ai_assistant"]
       interval: 10s
       timeout: 5s
+      retries: 5
+
+  # Redis cache (Phase 7)
+  redis:
+    image: redis:7-alpine
+    container_name: ai-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - /mnt/data-ssd/redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
       retries: 5
 
   # Home Assistant
@@ -116,6 +136,10 @@ services:
       - MQTT_BASE_PREFIX=${MQTT_BASE_PREFIX:-voice_assistant}  # Topic namespace
       - MQTT_BROKER_URL=${MQTT_BROKER_URL:-mosquitto}  # MQTT broker hostname
       - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}  # MQTT broker port
+      # Redis Caching (Phase 7)
+      - REDIS_ENABLED=${REDIS_ENABLED:-false}  # Feature flag for Redis caching
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}  # Redis connection URL
+      - REDIS_CACHE_TTL=${REDIS_CACHE_TTL:-300}  # Default cache TTL in seconds (5 minutes)
     secrets:
       - ha_token
       - openai_api_key
@@ -127,6 +151,8 @@ services:
       postgres:
         condition: service_healthy
       homeassistant:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     extra_hosts:

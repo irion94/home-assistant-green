@@ -1,6 +1,8 @@
 """
 Web Search Service using Brave Search API
 Provides real-time web search capabilities for the AI Gateway
+
+Phase 7: Added circuit breaker pattern to prevent cascading failures.
 """
 
 from __future__ import annotations
@@ -10,21 +12,33 @@ import os
 
 import httpx
 
+from app.services.circuit_breaker import CircuitBreaker
+
 logger = logging.getLogger(__name__)
 
 
 class WebSearchClient:
-    """Client for Brave Search API"""
+    """Client for Brave Search API.
+
+    Phase 7: Includes circuit breaker (5 failures -> 60s timeout).
+    """
 
     def __init__(self):
         self.api_key = os.getenv("BRAVE_API_KEY", "")
         self.base_url = "https://api.search.brave.com/res/v1/web/search"
         self.results_limit = int(os.getenv("SEARCH_RESULTS_LIMIT", "5"))
 
+        # Phase 7: Circuit breaker for Brave Search API
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=5,
+            recovery_timeout=60,
+            name="brave_search"
+        )
+
         if not self.api_key:
             logger.warning("BRAVE_API_KEY not set - web search disabled")
         else:
-            logger.info(f"WebSearchClient initialized (limit: {self.results_limit} results)")
+            logger.info(f"WebSearchClient initialized (limit: {self.results_limit} results, circuit breaker enabled)")
 
     def is_available(self) -> bool:
         """Check if web search is configured"""
@@ -32,7 +46,9 @@ class WebSearchClient:
 
     async def search(self, query: str, count: int | None = None) -> dict:
         """
-        Perform web search using Brave Search API
+        Perform web search using Brave Search API.
+
+        Phase 7: Protected by circuit breaker to prevent API overload.
 
         Args:
             query: Search query string
@@ -57,6 +73,36 @@ class WebSearchClient:
 
         results_count = count or self.results_limit
 
+        # Phase 7: Use circuit breaker for API call
+        try:
+            return await self.circuit_breaker.call(
+                self._do_search,
+                query,
+                results_count
+            )
+        except Exception as e:
+            # Circuit breaker or search failure
+            logger.error(f"Web search failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "results": []
+            }
+
+    async def _do_search(self, query: str, results_count: int) -> dict:
+        """
+        Internal search method wrapped by circuit breaker.
+
+        Args:
+            query: Search query string
+            results_count: Number of results to return
+
+        Returns:
+            Dictionary with search results and metadata
+
+        Raises:
+            Exception: On search failure (triggers circuit breaker)
+        """
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(
@@ -72,13 +118,7 @@ class WebSearchClient:
                     }
                 )
 
-                if response.status_code != 200:
-                    logger.error(f"Brave Search API error: {response.status_code} - {response.text}")
-                    return {
-                        "success": False,
-                        "error": f"Search API error: {response.status_code}",
-                        "results": []
-                    }
+                response.raise_for_status()  # Phase 7: Raise on error (triggers circuit breaker)
 
                 data = response.json()
                 results = self._parse_results(data)
@@ -92,20 +132,15 @@ class WebSearchClient:
                     "total_results": len(results)
                 }
 
-        except httpx.TimeoutException:
+        except httpx.TimeoutException as e:
             logger.error(f"Web search timeout for query: {query}")
-            return {
-                "success": False,
-                "error": "Search request timed out",
-                "results": []
-            }
+            raise  # Phase 7: Let circuit breaker handle timeout
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Brave Search API error: {e.response.status_code} - {e.response.text}")
+            raise  # Phase 7: Let circuit breaker handle HTTP errors
         except Exception as e:
             logger.error(f"Web search error: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "results": []
-            }
+            raise  # Phase 7: Let circuit breaker handle all errors
 
     def _parse_results(self, data: dict) -> list:
         """Parse Brave Search API response into simplified format"""

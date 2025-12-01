@@ -32,7 +32,14 @@ class DatabaseService:
         self._cache_ttl = int(os.getenv("CACHE_TTL_SECONDS", "3600"))
 
     async def connect(self) -> None:
-        """Create database connection pool."""
+        """Create database connection pool.
+
+        Phase 7: Optimized connection pooling for better performance.
+        - min_size: 5 connections (up from 2)
+        - max_size: 20 connections (up from 10)
+        - max_queries: 50000 (recycle connections after 50k queries)
+        - max_inactive_connection_lifetime: 300s (5 minutes)
+        """
         if self.pool is not None:
             return
 
@@ -43,10 +50,12 @@ class DatabaseService:
                 user=self._config["user"],
                 password=self._config["password"],
                 database=self._config["database"],
-                min_size=2,
-                max_size=10,
+                min_size=5,          # Phase 7: Increased from 2
+                max_size=20,         # Phase 7: Increased from 10
+                max_queries=50000,   # Phase 7: Recycle connections after N queries
+                max_inactive_connection_lifetime=300,  # Phase 7: 5 minutes
             )
-            logger.info("Database connection pool created")
+            logger.info("Database connection pool created (Phase 7: optimized)")
             await self._run_migrations()
         except Exception as e:
             logger.error(f"Failed to connect to database: {e}")
