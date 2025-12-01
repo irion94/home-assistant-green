@@ -417,14 +417,119 @@ async def test_slow_operation():
 
 ---
 
-## Next Steps
+## Tool Testing Guide (Phase 3)
 
-### Phase 3: Tool Testing & Registry
+### Tool Test Structure
 
-After Phase 2 completion, proceed to [Phase 3: Tool Testing & Registry](/.claude/plans/phase-03-tool-testing.md) for:
-- 100% coverage of 8 tools
-- PanelRegistry tests
-- Learning systems tests
+All backend tools follow a consistent testing pattern for comprehensive coverage:
+
+**Test file location**: `ai-gateway/tests/services/tools/test_{tool}_tool.py`
+
+**Required test cases** (minimum 10-15 per tool):
+1. **Tool name**: Verify tool identifier is correct
+2. **Schema structure**: Validate OpenAI function schema format
+3. **Required parameters**: Check schema requires correct arguments
+4. **Schema enums**: Verify action/option enums are complete
+5. **Missing parameters**: Test tool fails gracefully with missing args
+6. **Successful execution**: Test tool executes successfully with valid args
+7. **Display action**: Verify display action structure and content
+8. **MQTT publishing**: Test MQTT publish is called correctly
+9. **Error handling**: Test graceful failure on exceptions
+10. **Edge cases**: Missing data, invalid responses, network failures
+
+### Example Tool Test
+
+```python
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+from app.services.tools.example_tool import ExampleTool
+
+
+@pytest.fixture
+def example_tool(mock_ha_client):
+    """Fixture providing ExampleTool instance."""
+    return ExampleTool(ha_client=mock_ha_client)
+
+
+class TestExampleTool:
+    """Test suite for ExampleTool."""
+
+    def test_tool_name(self, example_tool):
+        """Test tool name is correct."""
+        assert example_tool.name == "example_action"
+
+    def test_schema_structure(self, example_tool):
+        """Test schema has required OpenAI structure."""
+        schema = example_tool.schema
+        assert schema["type"] == "function"
+        assert "function" in schema
+        assert "parameters" in schema["function"]
+
+    @pytest.mark.asyncio
+    async def test_successful_execution(self, example_tool, mock_ha_client):
+        """Test successful tool execution."""
+        mock_ha_client.call_service = AsyncMock(return_value={"success": True})
+
+        result = await example_tool.execute(
+            arguments={"param": "value"},
+            room_id="test_room",
+            session_id="test_session"
+        )
+
+        assert result.success is True
+        assert result.display_action is not None
+
+    @pytest.mark.asyncio
+    async def test_missing_required_arguments(self, example_tool):
+        """Test missing arguments fail gracefully."""
+        result = await example_tool.execute(
+            arguments={},
+            room_id="test_room",
+            session_id="test_session"
+        )
+
+        assert result.success is False
+        assert "missing" in result.content.lower()
+```
+
+### Testing Fixtures
+
+Use shared fixtures from `ai-gateway/tests/conftest.py`:
+
+- **`mock_ha_client`**: Mock Home Assistant API client
+- **`mock_mqtt_client`**: Mock MQTT publisher
+- **`mock_ha_states`**: Sample entity states
+- **`client`**: FastAPI TestClient
+
+### Tool Coverage Status
+
+**Phase 3 Complete** (2025-12-01):
+
+| Tool | Test File | Tests | Coverage |
+|------|-----------|-------|----------|
+| GetTimeTool | `test_time_tool.py` | 10 | 100% |
+| WebViewTool | `test_webview_tool.py` | 13 | 100% |
+| GetHomeDataTool | `test_home_data_tool.py` | 11 | 100% |
+| GetEntityTool | `test_entity_tool.py` | 14 | 100% |
+| ControlLightTool | `test_control_light_tool.py` | 13 | 100% |
+| MediaControlTool | `test_media_control_tool.py` | 15 | 100% |
+| WebSearchTool | `test_web_search_tool.py` | 11 | 100% |
+| ResearchTool | `test_research_tool.py` | 13 | 100% |
+
+**Total**: 8 tools, 11 test files, 100+ individual tests
+
+### Learning Systems Tests
+
+**Phase 3** also includes tests for learning/AI systems:
+
+- **IntentAnalyzer**: 25 tests for question/confirmation detection
+- **ContextEngine**: 12 tests for context retrieval and pattern learning
+- **SuggestionEngine**: 14 tests for time/room-based suggestions
+
+**Files**:
+- `tests/services/learning/test_intent_analyzer.py`
+- `tests/services/learning/test_context_engine.py`
+- `tests/services/learning/test_suggestion_engine.py`
 
 ---
 
@@ -432,9 +537,12 @@ After Phase 2 completion, proceed to [Phase 3: Tool Testing & Registry](/.claude
 
 - **Frontend Tests**: `react-dashboard/src/**/__tests__/`
 - **Backend Tests**: `ai-gateway/tests/`
+- **Tool Tests**: `ai-gateway/tests/services/tools/`
+- **Learning Tests**: `ai-gateway/tests/services/learning/`
 - **CI/CD Workflow**: `.github/workflows/test.yml`
 - **Phase 2 Plan**: `/.claude/plans/phase-02-testing.md`
+- **Phase 3 Plan**: `/.claude/plans/phase-03-tool-testing.md`
 
 ---
 
-**For questions or issues, refer to the Phase 2 implementation plan or CLAUDE.md troubleshooting section.**
+**For questions or issues, refer to the Phase 2/3 implementation plans or CLAUDE.md troubleshooting section.**

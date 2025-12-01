@@ -1,30 +1,16 @@
-import { useEffect } from 'react'
+import { useEffect, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X } from 'lucide-react'
+import { X, Loader2 } from 'lucide-react'
 import { useVoiceStore } from '@/stores/voiceStore'
-import {
-  WebViewPanel,
-  SearchResultsPanel,
-  LightControlDetailedPanel,
-  MediaControlPanel,
-  TimeDisplayPanel,
-  HomeDataPanel,
-  EntityDetailPanel,
-  ResearchResultsPanel,
-} from './display-panels'
+import { panelRegistry } from './display-panels/registry'
 import ToolPanel from './ToolPanel'
 
-// Auto-close timeouts (ms)
-const AUTO_CLOSE_TIMEOUTS: Record<string, number | null> = {
-  light_control_detailed: 10000, // 10s
-  media_control: null, // never auto-close
-  web_view: null, // never auto-close
-  search_results: 15000, // 15s
-  research_results: null, // never auto-close
-  get_time: 10000, // 10s
-  get_home_data: 10000, // 10s
-  get_entity: 10000, // 10s
-}
+// Panel loading spinner component
+const PanelLoadingSpinner = () => (
+  <div className="flex items-center justify-center h-full">
+    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+  </div>
+)
 
 interface ToolPanelSliderProps {
   roomId?: string
@@ -46,11 +32,12 @@ export const ToolPanelSlider = ({ roomId }: ToolPanelSliderProps) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayAction?.timestamp]) // Watch timestamp to detect new actions even if same type
 
-  // Auto-close timer - revert to default panel after timeout based on config
+  // Auto-close timer - uses PanelRegistry configuration
   useEffect(() => {
     if (!activeTool || activeTool === 'default') return
 
-    const timeout = AUTO_CLOSE_TIMEOUTS[activeTool]
+    // Get timeout from PanelRegistry (eliminates AUTO_CLOSE_TIMEOUTS object)
+    const timeout = panelRegistry.getAutoCloseTimeout(activeTool)
     if (timeout === null) return // Never auto-close
 
     const timerId = setTimeout(() => {
@@ -67,7 +54,7 @@ export const ToolPanelSlider = ({ roomId }: ToolPanelSliderProps) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTool])
 
-  // Render appropriate panel based on active tool
+  // Render appropriate panel based on active tool - uses PanelRegistry (no switch statement)
   const renderPanel = () => {
     // Default panel - 3-tab ToolPanel
     if (!activeTool || activeTool === 'default') {
@@ -79,26 +66,20 @@ export const ToolPanelSlider = ({ roomId }: ToolPanelSliderProps) => {
       return <ToolPanel roomId={roomId} />
     }
 
-    switch (activeTool) {
-      case 'web_view':
-        return <WebViewPanel action={displayAction} />
-      case 'search_results':
-        return <SearchResultsPanel action={displayAction} />
-      case 'light_control_detailed':
-        return <LightControlDetailedPanel action={displayAction} />
-      case 'media_control':
-        return <MediaControlPanel action={displayAction} />
-      case 'research_results':
-        return <ResearchResultsPanel action={displayAction} />
-      case 'get_time':
-        return <TimeDisplayPanel action={displayAction} />
-      case 'get_home_data':
-        return <HomeDataPanel action={displayAction} />
-      case 'get_entity':
-        return <EntityDetailPanel action={displayAction} />
-      default:
-        return <ToolPanel roomId={roomId} /> // Fallback to default panel
+    // Get panel from registry (eliminates switch statement)
+    const panelConfig = panelRegistry.get(activeTool)
+    if (!panelConfig) {
+      console.warn(`[ToolPanelSlider] Panel not found in registry: ${activeTool}`)
+      return <ToolPanel roomId={roomId} />
     }
+
+    const PanelComponent = panelConfig.component
+
+    return (
+      <Suspense fallback={<PanelLoadingSpinner />}>
+        <PanelComponent action={displayAction} />
+      </Suspense>
+    )
   }
 
   return (
