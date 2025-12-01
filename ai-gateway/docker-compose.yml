@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+  # Home Assistant
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2024.11.3
+    container_name: homeassistant
+    network_mode: host
+    volumes:
+      - /mnt/data-ssd/ha-data/ha-config:/config
+    environment:
+      - TZ=Europe/Warsaw
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/api/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # MQTT Broker (Mosquitto)
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - /mnt/data-ssd/ha-data/mosquitto/config:/mosquitto/config
+      - /mnt/data-ssd/ha-data/mosquitto/data:/mosquitto/data
+      - /mnt/data-ssd/ha-data/mosquitto/log:/mosquitto/log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # AI Gateway
+  ai-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      # Home Assistant connection
+      - HA_TOKEN=${HA_TOKEN}
+      - HA_BASE_URL=${HA_BASE_URL:-http://host.docker.internal:8123}
+      # LLM Provider selection (ollama or openai)
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      # Ollama configuration (used when LLM_PROVIDER=ollama)
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
+      # OpenAI configuration (used when LLM_PROVIDER=openai)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      # STT Provider selection (vosk or whisper)
+      - STT_PROVIDER=${STT_PROVIDER:-vosk}
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      # Web search (Brave Search API)
+      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      - SEARCH_RESULTS_LIMIT=${SEARCH_RESULTS_LIMIT:-5}
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./config:/app/config:ro
+    depends_on:
+      - homeassistant
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8080/health', timeout=5).raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Wake-Word Detection Service
+  wake-word:
+    build:
+      context: ../wake-word-service
+      dockerfile: Dockerfile
+    container_name: wake-word
+    # Security: Replace privileged mode with specific capabilities
+    cap_add:
+      - SYS_RAWIO     # Required for GPIO access
+      - IPC_LOCK      # Required for audio device access
+    security_opt:
+      - seccomp:unconfined  # Required for some audio operations
+    devices:
+      - /dev/snd:/dev/snd
+      - /dev/bus/usb:/dev/bus/usb
+      # SPI devices for ReSpeaker LED control (optional, may not exist on all systems)
+      # - /dev/spidev0.0:/dev/spidev0.0
+      # - /dev/spidev0.1:/dev/spidev0.1
+      # - /dev/gpiomem:/dev/gpiomem
+    environment:
+      - AUDIO_DEVICE=hw:2,0
+      - CHANNELS=6
+      - SAMPLE_RATE=16000
+      - CHUNK_SIZE=1280
+      - WAKE_WORD_MODEL=hey_jarvis
+      - DETECTION_THRESHOLD=0.35
+      - INFERENCE_FRAMEWORK=tflite
+      - AI_GATEWAY_URL=http://host.docker.internal:8080
+      - REQUEST_TIMEOUT=120
+      - RECORDING_DURATION=10
+      - ENABLE_BEEP=true
+      - BEEP_VOLUME=0.8
+      - LOG_LEVEL=INFO
+      # Vosk local transcription (only Polish model available, 50MB on SSD)
+      - VOSK_MODEL_PATH=/app/models/vosk/vosk-model-small-pl-0.22
+      # TTS cache directory (persists XTTS v2 model across rebuilds)
+      - TTS_HOME=/app/tts-cache
+    depends_on:
+      - ai-gateway
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../wake-word-service/sounds:/app/sounds:ro
+      - /mnt/data-ssd/ha-data/wake-word-models:/app/models
+      # Persist TTS models on SSD (XTTS v2 ~2GB)
+      - /mnt/data-ssd/ha-data/tts-cache:/app/tts-cache
+    group_add:
+      - audio
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python.*main.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# Volumes are now using SSD paths directly
+# /mnt/data-ssd/ha-data/ha-config
+# /mnt/data-ssd/ha-data/mosquitto/{config,data,log}
