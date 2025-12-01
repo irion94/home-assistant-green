@@ -13,6 +13,7 @@ import MediaPanel from '../components/kiosk/panels/MediaPanel'
 import VoiceOverlay from '../components/kiosk/VoiceOverlay'
 import { mqttService } from '../services/mqttService'
 import { useVoiceStore } from '../stores/voiceStore'
+import { useRemoteSTT } from '../hooks/useRemoteSTT'
 
 // Panel width configurations (in viewport width units)
 const PANEL_WIDTHS = {
@@ -38,6 +39,9 @@ export default function KioskHome() {
     closeOverlay,
     setRoomId
   } = useVoiceStore()
+
+  // Initialize hybrid STT (auto-triggered by wake-word via MQTT)
+  const { handleSTTRequest } = useRemoteSTT()
 
   // Get room ID from URL param, env var, or localStorage (priority order)
   const roomId = useMemo(() => {
@@ -86,6 +90,20 @@ export default function KioskHome() {
     }
   }, [roomId, setRoomId])  // Only reconnect if room changes
 
+  // Subscribe to remote STT requests from wake-word service (wildcard for all sessions)
+  useEffect(() => {
+    if (roomId) {
+      console.log('[KioskHome] Subscribing to STT requests for room:', roomId)
+      mqttService.subscribeToSTTRequests(roomId, handleSTTRequest)
+
+      // Cleanup: unsubscribe when component unmounts or roomId changes
+      return () => {
+        console.log('[KioskHome] Unsubscribing from STT requests')
+        mqttService.unsubscribeFromSTTRequests(roomId)
+      }
+    }
+  }, [roomId, handleSTTRequest])
+
   const handleNavigate = (path: string) => {
     navigate(path)
   }
@@ -132,19 +150,20 @@ export default function KioskHome() {
         <motion.button
           layoutId="voice-button"
           onClick={() => {
-            // Open overlay and start session via MQTT
-            openOverlay(true)  // true = start session when opened
+            // Open overlay WITHOUT auto-starting session
+            // User must click center button to start
+            openOverlay(false)
           }}
-          className="fixed bottom-6 right-6 w-16 h-16 rounded-full bg-primary shadow-lg shadow-primary/30 flex items-center justify-center hover:bg-primary-dark transition-colors z-50"
+          style={{ backgroundColor: '#3b82f6' }}
+          className="fixed bottom-6 right-6 w-24 h-24 rounded-full shadow-lg shadow-primary/30 flex items-center justify-center hover:bg-primary-dark transition-colors z-50"
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.95 }}
           transition={{
-            type: "spring",
-            stiffness: 300,
-            damping: 30
+            duration: 0.3,
+            ease: 'easeOut',
           }}
         >
-          <Mic className="w-7 h-7 text-white" />
+          <Mic className="w-10 h-10 text-white" />
         </motion.button>
       )}
 

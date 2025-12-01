@@ -275,7 +275,9 @@ class WakeWordService:
         self.conversation_mode_enabled = os.getenv("CONVERSATION_MODE_DEFAULT", "false").lower() == "true"
 
         # Room identification for multi-device support
-        self.room_id = os.getenv("ROOM_ID", "default")
+        self.room_id = os.getenv("ROOM_ID", "default")  # Default room for wake-word detection
+        self._session_room_id = self.room_id  # Active session room (can be overridden via MQTT command)
+        self._session_source = "wake_word"  # Session source: 'wake_word', 'dashboard', or 'api'
 
         # State machine (initialized in setup after room_id is set)
         self.state_machine: Optional[VoiceStateMachine] = None
@@ -331,14 +333,14 @@ class WakeWordService:
             self.feedback = AudioFeedback(enabled=enable_beep)
             logger.info(f"Audio feedback initialized (enabled: {enable_beep})")
 
-            # Initialize parallel STT (Vosk + Whisper) for local speech-to-text
+            # Initialize parallel STT (Vosk + optional Whisper) for local speech-to-text
             self.vosk_model_path = os.getenv("VOSK_MODEL_PATH")
             whisper_model_size = os.getenv("WHISPER_MODEL_SIZE", "base")
             self.parallel_stt = ParallelSTT(
                 vosk_model_path=self.vosk_model_path,
                 whisper_model_size=whisper_model_size
             )
-            logger.info(f"Parallel STT initialized (Vosk + Whisper {whisper_model_size})")
+            # Log message now comes from ParallelSTT.__init__() based on USE_WHISPER flag
 
             # Initialize streaming STT (Vosk only) for real-time interim results
             if self.streaming_stt_enabled and self.vosk_model_path:
@@ -379,16 +381,16 @@ class WakeWordService:
                 self.mqtt_client = mqtt.Client(client_id=f"wake-word-{self.room_id}")
                 self.mqtt_client.on_message = self._on_mqtt_message
                 self.mqtt_client.connect(mqtt_host, mqtt_port, 60)
-                # Subscribe to room-scoped topics
-                self.mqtt_client.subscribe(f"voice_assistant/room/{self.room_id}/command/#")
-                self.mqtt_client.subscribe(f"voice_assistant/room/{self.room_id}/config/conversation_mode")
+                # Subscribe to ALL rooms using wildcard (+) for multi-device support
+                self.mqtt_client.subscribe(f"voice_assistant/room/+/command/#")
+                self.mqtt_client.subscribe(f"voice_assistant/room/+/config/conversation_mode")
                 # Also subscribe to legacy topics for backward compatibility during migration
                 self.mqtt_client.subscribe("voice_assistant/command")
                 self.mqtt_client.subscribe("voice_assistant/config/conversation_mode")
                 self.mqtt_client.loop_start()
                 logger.info(f"MQTT client connected to {mqtt_host}:{mqtt_port}")
-                logger.info(f"Room ID: {self.room_id}")
-                logger.info(f"Subscribed to room-scoped topics: voice_assistant/room/{self.room_id}/...")
+                logger.info(f"Default room ID: {self.room_id} (wake-word detection)")
+                logger.info(f"Subscribed to ALL room topics: voice_assistant/room/+/...")
                 logger.info(f"Conversation mode default: {self.conversation_mode_enabled}")
             except Exception as mqtt_error:
                 logger.warning(f"MQTT connection failed: {mqtt_error} - status updates disabled")
@@ -450,7 +452,7 @@ class WakeWordService:
             return
 
         try:
-            base_topic = f"voice_assistant/room/{self.room_id}"
+            base_topic = f"voice_assistant/room/{self._session_room_id}"
 
             # Publish active session ID
             active_session = session_id if session_id else "none"
@@ -487,7 +489,7 @@ class WakeWordService:
                     "type": msg_type,
                     "text": text,
                     "session_id": session_id,
-                    "room_id": self.room_id,
+                    "room_id": self._session_room_id,  # Use session room, not default room
                     "timestamp": time.time()
                 })
 
@@ -497,7 +499,7 @@ class WakeWordService:
                 # Room-scoped topic (new format)
                 if session_id:
                     self.mqtt_client.publish(
-                        f"voice_assistant/room/{self.room_id}/session/{session_id}/{msg_type}",
+                        f"voice_assistant/room/{self._session_room_id}/session/{session_id}/{msg_type}",
                         message_data
                     )
 
@@ -517,7 +519,7 @@ class WakeWordService:
             return
 
         try:
-            topic = f"voice_assistant/room/{self.room_id}/session/{session_id}/transcript/interim"
+            topic = f"voice_assistant/room/{self._session_room_id}/session/{session_id}/transcript/interim"
             payload = json.dumps({
                 "text": text,
                 "is_final": False,
@@ -542,7 +544,7 @@ class WakeWordService:
             return
 
         try:
-            topic = f"voice_assistant/room/{self.room_id}/session/{session_id}/transcript/final"
+            topic = f"voice_assistant/room/{self._session_room_id}/session/{session_id}/transcript/final"
             payload = json.dumps({
                 "text": text,
                 "is_final": True,
@@ -569,7 +571,7 @@ class WakeWordService:
             return
 
         try:
-            topic = f"voice_assistant/room/{self.room_id}/session/{session_id}/transcript/refined"
+            topic = f"voice_assistant/room/{self._session_room_id}/session/{session_id}/transcript/refined"
             payload = json.dumps({
                 "text": text,
                 "is_final": True,
@@ -592,7 +594,7 @@ class WakeWordService:
             return
 
         try:
-            topic = f"voice_assistant/room/{self.room_id}/session/{session_id}/response/stream/start"
+            topic = f"voice_assistant/room/{self._session_room_id}/session/{session_id}/response/stream/start"
             payload = json.dumps({"started_at": time.time()})
             self.mqtt_client.publish(topic, payload)
             logger.debug("Published streaming start")
@@ -611,7 +613,7 @@ class WakeWordService:
             return
 
         try:
-            topic = f"voice_assistant/room/{self.room_id}/session/{session_id}/response/stream/chunk"
+            topic = f"voice_assistant/room/{self._session_room_id}/session/{session_id}/response/stream/chunk"
             payload = json.dumps({
                 "sequence": sequence,
                 "content": token,
@@ -635,7 +637,7 @@ class WakeWordService:
             return
 
         try:
-            topic = f"voice_assistant/room/{self.room_id}/session/{session_id}/response/stream/complete"
+            topic = f"voice_assistant/room/{self._session_room_id}/session/{session_id}/response/stream/complete"
             payload = json.dumps({
                 "text": full_text,
                 "duration": duration,
@@ -653,60 +655,93 @@ class WakeWordService:
         Handles both legacy and room-scoped topics:
         - Legacy: voice_assistant/command, voice_assistant/config/conversation_mode
         - Room-scoped: voice_assistant/room/{room_id}/command/*, voice_assistant/room/{room_id}/config/*
+
+        Now supports multi-room using wildcard subscriptions - extracts room_id from topic.
         """
         try:
             topic = msg.topic
             payload = msg.payload.decode('utf-8')
             logger.info(f"MQTT message received: {topic} = {payload}")
 
-            # Room-scoped command topics
-            room_prefix = f"voice_assistant/room/{self.room_id}"
-            if topic.startswith(f"{room_prefix}/command/"):
-                command = topic.split("/")[-1]  # Get last part: start, stop
-                self._handle_command(command, payload)
-            elif topic == f"{room_prefix}/config/conversation_mode":
-                self._handle_conversation_mode_change(payload)
+            # Room-scoped command topics (multi-room support via wildcard)
+            # Topic format: voice_assistant/room/{room_id}/command/{command}
+            if topic.startswith("voice_assistant/room/") and "/command/" in topic:
+                parts = topic.split("/")
+                if len(parts) >= 5:  # voice_assistant/room/{room_id}/command/{command}
+                    room_id = parts[2]  # Extract room_id from topic
+                    command = parts[-1]  # Get last part: start, stop
+                    logger.info(f"Received command '{command}' for room '{room_id}'")
+                    # Temporarily override room_id for this session
+                    self._handle_command(command, payload, room_id)
+
+            # Room-scoped config topics
+            elif topic.startswith("voice_assistant/room/") and "/config/conversation_mode" in topic:
+                parts = topic.split("/")
+                if len(parts) >= 5:
+                    room_id = parts[2]
+                    logger.info(f"Conversation mode change for room '{room_id}'")
+                    self._handle_conversation_mode_change(payload)
 
             # Legacy topics (backward compatibility)
             elif topic == "voice_assistant/command":
                 if payload == "start_conversation":
-                    self._handle_command("start", "")
+                    self._handle_command("start", "", self.room_id)
                 elif payload == "stop_conversation":
-                    self._handle_command("stop", "")
+                    self._handle_command("stop", "", self.room_id)
             elif topic == "voice_assistant/config/conversation_mode":
                 self._handle_conversation_mode_change(payload)
 
         except Exception as e:
             logger.error(f"Error processing MQTT message: {e}")
 
-    def _handle_command(self, command: str, payload: str) -> None:
+    def _handle_command(self, command: str, payload: str, room_id: str | None = None) -> None:
         """Handle voice assistant commands.
 
         Args:
             command: 'start' or 'stop'
             payload: Optional JSON payload with mode, source info
+            room_id: Room identifier (overrides default room_id for this session)
         """
         if command == "start":
-            logger.info("MQTT command: start session")
+            # Temporarily override room_id for multi-room support
+            if room_id:
+                self._session_room_id = room_id
+                logger.info(f"MQTT command: start session for room '{room_id}'")
+            else:
+                self._session_room_id = self.room_id
+                logger.info("MQTT command: start session")
+
             self.conversation_start_requested = True
             self.conversation_stop_requested = False
-            # Parse payload for mode if provided
+            # Parse payload for mode and source if provided
             if payload:
                 try:
                     data = json.loads(payload)
+
+                    # Extract source (dashboard, wake_word, api)
+                    if "source" in data:
+                        self._session_source = data["source"]
+                        logger.info(f"Session source: {self._session_source}")
+                    else:
+                        self._session_source = "wake_word"  # Default for backward compatibility
+
+                    # Extract mode (single vs multi-turn conversation)
                     if "mode" in data:
                         self.conversation_mode_enabled = data["mode"] == "multi"
                         logger.info(f"Session mode set to: {'multi-turn' if self.conversation_mode_enabled else 'single'}")
                         # Publish mode change back to dashboard for UI update
                         if self.mqtt_client:
                             self.mqtt_client.publish(
-                                f"voice_assistant/room/{self.room_id}/config/conversation_mode",
+                                f"voice_assistant/room/{self._session_room_id}/config/conversation_mode",
                                 "true" if self.conversation_mode_enabled else "false",
                                 retain=True
                             )
                             logger.info(f"Published conversation mode: {self.conversation_mode_enabled}")
                 except json.JSONDecodeError:
                     pass
+            else:
+                # No payload = wake-word trigger
+                self._session_source = "wake_word"
         elif command == "stop":
             logger.info("MQTT command: stop session")
             self.conversation_stop_requested = True
@@ -725,10 +760,71 @@ class WakeWordService:
             # Publish back to confirm (for bidirectional sync)
             if self.mqtt_client:
                 self.mqtt_client.publish(
-                    f"voice_assistant/room/{self.room_id}/config/conversation_mode",
+                    f"voice_assistant/room/{self._session_room_id}/config/conversation_mode",
                     "true" if enabled else "false",
                     retain=True
                 )
+
+    def request_browser_stt(self, session_id: str) -> Optional[str]:
+        """Request browser STT via MQTT, wait for response or timeout.
+
+        Args:
+            session_id: Session identifier
+
+        Returns:
+            str: Transcribed text from browser (if successful)
+            None: If timeout or browser unavailable
+        """
+        if not self.mqtt_client:
+            logger.warning("[Hybrid STT] MQTT client not available")
+            return None
+
+        response_topic = f"voice_assistant/room/{self._session_room_id}/session/{session_id}/stt/response"
+        response_received = threading.Event()
+        transcription = {"text": None, "source": None}
+
+        def on_response(client, userdata, msg):
+            try:
+                payload = json.loads(msg.payload.decode())
+                transcription["text"] = payload.get("text")
+                transcription["source"] = payload.get("source")
+                response_received.set()
+            except Exception as e:
+                logger.error(f"[Hybrid STT] Error parsing response: {e}")
+
+        # Subscribe to response topic
+        self.mqtt_client.subscribe(response_topic)
+        self.mqtt_client.message_callback_add(response_topic, on_response)
+
+        # Publish request
+        request_topic = f"voice_assistant/room/{self._session_room_id}/session/{session_id}/stt/request"
+        request_payload = json.dumps({
+            "type": "start",
+            "sessionId": session_id,
+            "timestamp": int(time.time() * 1000),
+            "timeout_ms": 5000
+        })
+        self.mqtt_client.publish(request_topic, request_payload)
+
+        logger.info(f"[Hybrid STT] Requested browser STT (session: {session_id})")
+
+        # Wait for response with timeout
+        timeout_seconds = float(os.getenv("HYBRID_STT_TIMEOUT_MS", "5000")) / 1000.0
+        if response_received.wait(timeout=timeout_seconds):
+            logger.info(f"[Hybrid STT] Browser responded: source={transcription['source']}, text='{transcription['text'][:50] if transcription['text'] else 'None'}...'")
+            self.mqtt_client.unsubscribe(response_topic)
+            return transcription["text"]
+        else:
+            logger.warning(f"[Hybrid STT] Browser timeout after {timeout_seconds}s, falling back to RPI STT")
+            # Publish timeout notification
+            timeout_topic = f"voice_assistant/room/{self._session_room_id}/session/{session_id}/stt/timeout"
+            timeout_payload = json.dumps({
+                "reason": "no_response",
+                "timestamp": int(time.time() * 1000)
+            })
+            self.mqtt_client.publish(timeout_topic, timeout_payload)
+            self.mqtt_client.unsubscribe(response_topic)
+            return None
 
     def process_interaction(self, session_id: str) -> InteractionResult:
         """Process a single voice interaction.
@@ -748,59 +844,91 @@ class WakeWordService:
         result = InteractionResult()
 
         try:
-            # LISTENING - Record user speech (with optional streaming STT)
+            # LISTENING - Record user speech (with optional streaming STT or hybrid browser STT)
             self.state_machine.transition(VoiceState.LISTENING)
             self.feedback.play_listening()
             logger.info("Listening for speech...")
 
             stt_start = time.time()
 
-            # Use streaming STT if enabled
-            if self.streaming_stt_enabled and self.streaming_stt:
-                audio_data, vosk_text, vosk_confidence = self._process_streaming_stt(session_id)
-            else:
-                # Fallback to batch mode
-                audio_data = self.audio_capture.record(
-                    duration=self.recording_duration,
-                    stop_check=lambda: self.conversation_stop_requested
-                )
-                vosk_text = None
-                vosk_confidence = 0.0
+            # Check if hybrid STT (browser first) is enabled
+            hybrid_enabled = os.getenv("HYBRID_STT_ENABLED", "false").lower() == "true"
+            browser_text = None
+            audio_data = None
+            vosk_text = None
+            vosk_confidence = 0.0
 
-            # Check for stop during recording
-            if self.conversation_stop_requested:
-                result.should_continue = False
-                return result
+            if hybrid_enabled:
+                # HYBRID MODE: Try browser STT first
+                # Give browser time to subscribe to MQTT topics after session creation
+                logger.info("[Hybrid STT] Waiting for browser to subscribe...")
+                time.sleep(0.3)  # 300ms delay for browser MQTT subscription
+                logger.info("[Hybrid STT] Attempting browser STT first...")
+                browser_text = self.request_browser_stt(session_id)
 
-            logger.info(f"Recorded {len(audio_data)} audio frames")
+                if browser_text:
+                    # Browser STT succeeded - skip audio recording
+                    logger.info(f"[Hybrid STT] Using browser transcription: '{browser_text[:50]}...'")
+                    result.transcript = browser_text
+                    result.stt_engine = "browser"
+                    result.stt_duration = time.time() - stt_start
 
-            # TRANSCRIBING - Convert speech to text (or refine streaming result)
-            self.state_machine.transition(VoiceState.TRANSCRIBING)
-            self.feedback.processing()
+                    # Publish transcript to MQTT for frontend display
+                    self.publish_message("transcript", browser_text, session_id)
+                    logger.info(f"[Hybrid STT] Published browser transcript to MQTT")
+                else:
+                    # Browser timeout - fall back to local STT
+                    logger.info("[Hybrid STT] Falling back to local RPI STT...")
+                    # Continue to audio recording below
 
-            if self.streaming_stt_enabled and vosk_text:
-                # Streaming mode: use Vosk result, optionally refine with Whisper
-                result.transcript = vosk_text
-                result.stt_engine = "vosk"
+            # Local STT (if hybrid disabled or browser timed out)
+            if not hybrid_enabled or not browser_text:
+                # Use streaming STT if enabled
+                if self.streaming_stt_enabled and self.streaming_stt:
+                    audio_data, vosk_text, vosk_confidence = self._process_streaming_stt(session_id)
+                else:
+                    # Fallback to batch mode
+                    audio_data = self.audio_capture.record(
+                        duration=self.recording_duration,
+                        stop_check=lambda: self.conversation_stop_requested
+                    )
+                    vosk_text = None
+                    vosk_confidence = 0.0
 
-                # Check if Whisper refinement needed (low confidence)
-                if vosk_confidence < self.streaming_stt_confidence_threshold:
-                    logger.info(f"Low confidence ({vosk_confidence:.2f}), running Whisper refinement...")
-                    whisper_result = self.parallel_stt.whisper.transcribe(audio_data, self.sample_rate)
-                    if whisper_result and whisper_result.strip():
-                        result.transcript = whisper_result
-                        result.stt_engine = "whisper"
-                        self.publish_refined_transcript(session_id, whisper_result)
-                        logger.info(f"Whisper refined: '{whisper_result[:50]}...'")
-            else:
-                # Batch mode: use parallel STT
-                stt_result = self.parallel_stt.transcribe_parallel(audio_data, self.sample_rate)
-                result.transcript = stt_result.selected.text
-                result.stt_engine = stt_result.selected.engine
-                # Publish STT comparison for debugging
-                self._publish_stt_comparison(stt_result, session_id)
+                # Check for stop during recording
+                if self.conversation_stop_requested:
+                    result.should_continue = False
+                    return result
 
-            result.stt_duration = time.time() - stt_start
+                logger.info(f"Recorded {len(audio_data)} audio frames")
+
+                # TRANSCRIBING - Convert speech to text (or refine streaming result)
+                self.state_machine.transition(VoiceState.TRANSCRIBING)
+                self.feedback.processing()
+
+                if self.streaming_stt_enabled and vosk_text:
+                    # Streaming mode: use Vosk result, optionally refine with Whisper
+                    result.transcript = vosk_text
+                    result.stt_engine = "vosk"
+
+                    # Check if Whisper refinement needed (low confidence)
+                    if vosk_confidence < self.streaming_stt_confidence_threshold:
+                        logger.info(f"Low confidence ({vosk_confidence:.2f}), running Whisper refinement...")
+                        whisper_result = self.parallel_stt.whisper.transcribe(audio_data, self.sample_rate)
+                        if whisper_result and whisper_result.strip():
+                            result.transcript = whisper_result
+                            result.stt_engine = "whisper"
+                            self.publish_refined_transcript(session_id, whisper_result)
+                            logger.info(f"Whisper refined: '{whisper_result[:50]}...'")
+                else:
+                    # Batch mode: use parallel STT
+                    stt_result = self.parallel_stt.transcribe_parallel(audio_data, self.sample_rate)
+                    result.transcript = stt_result.selected.text
+                    result.stt_engine = stt_result.selected.engine
+                    # Publish STT comparison for debugging
+                    self._publish_stt_comparison(stt_result, session_id)
+
+                result.stt_duration = time.time() - stt_start
 
             if not result.transcript:
                 logger.info("No speech detected")
@@ -837,7 +965,11 @@ class WakeWordService:
                 token_count = sequence
                 self._publish_streaming_token(session_id, token, sequence)
 
-                # Parallel TTS: buffer tokens and enqueue complete sentences
+                # Skip TTS buffering for dashboard sessions (browser handles TTS)
+                if self._session_source == "dashboard":
+                    return
+
+                # Parallel TTS: buffer tokens and enqueue complete sentences (for wake-word sessions only)
                 if self._parallel_tts_enabled():
                     self.sentence_buffer += token
                     # Log first few tokens to verify callback is working
@@ -890,43 +1022,52 @@ class WakeWordService:
 
             # SPEAKING - Play TTS response
             if result.response:
-                self.state_machine.transition(VoiceState.SPEAKING)
-                self.feedback.speaking()
-                # Note: Legacy response topic not needed - streaming already published complete text
-                # via stream/complete topic, which frontend uses to finalize the message
-                # self.publish_message("response", result.response, session_id)
-
-                tts_start = time.time()
-
-                if self._parallel_tts_enabled():
-                    # === PARALLEL TTS MODE ===
-                    logger.info("Starting parallel TTS playback...")
-
-                    # Enqueue any remaining buffer (last sentence fragment)
-                    if self.sentence_buffer.strip():
-                        lang = self._detect_language(result.transcript)
-                        self._get_parallel_tts_queue().enqueue(self.sentence_buffer.strip(), lang)
-                        self.sentence_buffer = ""
-
-                    # Play all queued audio chunks (blocks until queue empty)
-                    chunk_count = 0
-                    queue_timeout = float(os.getenv("PARALLEL_TTS_QUEUE_TIMEOUT", "30"))
-                    while self._get_parallel_tts_queue().has_pending():
-                        if not self._get_parallel_tts_queue().play_next(timeout=queue_timeout):
-                            break  # Interrupted, timeout, or error
-                        chunk_count += 1
-
-                    result.tts_duration = time.time() - tts_start
-                    logger.info(f"Parallel TTS complete: {chunk_count} chunks in {result.tts_duration:.1f}s")
-
+                # Skip local TTS for dashboard sessions (browser will handle TTS via Web Speech API)
+                if self._session_source == "dashboard":
+                    logger.info(f"Skipping local TTS playback for dashboard session (room={self._session_room_id})")
+                    self.state_machine.transition(VoiceState.SPEAKING)
+                    self.feedback.speaking()
+                    # Browser will handle TTS via streaming response
+                    self.feedback.play_success()
                 else:
-                    # === LEGACY MODE (fallback) ===
-                    logger.info(f"Speaking (legacy): '{result.response[:50]}...'")
-                    self.tts_service.speak(result.response)
-                    result.tts_duration = time.time() - tts_start
-                    logger.info("TTS playback complete")
+                    # Local TTS for wake-word sessions (RPi microphone/speaker)
+                    self.state_machine.transition(VoiceState.SPEAKING)
+                    self.feedback.speaking()
+                    # Note: Legacy response topic not needed - streaming already published complete text
+                    # via stream/complete topic, which frontend uses to finalize the message
+                    # self.publish_message("response", result.response, session_id)
 
-                self.feedback.play_success()
+                    tts_start = time.time()
+
+                    if self._parallel_tts_enabled():
+                        # === PARALLEL TTS MODE ===
+                        logger.info("Starting parallel TTS playback...")
+
+                        # Enqueue any remaining buffer (last sentence fragment)
+                        if self.sentence_buffer.strip():
+                            lang = self._detect_language(result.transcript)
+                            self._get_parallel_tts_queue().enqueue(self.sentence_buffer.strip(), lang)
+                            self.sentence_buffer = ""
+
+                        # Play all queued audio chunks (blocks until queue empty)
+                        chunk_count = 0
+                        queue_timeout = float(os.getenv("PARALLEL_TTS_QUEUE_TIMEOUT", "30"))
+                        while self._get_parallel_tts_queue().has_pending():
+                            if not self._get_parallel_tts_queue().play_next(timeout=queue_timeout):
+                                break  # Interrupted, timeout, or error
+                            chunk_count += 1
+
+                        result.tts_duration = time.time() - tts_start
+                        logger.info(f"Parallel TTS complete: {chunk_count} chunks in {result.tts_duration:.1f}s")
+
+                    else:
+                        # === LEGACY MODE (fallback) ===
+                        logger.info(f"Speaking (legacy): '{result.response[:50]}...'")
+                        self.tts_service.speak(result.response)
+                        result.tts_duration = time.time() - tts_start
+                        logger.info("TTS playback complete")
+
+                    self.feedback.play_success()
 
             # Update session activity
             if self.state_machine.session:
@@ -1190,7 +1331,7 @@ class WakeWordService:
             # Publish session ended for bidirectional sync
             if self.mqtt_client:
                 self.mqtt_client.publish(
-                    f"voice_assistant/room/{self.room_id}/session/{session_id}/ended",
+                    f"voice_assistant/room/{self._session_room_id}/session/{session_id}/ended",
                     json.dumps({"timestamp": time.time()})
                 )
                 # Legacy topic

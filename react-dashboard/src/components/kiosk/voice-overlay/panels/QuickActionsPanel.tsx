@@ -5,7 +5,7 @@
  * Sends text commands to AI Gateway via voiceStore.
  */
 
-import { Lightbulb, LightbulbOff, Cloud, Thermometer, Moon, Coffee } from 'lucide-react';
+import { Lightbulb, LightbulbOff, Cloud, Moon, Coffee, Clock, Home, MapPin } from 'lucide-react';
 import { useVoiceStore } from '../../../../stores/voiceStore';
 
 interface QuickActionsPanelProps {
@@ -21,28 +21,40 @@ interface QuickAction {
 
 const GLOBAL_ACTIONS: QuickAction[] = [
   {
-    label: 'All Lights On',
-    command: 'Turn on all lights',
+    label: 'Current Time',
+    command: 'Która godzina?',
+    icon: <Clock className="w-5 h-5" />,
+    description: 'Test get_time tool',
+  },
+  {
+    label: 'Home Status',
+    command: 'Pokaż stan domu',
+    icon: <Home className="w-5 h-5" />,
+    description: 'Test get_home_data tool',
+  },
+  {
+    label: 'Living Room',
+    command: 'Włącz światła w salonie',
     icon: <Lightbulb className="w-5 h-5" />,
-    description: 'Turn on all lights in the house',
+    description: 'Test light_control_detailed tool',
+  },
+  {
+    label: 'Nearby Bars',
+    command: 'Sprawdź najbliższe bary',
+    icon: <MapPin className="w-5 h-5" />,
+    description: 'Test research_local tool',
+  },
+  {
+    label: 'Weather',
+    command: "What's the weather?",
+    icon: <Cloud className="w-5 h-5" />,
+    description: 'Test web_search tool',
   },
   {
     label: 'All Lights Off',
     command: 'Turn off all lights',
     icon: <LightbulbOff className="w-5 h-5" />,
     description: 'Turn off all lights',
-  },
-  {
-    label: 'Weather',
-    command: "What's the weather?",
-    icon: <Cloud className="w-5 h-5" />,
-    description: 'Get current weather conditions',
-  },
-  {
-    label: 'Temperature',
-    command: "What's the temperature?",
-    icon: <Thermometer className="w-5 h-5" />,
-    description: 'Get indoor/outdoor temperature',
   },
   {
     label: 'Good Night',
@@ -59,11 +71,21 @@ const GLOBAL_ACTIONS: QuickAction[] = [
 ];
 
 export default function QuickActionsPanel({ roomId }: QuickActionsPanelProps) {
-  const addMessage = useVoiceStore(state => state.addMessage);
-  const sessionId = useVoiceStore(state => state.sessionId);
+  const addMessage = useVoiceStore((state) => state.addMessage);
+  const sessionId = useVoiceStore((state) => state.sessionId);
+  const setSessionId = useVoiceStore((state) => state.setSessionId);
 
   const handleAction = async (action: QuickAction) => {
     try {
+      // Generate or use existing session ID
+      const effectiveSessionId = sessionId || `quick-${Date.now()}`;
+      const effectiveRoomId = roomId || 'salon';
+
+      // Set session ID if not already set (for display actions)
+      if (!sessionId) {
+        setSessionId(effectiveSessionId);
+      }
+
       // Add user message
       addMessage({
         id: `user-${Date.now()}`,
@@ -71,6 +93,8 @@ export default function QuickActionsPanel({ roomId }: QuickActionsPanelProps) {
         text: action.command,
         timestamp: Date.now(),
       });
+
+      console.log(`[QuickActions] Sending command to /conversation (session=${effectiveSessionId}, room=${effectiveRoomId})`);
 
       // Send command to AI Gateway
       const response = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/conversation`, {
@@ -80,8 +104,8 @@ export default function QuickActionsPanel({ roomId }: QuickActionsPanelProps) {
         },
         body: JSON.stringify({
           text: action.command,
-          session_id: sessionId || 'quick-action',
-          room_id: roomId || 'salon',
+          session_id: effectiveSessionId,
+          room_id: effectiveRoomId,
         }),
       });
 
@@ -90,16 +114,17 @@ export default function QuickActionsPanel({ roomId }: QuickActionsPanelProps) {
       }
 
       const data = await response.json();
+      console.log(`[QuickActions] Response received:`, data);
 
       // Add assistant response
       addMessage({
         id: `assistant-${Date.now()}`,
         type: 'assistant',
-        text: data.response || 'Done',
+        text: data.text || 'Done',  // Backend returns 'text' field, not 'response'
         timestamp: Date.now(),
       });
     } catch (error) {
-      console.error('Quick action error:', error);
+      console.error('[QuickActions] Error:', error);
       addMessage({
         id: `assistant-${Date.now()}`,
         type: 'assistant',

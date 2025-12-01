@@ -120,9 +120,10 @@ class GetEntityTool(BaseTool):
 
             # Create display action for dashboard
             display_action = {
-                "type": "entity_states",
+                "type": "get_entity",
                 "data": {
                     "domain": domain,
+                    "entity_id": entity_id,
                     "entities": entities[:20],  # Limit for display
                     "entity_count": len(entities),
                 },

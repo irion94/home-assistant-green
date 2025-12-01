@@ -1,18 +1,20 @@
 /**
  * ToolPanel - Main container for interactive tool dashboard (Phase 4)
  *
- * Replaces debug logs in left panel with 3-tab interface:
+ * 4-tab interface:
+ * - Quick Actions: One-click command buttons (default)
  * - Entities: Real-time entity states by domain
- * - Quick Actions: One-click command buttons
  * - History: Tool execution history
+ * - Debug: Terminal-style debug logs
  */
 
 import { useState } from 'react';
 import EntityStatesPanel from './panels/EntityStatesPanel';
 import QuickActionsPanel from './panels/QuickActionsPanel';
 import ToolHistoryPanel from './panels/ToolHistoryPanel';
+import { DebugLogPanel } from '../DebugLogPanel';
 
-type TabType = 'entities' | 'actions' | 'history';
+type TabType = 'actions' | 'entities' | 'history' | 'debug';
 
 interface ToolPanelProps {
   roomId?: string;
@@ -20,18 +22,12 @@ interface ToolPanelProps {
 }
 
 export default function ToolPanel({ roomId, className = '' }: ToolPanelProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('entities');
+  const [activeTab, setActiveTab] = useState<TabType>('actions');
 
   return (
     <div className={`flex flex-col h-full bg-black/20 ${className}`}>
       {/* Tab Switcher */}
       <div className="flex border-b border-white/10">
-        <TabButton
-          active={activeTab === 'entities'}
-          onClick={() => setActiveTab('entities')}
-        >
-          Entities
-        </TabButton>
         <TabButton
           active={activeTab === 'actions'}
           onClick={() => setActiveTab('actions')}
@@ -39,18 +35,31 @@ export default function ToolPanel({ roomId, className = '' }: ToolPanelProps) {
           Quick Actions
         </TabButton>
         <TabButton
+          active={activeTab === 'entities'}
+          onClick={() => setActiveTab('entities')}
+        >
+          Entities
+        </TabButton>
+        <TabButton
           active={activeTab === 'history'}
           onClick={() => setActiveTab('history')}
         >
           History
         </TabButton>
+        <TabButton
+          active={activeTab === 'debug'}
+          onClick={() => setActiveTab('debug')}
+        >
+          Debug
+        </TabButton>
       </div>
 
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto scrollbar-hide p-3">
-        {activeTab === 'entities' && <EntityStatesPanel roomId={roomId} />}
         {activeTab === 'actions' && <QuickActionsPanel roomId={roomId} />}
+        {activeTab === 'entities' && <EntityStatesPanel roomId={roomId} />}
         {activeTab === 'history' && <ToolHistoryPanel />}
+        {activeTab === 'debug' && <DebugLogPanel />}
       </div>
     </div>
   );

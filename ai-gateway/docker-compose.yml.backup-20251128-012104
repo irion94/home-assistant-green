@@ -82,7 +82,7 @@ services:
       # STT Provider selection (vosk or whisper)
       - STT_PROVIDER=${STT_PROVIDER:-vosk}
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
-      - STT_CONFIDENCE_THRESHOLD=${STT_CONFIDENCE_THRESHOLD:-0.5}  # Vosk confidence for Whisper fallback (lowered for better Polish accuracy)
+      - STT_CONFIDENCE_THRESHOLD=${STT_CONFIDENCE_THRESHOLD:-0.7}  # Vosk confidence for Whisper fallback (0.0-1.0)
       # Web search (Brave Search API)
       - BRAVE_API_KEY=${BRAVE_API_KEY:-}
       - SEARCH_RESULTS_LIMIT=${SEARCH_RESULTS_LIMIT:-5}
@@ -152,7 +152,7 @@ services:
       - SAMPLE_RATE=16000
       - CHUNK_SIZE=1280
       - WAKE_WORD_MODEL=hey_jarvis
-      - DETECTION_THRESHOLD=0.50  # Increased from 0.35 to reduce false wake-ups
+      - DETECTION_THRESHOLD=0.35
       - INFERENCE_FRAMEWORK=tflite
       - AI_GATEWAY_URL=http://host.docker.internal:8080
       - REQUEST_TIMEOUT=120
@@ -163,13 +163,9 @@ services:
       # Vosk local transcription (only Polish model available, 50MB on SSD)
       - VOSK_MODEL_PATH=/app/models/vosk/vosk-model-small-pl-0.22
       # Use Whisper for parallel STT (set to false for faster, Vosk-only mode)
-      - USE_WHISPER=false
-      # Whisper Model Selection
-      # Options: tiny, base, small, medium, large-v3, or HuggingFace repo ID
-      # Testing: large-v3 (standard OpenAI model, best for Polish)
-      - WHISPER_MODEL_SIZE=large-v3
+      - USE_WHISPER=true
       # Whisper timeout in seconds (fallback to Vosk if Whisper takes longer)
-      - WHISPER_TIMEOUT=15.0
+      - WHISPER_TIMEOUT=6.0
       # TTS cache directory (persists XTTS v2 model across rebuilds)
       - TTS_HOME=/app/tts-cache
       # Conversation mode configuration (false = single command, true = multi-turn)
@@ -181,9 +177,6 @@ services:
       - PARALLEL_TTS_WORKERS=1                    # Synthesis thread pool size (1-2) - REDUCED to 1 to prevent OOM
       - PARALLEL_TTS_FORCE_XTTS=false             # Use VITS for short text (<15 words) to save memory
       - PARALLEL_TTS_QUEUE_TIMEOUT=30             # Synthesis timeout (seconds) - XTTS can take 10-15s
-      # Hybrid STT Configuration (Phase 2: Browser STT with RPI fallback)
-      - HYBRID_STT_ENABLED=true                   # Enable browser Web Speech API
-      - HYBRID_STT_TIMEOUT_MS=5000                # Browser response timeout in milliseconds
     depends_on:
       - ai-gateway
       - mosquitto

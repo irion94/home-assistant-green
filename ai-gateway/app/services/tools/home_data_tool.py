@@ -89,17 +89,52 @@ class GetHomeDataTool(BaseTool):
                     if data:
                         results[s_type] = data
 
-                if not results:
+                # Always get light states count (even if sensors fail)
+                # Use the same complete light list as control_light tool
+                all_lights = [
+                    "light.yeelight_color_0x80156a9",  # salon
+                    "light.yeelight_color_0x49c27e1",  # kuchnia
+                    "light.yeelight_color_0x80147dd",  # sypialnia
+                    "light.yeelight_lamp15_0x1b37d19d_ambilight",  # biurko
+                    "light.yeelight_lamp15_0x1b37d19d",  # biurko ambient
+                    "light.yeelight_color_0x801498b",  # lamp 1
+                    "light.yeelight_color_0x8015154",  # lamp 2
+                ]
+                lights_on = 0
+                lights_total = len(all_lights)
+                for entity_id in all_lights:
+                    state = await self.ha_client.get_state(entity_id)
+                    if state and state.get("state") == "on":
+                        lights_on += 1
+
+                results["lights"] = {"on": lights_on, "total": lights_total}
+                logger.info(f"Home data - lights: {lights_on}/{lights_total} on, total results: {len(results)}")
+
+                # Show panel even if only lights data is available
+                if not results or (len(results) == 1 and "lights" in results and lights_total == 0):
+                    # Only fail if we have no lights AND no sensor data
                     return ToolResult(
                         success=False,
-                        content="No sensor data available",
+                        content="No home data available",
                         metadata={"error": "no_data"},
                     )
 
                 content = self._format_all_sensors(results)
+
+                # Create display action for left panel
+                display_action = {
+                    "type": "get_home_data",
+                    "data": {
+                        "sensor_type": "all",
+                        "sensors": results,
+                        "summary": content,
+                    },
+                }
+
                 return ToolResult(
                     success=True,
                     content=content,
+                    display_action=display_action,
                     metadata={"sensors": results},
                 )
 
@@ -113,9 +148,22 @@ class GetHomeDataTool(BaseTool):
                     )
 
                 content = self._format_sensor_data(sensor_type, data)
+
+                # Create display action for left panel
+                display_action = {
+                    "type": "get_home_data",
+                    "data": {
+                        "sensor_type": sensor_type,
+                        "state": data.get("state"),
+                        "attributes": data.get("attributes", {}),
+                        "summary": content,
+                    },
+                }
+
                 return ToolResult(
                     success=True,
                     content=content,
+                    display_action=display_action,
                     metadata={"sensor_type": sensor_type, "data": data},
                 )
 
@@ -184,7 +232,11 @@ class GetHomeDataTool(BaseTool):
         """
         lines = []
         for sensor_type, data in results.items():
-            formatted = self._format_sensor_data(sensor_type, data)
-            lines.append(formatted)
+            if sensor_type == "lights":
+                # Special formatting for lights
+                lines.append(f"Lights: {data['on']}/{data['total']} on")
+            else:
+                formatted = self._format_sensor_data(sensor_type, data)
+                lines.append(formatted)
 
         return "\n".join(lines)

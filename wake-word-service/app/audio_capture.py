@@ -148,8 +148,9 @@ class AudioCapture:
             # Reshape to separate channels
             audio = audio.reshape(-1, self.channels)
 
-            # Use first channel (or average channels) for mono
-            audio_mono = audio[:, 0]  # Channel 0
+            # Use first channel (raw mic)
+            # NOTE: Beamformed channel 4 was tested but produced corrupted audio
+            audio_mono = audio[:, 0]  # Channel 0 - raw mic
 
             # Apply software gain boost (ReSpeaker has low output levels)
             # Note: Reduced from 8x to 2x to avoid clipping distortion

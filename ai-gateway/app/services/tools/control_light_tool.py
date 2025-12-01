@@ -137,20 +137,51 @@ class ControlLightTool(BaseTool):
                     metadata={"error": "ha_call_failed"},
                 )
 
-            # Publish display action
-            display_action = None
+            # Fetch detailed entity states for display panel
+            entity_details = []
+            try:
+                import asyncio
+                await asyncio.sleep(0.5)  # Brief delay for state propagation
+
+                for entity_id in entities:
+                    state = await self.ha_client.get_state(entity_id)
+                    if state:
+                        attrs = state.get("attributes", {})
+                        entity_details.append({
+                            "entity_id": entity_id,
+                            "friendly_name": attrs.get("friendly_name", entity_id.split(".")[-1]),
+                            "state": state.get("state", "unknown"),
+                            "brightness": attrs.get("brightness"),
+                            "brightness_pct": int(attrs.get("brightness", 0) / 255 * 100) if attrs.get("brightness") else None,
+                            "color_temp": attrs.get("color_temp"),
+                            "rgb_color": attrs.get("rgb_color"),
+                            "supported_features": [],  # Could parse from attrs.get("supported_features")
+                        })
+            except Exception as e:
+                logger.warning(f"Failed to fetch entity states: {e}")
+                # Fall back to simple entity list
+                entity_details = [{"entity_id": eid, "friendly_name": eid.split(".")[-1], "state": action} for eid in entities]
+
+            # Ensure we always have entity details, even if all get_state calls failed
+            if not entity_details:
+                entity_details = [{"entity_id": eid, "friendly_name": eid.split(".")[-1], "state": action} for eid in entities]
+
+            # Always create display action to show the panel
+            display_action = {
+                "type": "light_control_detailed",
+                "data": {
+                    "room": room,
+                    "entities": entity_details,
+                    "action_performed": action,
+                    "supports_interaction": True,
+                },
+            }
+
+            # Publish to MQTT if room_id and session_id are available
             if room_id and session_id:
                 ensure_mqtt_connected()
-                display_action = {
-                    "type": "light_control",
-                    "data": {
-                        "room": room,
-                        "entities": entities,
-                        "action": action,
-                    },
-                }
                 self.mqtt_client.publish_display_action(
-                    action_type="light_control",
+                    action_type="light_control_detailed",
                     action_data=display_action["data"],
                     room_id=room_id,
                     session_id=session_id,

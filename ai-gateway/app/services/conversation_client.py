@@ -27,7 +27,8 @@ if TYPE_CHECKING:
     from app.models import Config
     from app.services.database import DatabaseService
 
-from app.services.llm_tools import get_tools, get_tool_executor
+from app.services.llm_tools import get_tools, get_tool_executor  # Legacy tools
+from app.services.tools.registry import tool_registry  # New tools with display actions
 
 logger = logging.getLogger(__name__)
 
@@ -264,9 +265,9 @@ class ConversationClient:
         # Load session history from DB if this is a resumed session
         await self._ensure_session_loaded(session_id)
 
-        # Get HA client for tool execution
-        _, ha_client = self._get_action_handlers()
-        tool_executor = get_tool_executor(ha_client)
+        # Get MQTT client for display actions
+        from app.services.mqtt_client import get_mqtt_client, ensure_mqtt_connected
+        mqtt_client = get_mqtt_client()
 
         # Add user message to history
         _sessions[session_id].append({"role": "user", "content": text})
@@ -292,7 +293,7 @@ class ConversationClient:
                     json={
                         "model": self.model,
                         "messages": messages,
-                        "tools": get_tools(),
+                        "tools": tool_registry.get_schemas(),
                         "tool_choice": "auto",
                         "max_tokens": 500,
                         "temperature": 0.7,
@@ -318,20 +319,31 @@ class ConversationClient:
                         except json.JSONDecodeError:
                             arguments = {}
 
-                        # Execute the tool
-                        result = await tool_executor.execute(
+                        # Execute the tool using new registry
+                        tool_result = await tool_registry.execute(
                             tool_name,
                             arguments,
                             room_id=room_id,
                             session_id=session_id
                         )
-                        logger.info(f"Tool {tool_name} result: {result[:100]}...")
+                        logger.info(f"Tool {tool_name} result: {tool_result.content[:100]}...")
+
+                        # Publish display action to MQTT if present
+                        if tool_result.display_action and room_id and session_id:
+                            ensure_mqtt_connected()
+                            mqtt_client.publish_display_action(
+                                action_type=tool_result.display_action["type"],
+                                action_data=tool_result.display_action["data"],
+                                room_id=room_id,
+                                session_id=session_id
+                            )
+                            logger.info(f"Published display action: {tool_result.display_action['type']}")
 
                         # Add tool result to messages
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tool_call["id"],
-                            "content": result
+                            "content": tool_result.content
                         })
 
                     # Get final response from LLM with tool results
@@ -410,6 +422,10 @@ class ConversationClient:
         # Load session history from DB if this is a resumed session
         await self._ensure_session_loaded(session_id)
 
+        # Get MQTT client for display actions
+        from app.services.mqtt_client import get_mqtt_client, ensure_mqtt_connected
+        mqtt_client = get_mqtt_client()
+
         # Add user message to history
         _sessions[session_id].append({"role": "user", "content": text})
 
@@ -443,7 +459,7 @@ class ConversationClient:
                         "max_tokens": 150,
                         "temperature": 0.7,
                         "stream": True,
-                        "tools": get_tools(),  # Enable function calling
+                        "tools": tool_registry.get_schemas() if tool_registry._tools else get_tools(),  # Use new registry
                     },
                 ) as response:
                     response.raise_for_status()
@@ -505,25 +521,30 @@ class ConversationClient:
 
                     logger.info(f"Executing tool: {function_name}({arguments})")
 
-                    # Get tool executor and execute
-                    _, ha_client = self._get_action_handlers()
-                    if not ha_client:
-                        logger.error("HA client not available for tool execution")
-                        continue
-
-                    executor = get_tool_executor(ha_client)
-                    result = await executor.execute(
+                    # Execute tool using new registry
+                    tool_result = await tool_registry.execute(
                         function_name,
                         arguments,
                         room_id=room_id,
                         session_id=session_id
                     )
 
-                    logger.info(f"Tool {function_name} result: {result}")
+                    logger.info(f"Tool {function_name} result: {tool_result.content[:100]}...")
+
+                    # Publish display action to MQTT if present
+                    if tool_result.display_action and room_id and session_id:
+                        ensure_mqtt_connected()
+                        mqtt_client.publish_display_action(
+                            action_type=tool_result.display_action["type"],
+                            action_data=tool_result.display_action["data"],
+                            room_id=room_id,
+                            session_id=session_id
+                        )
+                        logger.info(f"Published display action: {tool_result.display_action['type']}")
 
                     tool_results.append({
                         "tool_call": tool_call,
-                        "result": result
+                        "result": tool_result.content
                     })
 
                 # If tools were executed, get LLM's response incorporating the results
@@ -637,6 +658,10 @@ class ConversationClient:
         # Load session history from DB if this is a resumed session
         await self._ensure_session_loaded(session_id)
 
+        # Get MQTT client for display actions
+        from app.services.mqtt_client import get_mqtt_client, ensure_mqtt_connected
+        mqtt_client = get_mqtt_client()
+
         buffer = ""
         sentence_endings = {'.', '!', '?'}
         full_response = ""
@@ -672,7 +697,7 @@ class ConversationClient:
                         "max_tokens": 150,
                         "temperature": 0.7,
                         "stream": True,
-                        "tools": get_tools(),  # Enable function calling
+                        "tools": tool_registry.get_schemas() if tool_registry._tools else get_tools(),  # Use new registry
                     },
                 ) as response:
                     response.raise_for_status()
@@ -760,25 +785,30 @@ class ConversationClient:
 
                     logger.info(f"Executing tool: {function_name}({arguments})")
 
-                    # Get tool executor and execute
-                    _, ha_client = self._get_action_handlers()
-                    if not ha_client:
-                        logger.error("HA client not available for tool execution")
-                        continue
-
-                    executor = get_tool_executor(ha_client)
-                    result = await executor.execute(
+                    # Execute tool using new registry
+                    tool_result = await tool_registry.execute(
                         function_name,
                         arguments,
                         room_id=room_id,
                         session_id=session_id
                     )
 
-                    logger.info(f"Tool {function_name} result: {result}")
+                    logger.info(f"Tool {function_name} result: {tool_result.content[:100]}...")
+
+                    # Publish display action to MQTT if present
+                    if tool_result.display_action and room_id and session_id:
+                        ensure_mqtt_connected()
+                        mqtt_client.publish_display_action(
+                            action_type=tool_result.display_action["type"],
+                            action_data=tool_result.display_action["data"],
+                            room_id=room_id,
+                            session_id=session_id
+                        )
+                        logger.info(f"Published display action: {tool_result.display_action['type']}")
 
                     tool_results.append({
                         "tool_call": tool_call,
-                        "result": result
+                        "result": tool_result.content
                     })
 
                 # If tools were executed, get LLM's response incorporating the results

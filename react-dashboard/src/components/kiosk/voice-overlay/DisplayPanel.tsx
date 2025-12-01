@@ -9,7 +9,8 @@ interface DisplayPanelProps {
 }
 
 export default function DisplayPanel({ displayAction, roomId, onClose }: DisplayPanelProps) {
-  const actionType = displayAction?.type ?? 'default'
+  // Show default panel in header if action is light_control_detailed (shown as overlay on left)
+  const actionType = displayAction?.type === 'light_control_detailed' ? 'default' : (displayAction?.type ?? 'default')
   const PanelComponent = getDisplayPanel(actionType)
 
   return (

@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { useDebugEnabled, useDebugLogs, useVoiceStore, DebugLogType } from '../../stores/voiceStore'
+import { useDebugLogs, useVoiceStore, DebugLogType } from '../../stores/voiceStore'
 
 const formatTime = (date: Date): string => {
   const hours = date.getHours().toString().padStart(2, '0')
@@ -35,7 +35,6 @@ const getLogTypeColor = (type: DebugLogType): string => {
 }
 
 export function DebugLogPanel() {
-  const debugEnabled = useDebugEnabled()
   const debugLogs = useDebugLogs()
   const clearDebugLogs = useVoiceStore((s) => s.clearDebugLogs)
   const logEndRef = useRef<HTMLDivElement>(null)
@@ -47,12 +46,8 @@ export function DebugLogPanel() {
     }
   }, [debugLogs])
 
-  if (!debugEnabled) {
-    return null
-  }
-
   return (
-    <div className="flex-1 flex flex-col p-3 bg-black/30">
+    <div className="flex-1 flex flex-col bg-black/30 h-full">
       <div className="flex justify-between items-center mb-2 flex-shrink-0">
         <span className="text-xs text-gray-400 font-medium">
           Debug Log ({debugLogs.length})

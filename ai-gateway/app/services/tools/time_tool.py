@@ -58,9 +58,21 @@ class GetTimeTool(BaseTool):
 
             content = f"Teraz jest godzina {time_str}, {day_name}, {date_str}"
 
+            # Create display action for left panel
+            display_action = {
+                "type": "get_time",
+                "data": {
+                    "time": time_str,
+                    "date": date_str,
+                    "day": day_name,
+                    "timezone": "Europe/Warsaw",
+                },
+            }
+
             return ToolResult(
                 success=True,
                 content=content,
+                display_action=display_action,
                 metadata={
                     "time": time_str,
                     "date": date_str,

@@ -50,10 +50,17 @@ class ParallelSTT:
             whisper_model_size: Whisper model size ('tiny', 'base', 'small')
         """
         self.vosk = Transcriber(model_path=vosk_model_path)
-        self.whisper = WhisperTranscriber(model_size=whisper_model_size)
-        self.executor = ThreadPoolExecutor(max_workers=2)
 
-        logger.info("ParallelSTT initialized with Vosk and Whisper")
+        # Only initialize Whisper if USE_WHISPER=true (saves ~2GB RAM)
+        use_whisper = os.getenv("USE_WHISPER", "false").lower() == "true"
+        if use_whisper:
+            self.whisper = WhisperTranscriber(model_size=whisper_model_size)
+            logger.info("ParallelSTT initialized with Vosk and Whisper")
+        else:
+            self.whisper = None
+            logger.info("ParallelSTT initialized with Vosk only (Whisper disabled)")
+
+        self.executor = ThreadPoolExecutor(max_workers=2)
 
     def _transcribe_vosk(self, audio_data: np.ndarray, sample_rate: int) -> STTResult:
         """Run Vosk transcription with timing."""
@@ -69,6 +76,15 @@ class ParallelSTT:
 
     def _transcribe_whisper(self, audio_data: np.ndarray, sample_rate: int) -> STTResult:
         """Run Whisper transcription with timing."""
+        if self.whisper is None:
+            # Whisper disabled - return empty result
+            return STTResult(
+                text="",
+                confidence=0.0,
+                duration=0.0,
+                engine="whisper"
+            )
+
         start = time.time()
         text = self.whisper.transcribe(audio_data, sample_rate)
         duration = time.time() - start

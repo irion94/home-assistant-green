@@ -6,16 +6,7 @@ import { classNames } from '../../../utils/formatters'
 interface StatusIndicatorProps {
   state: VoiceState
   conversationMode: boolean
-}
-
-const stateColors: Record<VoiceState, string> = {
-  idle: 'bg-primary shadow-lg shadow-primary/30',
-  wake_detected: 'bg-info',
-  listening: 'bg-error shadow-lg shadow-error/50',
-  transcribing: 'bg-warning',
-  processing: 'bg-warning',
-  speaking: 'bg-success animate-pulse',
-  waiting: 'bg-primary',
+  onStartSession?: () => void
 }
 
 const stateLabels: Record<VoiceState, string> = {
@@ -28,7 +19,27 @@ const stateLabels: Record<VoiceState, string> = {
   waiting: 'Waiting for response...',
 }
 
-export default function StatusIndicator({ state, conversationMode }: StatusIndicatorProps) {
+// Map states to actual color values for inline styles
+const stateColorValues: Record<VoiceState, string> = {
+  idle: '#3b82f6', // blue-500
+  wake_detected: '#06b6d4', // cyan-500
+  listening: '#ef4444', // red-500
+  transcribing: '#f59e0b', // amber-500
+  processing: '#f59e0b', // amber-500
+  speaking: '#22c55e', // green-500
+  waiting: '#3b82f6', // blue-500
+}
+
+export default function StatusIndicator({ state, conversationMode, onStartSession }: StatusIndicatorProps) {
+  const isIdle = state === 'idle'
+  const canClick = isIdle && onStartSession
+
+  const handleClick = () => {
+    if (canClick) {
+      onStartSession()
+    }
+  }
+
   return (
     <div className="flex flex-col items-center gap-4">
       {/* Pulsing rings for listening state */}
@@ -45,16 +56,24 @@ export default function StatusIndicator({ state, conversationMode }: StatusIndic
         )}
 
         {/* Shared element with FAB button - morphs from bottom-right to center */}
-        <motion.div
+        <motion.button
           layoutId="voice-button"
+          onClick={handleClick}
+          disabled={!canClick}
+          style={{ backgroundColor: stateColorValues[state] }}
           className={classNames(
-            'relative w-20 h-20 rounded-full flex items-center justify-center transition-colors duration-300',
-            stateColors[state]
+            'relative w-20 h-20 rounded-full flex items-center justify-center border-0 outline-none disabled:opacity-100',
+            state === 'idle' && 'shadow-lg shadow-primary/30',
+            state === 'listening' && 'shadow-lg shadow-error/50',
+            state === 'speaking' && 'animate-pulse',
+            canClick && 'cursor-pointer active:scale-95',
+            !canClick && 'cursor-default'
           )}
+          whileHover={canClick ? { scale: 1.1 } : {}}
+          whileTap={canClick ? { scale: 0.95 } : {}}
           transition={{
-            type: "spring",
-            stiffness: 300,
-            damping: 30
+            duration: 0.3,
+            ease: 'easeOut',
           }}
         >
           {(state === 'processing' || state === 'transcribing') ? (
@@ -64,7 +83,7 @@ export default function StatusIndicator({ state, conversationMode }: StatusIndic
           ) : (
             <Mic className="w-8 h-8 text-white" />
           )}
-        </motion.div>
+        </motion.button>
       </div>
 
       {/* Status label */}

@@ -1,12 +1,11 @@
-import { Wifi, WifiOff, Radio, MessageCircle, Bug, X } from 'lucide-react'
-import { useVoiceStore, useDebugEnabled } from '../../../../stores/voiceStore'
+import { Wifi, WifiOff, Radio, MessageCircle, X } from 'lucide-react'
+import { useVoiceStore } from '../../../../stores/voiceStore'
 import { mqttService } from '../../../../services/mqttService'
 import { classNames } from '../../../../utils/formatters'
 import { DisplayPanelProps } from '../types'
 
 export default function DefaultDisplayPanel({ roomId, onClose }: DisplayPanelProps) {
-  const { sessionId, conversationMode, mqttConnected, toggleDebug } = useVoiceStore()
-  const debugEnabled = useDebugEnabled()
+  const { sessionId, conversationMode, mqttConnected } = useVoiceStore()
 
   return (
     <div className="flex items-center justify-between p-4 bg-black/20 backdrop-blur-md border-b border-white/10">
@@ -65,20 +64,6 @@ export default function DefaultDisplayPanel({ roomId, onClose }: DisplayPanelPro
           <span className="text-base font-semibold">
             {conversationMode ? "In conversation" : "Start conversation"}
           </span>
-        </button>
-
-        {/* Debug toggle */}
-        <button
-          onClick={toggleDebug}
-          className={classNames(
-            "p-3 rounded-full transition-colors",
-            debugEnabled
-              ? "bg-yellow-500/30 text-yellow-400 ring-2 ring-yellow-400/50"
-              : "bg-white/5 hover:bg-white/10"
-          )}
-          title="Toggle debug log"
-        >
-          <Bug className="w-5 h-5" />
         </button>
 
         {/* Close button */}

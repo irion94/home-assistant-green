@@ -66,6 +66,15 @@ interface VoiceStore {
   // Display action state
   displayAction: DisplayAction | null
 
+  // Left panel state
+  leftPanelVisible: boolean
+  activeTool: string | null
+  autoCloseTimerId: NodeJS.Timeout | null
+
+  // Hybrid STT state
+  hybridSTTEnabled: boolean
+  browserSTTAvailable: boolean
+
   // Actions - Session
   setSessionId: (sessionId: string | null) => void
   setVoiceState: (state: VoiceState) => void
@@ -103,6 +112,15 @@ interface VoiceStore {
   // Actions - Display
   setDisplayAction: (action: DisplayAction | null) => void
   clearDisplayAction: () => void
+
+  // Actions - Left Panel
+  showLeftPanel: (toolType: string) => void
+  hideLeftPanel: () => void
+  setAutoCloseTimer: (timerId: NodeJS.Timeout | null) => void
+
+  // Actions - Hybrid STT
+  setHybridSTTEnabled: (enabled: boolean) => void
+  setBrowserSTTAvailable: (available: boolean) => void
 }
 
 export const useVoiceStore = create<VoiceStore>()(
@@ -126,6 +144,11 @@ export const useVoiceStore = create<VoiceStore>()(
       debugEnabled: false,
       debugLogs: [],
       displayAction: null,
+      leftPanelVisible: false,
+      activeTool: null,
+      autoCloseTimerId: null,
+      hybridSTTEnabled: true, // Enable by default in kiosk mode
+      browserSTTAvailable: false, // Will be set by useRemoteSTT hook
 
       // Session actions
       setSessionId: (sessionId) => set({ sessionId }),
@@ -276,6 +299,9 @@ export const useVoiceStore = create<VoiceStore>()(
           overlayOpen: true,
           startSessionOnOpen: startSession,
           triggerState: initialState,
+          // Show left panel with default tabs when overlay opens
+          leftPanelVisible: true,
+          activeTool: 'default',
           // Reset state for new session if starting from button
           ...(startSession ? { state: 'idle', lastComparison: null } : {})
         })
@@ -284,7 +310,11 @@ export const useVoiceStore = create<VoiceStore>()(
       closeOverlay: () => set({
         overlayOpen: false,
         startSessionOnOpen: false,
-        triggerState: 'idle'
+        triggerState: 'idle',
+        // Hide left panel when overlay closes
+        leftPanelVisible: false,
+        activeTool: null,
+        autoCloseTimerId: null
       }),
 
       // Session lifecycle
@@ -326,11 +356,62 @@ export const useVoiceStore = create<VoiceStore>()(
 
       // Display actions
       setDisplayAction: (action) => {
-        set({ displayAction: action })
         get().addDebugLog('MQTT', `display_action: ${action?.type ?? 'null'}`)
+
+        // Show left panel when display action is received (atomic update)
+        if (action && action.type !== 'default') {
+          // Clear existing timer
+          const currentTimer = get().autoCloseTimerId
+          if (currentTimer) clearTimeout(currentTimer)
+
+          // Atomic update of all related state
+          set({
+            displayAction: action,
+            leftPanelVisible: true,
+            activeTool: action.type,
+            autoCloseTimerId: null
+          })
+          get().addDebugLog('STATE', `Left panel opened: ${action.type}`)
+        } else {
+          // Just update displayAction if it's default/null
+          set({ displayAction: action })
+        }
       },
 
-      clearDisplayAction: () => set({ displayAction: null })
+      clearDisplayAction: () => set({ displayAction: null }),
+
+      // Left panel actions
+      showLeftPanel: (toolType) => {
+        // Clear existing timer
+        const currentTimer = get().autoCloseTimerId
+        if (currentTimer) clearTimeout(currentTimer)
+
+        set({
+          leftPanelVisible: true,
+          activeTool: toolType,
+          autoCloseTimerId: null
+        })
+        get().addDebugLog('STATE', `Left panel opened: ${toolType}`)
+      },
+
+      hideLeftPanel: () => {
+        // Clear timer
+        const currentTimer = get().autoCloseTimerId
+        if (currentTimer) clearTimeout(currentTimer)
+
+        set({
+          leftPanelVisible: false,
+          activeTool: null,
+          autoCloseTimerId: null
+        })
+        get().addDebugLog('STATE', 'Left panel closed')
+      },
+
+      setAutoCloseTimer: (timerId) => set({ autoCloseTimerId: timerId }),
+
+      // Hybrid STT actions
+      setHybridSTTEnabled: (enabled) => set({ hybridSTTEnabled: enabled }),
+      setBrowserSTTAvailable: (available) => set({ browserSTTAvailable: available })
     }),
     {
       name: 'voice-store',

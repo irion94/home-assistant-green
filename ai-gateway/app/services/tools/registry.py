@@ -191,6 +191,28 @@ class ToolRegistry:
             logger.info(
                 f"Tool '{tool_name}' completed: success={result.success}, latency={latency_ms:.2f}ms"
             )
+
+            # Publish tool execution event to MQTT for history panel
+            if room_id and session_id:
+                try:
+                    from app.services.mqtt_client import get_mqtt_client
+                    import json
+
+                    mqtt = get_mqtt_client()
+                    topic = f"voice_assistant/room/{room_id}/session/{session_id}/tool_executed"
+                    payload = {
+                        "tool_name": tool_name,
+                        "arguments": arguments,
+                        "success": result.success,
+                        "latency_ms": round(latency_ms, 2),
+                        "timestamp": time.time(),
+                        "content": result.content[:100] if result.content else None,  # Truncate for brevity
+                    }
+                    mqtt.client.publish(topic, json.dumps(payload), qos=1)
+                    logger.debug(f"Published tool_executed event to MQTT: {tool_name}")
+                except Exception as mqtt_error:
+                    logger.warning(f"Failed to publish tool_executed to MQTT: {mqtt_error}")
+
             return result
 
         except Exception as e:

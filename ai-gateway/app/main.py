@@ -93,6 +93,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from app.services.tools.time_tool import GetTimeTool
         from app.services.tools.home_data_tool import GetHomeDataTool
         from app.services.tools.entity_tool import GetEntityTool
+        from app.services.tools.webview_tool import WebViewTool
+        from app.services.tools.media_control_tool import MediaControlTool
+        from app.services.tools.research_tool import ResearchTool
         from app.services.ha_client import HomeAssistantClient
 
         # Initialize HA client for tools
@@ -104,6 +107,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         tool_registry.register(GetTimeTool())
         tool_registry.register(GetHomeDataTool(ha_client))
         tool_registry.register(GetEntityTool(ha_client))
+        tool_registry.register(WebViewTool())
+        tool_registry.register(MediaControlTool(ha_client))
+        tool_registry.register(ResearchTool())
 
         logger.info(f"New tool architecture enabled: {len(tool_registry)} tools registered")
         logger.info(f"Registered tools: {', '.join(tool_registry.list_tools())}")

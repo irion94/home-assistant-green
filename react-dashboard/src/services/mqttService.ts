@@ -467,6 +467,24 @@ class MqttService {
       return
     }
 
+    // session/{session_id}/tool_executed (Tool history tracking)
+    const toolExecutedMatch = subTopic.match(/^session\/([^/]+)\/tool_executed$/)
+    if (toolExecutedMatch) {
+      try {
+        const toolEvent = JSON.parse(payload)
+        const status = toolEvent.success ? '✓' : '✗'
+        const latency = toolEvent.latency_ms.toFixed(1)
+        store.addDebugLog(
+          'MQTT',
+          `TOOL ${status} ${toolEvent.tool_name} (${latency}ms) → ${toolEvent.content || 'no result'}`
+        )
+        console.log(`[MQTT] Tool executed: ${toolEvent.tool_name}`, toolEvent)
+      } catch (e) {
+        console.error('[MQTT] Failed to parse tool_executed:', e)
+      }
+      return
+    }
+
     // session/{session_id}/transcript (legacy - plain transcript without streaming info)
     const transcriptMatch = subTopic.match(/^session\/([^/]+)\/transcript$/)
     if (transcriptMatch) {
@@ -656,6 +674,96 @@ class MqttService {
    */
   stopConversation(): void {
     this.stopSession()
+  }
+
+  /**
+   * Subscribe to STT request topic for hybrid STT.
+   * Uses wildcard to receive requests for any session in this room.
+   * @param roomId - Room identifier
+   * @param callback - Callback function to handle STT requests
+   */
+  subscribeToSTTRequests(roomId: string, callback: (payload: any) => void): void {
+    // Use wildcard (+) to match any session ID
+    const topic = `voice_assistant/room/${roomId}/session/+/stt/request`;
+
+    this.client?.subscribe(topic, (err) => {
+      if (err) {
+        console.error(`[MQTT] Failed to subscribe to ${topic}:`, err);
+      } else {
+        console.log(`[MQTT] Subscribed to STT requests: ${topic}`);
+      }
+    });
+
+    // Store handler reference for cleanup
+    const messageHandler = (receivedTopic: string, message: Buffer) => {
+      // Check if topic matches our wildcard pattern
+      if (receivedTopic.startsWith(`voice_assistant/room/${roomId}/session/`) &&
+          receivedTopic.endsWith('/stt/request')) {
+        try {
+          const payload = JSON.parse(message.toString());
+          console.log(`[MQTT] Received STT request:`, payload);
+          callback(payload);
+        } catch (error) {
+          console.error('[MQTT] Failed to parse STT request:', error);
+        }
+      }
+    };
+
+    // Remove old handler if exists, add new one
+    if (this.sttRequestHandler) {
+      this.client?.off('message', this.sttRequestHandler);
+    }
+    this.sttRequestHandler = messageHandler;
+    this.client?.on('message', messageHandler);
+  }
+
+  private sttRequestHandler?: (topic: string, message: Buffer) => void;
+
+  /**
+   * Unsubscribe from STT requests.
+   * @param roomId - Room identifier
+   */
+  unsubscribeFromSTTRequests(roomId: string): void {
+    const topic = `voice_assistant/room/${roomId}/session/+/stt/request`;
+
+    this.client?.unsubscribe(topic, (err) => {
+      if (err) {
+        console.error(`[MQTT] Failed to unsubscribe from ${topic}:`, err);
+      } else {
+        console.log(`[MQTT] Unsubscribed from STT requests: ${topic}`);
+      }
+    });
+
+    // Remove message handler
+    if (this.sttRequestHandler) {
+      this.client?.off('message', this.sttRequestHandler);
+      this.sttRequestHandler = undefined;
+    }
+  }
+
+  /**
+   * Publish browser STT response.
+   * @param roomId - Room identifier
+   * @param sessionId - Session identifier
+   * @param text - Transcribed text
+   * @param confidence - Confidence score (0-1)
+   */
+  publishBrowserSTTResponse(roomId: string, sessionId: string, text: string, confidence: number): void {
+    const topic = `voice_assistant/room/${roomId}/session/${sessionId}/stt/response`;
+    const payload = {
+      source: 'browser',
+      text,
+      confidence,
+      timestamp: Date.now()
+    };
+
+    this.client?.publish(topic, JSON.stringify(payload), { qos: 1 }, (err) => {
+      if (err) {
+        console.error(`[MQTT] Failed to publish STT response:`, err);
+      } else {
+        console.log(`[MQTT] Published STT response: "${text.substring(0, 50)}..."`);
+      }
+    });
   }
 
   /**

@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mic, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { ConversationMessage } from '../../../stores/voiceStore'
 import { classNames } from '../../../utils/formatters'
 
@@ -16,21 +16,9 @@ export default function ChatSection({ messages }: ChatSectionProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  if (messages.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-        <Mic className="w-16 h-16 mb-4 opacity-50" />
-        <p className="text-lg">Say "Hey Jarvis" to start</p>
-        <p className="text-sm mt-2 opacity-70">or tap the microphone button</p>
-      </div>
-    )
-  }
-
   return (
-    <div className="flex-1 flex flex-col px-4 py-2">
-      {/* Container with bottom-up layout */}
-      <div className="flex-1 flex flex-col justify-end">
-        <div className="space-y-3">
+    <div className="flex-1 flex flex-col justify-end">
+      <div className="space-y-3">
           <AnimatePresence initial={false}>
             {messages.map((message) => (
               <motion.div
@@ -76,7 +64,6 @@ export default function ChatSection({ messages }: ChatSectionProps) {
           </AnimatePresence>
           <div ref={messagesEndRef} />
         </div>
-      </div>
     </div>
   )
 }
