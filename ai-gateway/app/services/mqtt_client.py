@@ -1,8 +1,13 @@
 """
 MQTT client for publishing display actions to React Dashboard.
 
+Phase 5: MQTT Decoupling
+- Centralized topic configuration
+- Versioning support (v1/ prefix)
+- Dual v0/v1 publishing during migration
+
 Phase 12: VoiceOverlay UI Redesign
-Topic: voice_assistant/room/{room_id}/session/{session_id}/display_action
+Topic: {version}/voice_assistant/room/{room_id}/session/{session_id}/display_action
 Payload: { type: "default" | "web_view" | "light_control" | "search_results", data: {...}, timestamp: int }
 """
 
@@ -12,6 +17,7 @@ import time
 import logging
 from typing import Any, Dict, Optional
 import paho.mqtt.client as mqtt
+from app.config.mqtt_topics import get_mqtt_config
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +37,7 @@ class MqttClient:
         self.port = port
         self.client: Optional[mqtt.Client] = None
         self._connected = False
+        self.topics = get_mqtt_config()  # Phase 5: Centralized topic config
 
     def connect(self) -> None:
         """Connect to MQTT broker."""
@@ -98,7 +105,8 @@ class MqttClient:
             return False
 
         try:
-            topic = f"voice_assistant/room/{room_id}/session/{session_id}/display_action"
+            # Phase 5: Use centralized topic config
+            topic = self.topics.display_action(room_id, session_id)
             payload = {
                 "type": action_type,
                 "data": action_data,
@@ -106,7 +114,14 @@ class MqttClient:
             }
 
             payload_json = json.dumps(payload)
+
+            # Publish to v1 topic
             result = self.client.publish(topic, payload_json, qos=1)
+
+            # Phase 5: Dual publishing - also publish to legacy v0 topic during migration
+            legacy_topic = self.topics.legacy_display_action(room_id, session_id)
+            self.client.publish(legacy_topic, payload_json, qos=1)
+            logger.debug(f"Dual-published to v1 ({topic}) and v0 ({legacy_topic})")
 
             if result.rc == mqtt.MQTT_ERR_SUCCESS:
                 logger.info(f"Published display action '{action_type}' to {topic}")
@@ -142,7 +157,8 @@ class MqttClient:
             return False
 
         try:
-            topic = f"voice_assistant/room/{room_id}/session/{session_id}/overlay_hint"
+            # Phase 5: Use centralized topic config
+            topic = self.topics.overlay_hint(room_id, session_id)
             payload = {
                 "keep_open": keep_open,
                 "timestamp": int(time.time() * 1000)  # Milliseconds

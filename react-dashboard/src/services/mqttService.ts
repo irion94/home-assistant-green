@@ -2,29 +2,23 @@
  * MQTT Service for connecting to voice assistant messages.
  * Subscribes to room-scoped MQTT topics for real-time updates.
  *
- * Topic Structure (Phase 4):
- * voice_assistant/room/{room_id}/
- *   ├── session/
- *   │   ├── active                  # Current session ID or "none"
- *   │   └── {session_id}/
- *   │       ├── state               # listening/processing/speaking/waiting/idle
- *   │       ├── transcript          # Latest user message JSON
- *   │       ├── response            # Latest AI response JSON
- *   │       └── ended               # Session end signal
- *   ├── command/
- *   │   ├── start                   # Start session (payload: {mode, source})
- *   │   └── stop                    # End current session
- *   └── config/
- *       └── conversation_mode       # Room preference
+ * Phase 5: MQTT Decoupling
+ * - Centralized topic configuration
+ * - Dual v0/v1 subscription during migration
+ * - Zustand integration for state management
  *
- * Now with Zustand integration (Phase 5):
- * - Writes directly to voiceStore for centralized state management
- * - Eliminates callback conflicts between KioskHome and VoiceOverlay
- * - Callbacks still available for backward compatibility
+ * Topic Structure:
+ * {version}/voice_assistant/room/{room_id}/session/{session_id}/
+ *   ├── state               # listening/processing/speaking/waiting/idle
+ *   ├── transcript          # Latest user message JSON
+ *   ├── response            # Latest AI response JSON
+ *   ├── display_action      # Panel switching commands
+ *   └── overlay_hint        # Overlay behavior hints
  */
 
 import mqtt, { MqttClient } from 'mqtt'
 import { useVoiceStore } from '../stores/voiceStore'
+import { mqttTopics } from '../config/mqttTopics'
 
 export interface VoiceMessage {
   type: 'transcript' | 'response'
@@ -185,68 +179,39 @@ class MqttService {
 
   /**
    * Subscribe to room-scoped voice assistant topics.
+   * Phase 5: Dual subscription to v1 (new) and v0 (legacy) topics during migration.
    */
   private subscribeRoom(): void {
     if (!this.client) return
 
-    const roomPrefix = `voice_assistant/room/${this.roomId}`
+    // Phase 5: Subscribe to both v1 (new) and v0 (legacy) topics
     const topics = [
-      // Session management (room-scoped only - no legacy topics)
-      `${roomPrefix}/session/active`,
-      `${roomPrefix}/session/+/state`,
-      `${roomPrefix}/session/+/transcript`,
-      `${roomPrefix}/session/+/response`,
-      `${roomPrefix}/session/+/ended`,
-      // Streaming STT topics (Phase 8)
-      `${roomPrefix}/session/+/transcript/interim`,
-      `${roomPrefix}/session/+/transcript/final`,
-      `${roomPrefix}/session/+/transcript/refined`,
-      // Streaming response topics (Phase 9)
-      `${roomPrefix}/session/+/response/stream/start`,
-      `${roomPrefix}/session/+/response/stream/chunk`,
-      `${roomPrefix}/session/+/response/stream/complete`,
-      // Display action topics (Phase 12)
-      `${roomPrefix}/session/+/display_action`,
-      // Configuration
-      `${roomPrefix}/config/conversation_mode`,
-      // STT comparison (optional debug)
-      `${roomPrefix}/stt_comparison`,
+      // v1 topics (new format with versioning)
+      mqttTopics.subscribeAllSessions(this.roomId),
+
+      // v0 legacy topics (backward compatibility during migration)
+      mqttTopics.subscribeLegacySessions(this.roomId),
     ]
 
     this.client.subscribe(topics, (err) => {
       if (err) {
         console.error('[MQTT] Subscribe error:', err)
       } else {
-        console.log(`[MQTT] Subscribed to room ${this.roomId} topics`)
+        console.log(`[MQTT] Subscribed to room ${this.roomId} (v1 + v0 legacy)`)
       }
     })
   }
 
   /**
    * Unsubscribe from current room topics.
+   * Phase 5: Unsubscribe from both v1 and v0 topics.
    */
   private unsubscribeRoom(): void {
     if (!this.client) return
 
-    const roomPrefix = `voice_assistant/room/${this.roomId}`
     const topics = [
-      `${roomPrefix}/session/active`,
-      `${roomPrefix}/session/+/state`,
-      `${roomPrefix}/session/+/transcript`,
-      `${roomPrefix}/session/+/response`,
-      `${roomPrefix}/session/+/ended`,
-      // Streaming STT topics (Phase 8)
-      `${roomPrefix}/session/+/transcript/interim`,
-      `${roomPrefix}/session/+/transcript/final`,
-      `${roomPrefix}/session/+/transcript/refined`,
-      // Streaming response topics (Phase 9)
-      `${roomPrefix}/session/+/response/stream/start`,
-      `${roomPrefix}/session/+/response/stream/chunk`,
-      `${roomPrefix}/session/+/response/stream/complete`,
-      // Display action topics (Phase 12)
-      `${roomPrefix}/session/+/display_action`,
-      `${roomPrefix}/config/conversation_mode`,
-      `${roomPrefix}/stt_comparison`,
+      mqttTopics.subscribeAllSessions(this.roomId),
+      mqttTopics.subscribeLegacySessions(this.roomId),
     ]
 
     this.client.unsubscribe(topics, (err) => {
@@ -260,12 +225,23 @@ class MqttService {
 
   /**
    * Handle incoming MQTT messages.
+   * Phase 5: Detect topic version (v0 legacy vs v1 new).
    */
   private handleMessage(topic: string, payload: string): void {
     try {
-      const roomPrefix = `voice_assistant/room/${this.roomId}`
+      // Phase 5: Detect topic version
+      const isV1 = topic.startsWith('v1/')
+      const isV0 = !topic.startsWith('v')
 
-      // Room-scoped topics
+      if (isV0) {
+        console.debug(`[MQTT] Received v0 topic (legacy): ${topic}`)
+      }
+
+      // Extract subtopic after room prefix (handle both v0 and v1 formats)
+      const roomPrefix = isV1
+        ? `v1/voice_assistant/room/${this.roomId}`
+        : `voice_assistant/room/${this.roomId}`
+
       if (topic.startsWith(roomPrefix)) {
         const subTopic = topic.substring(roomPrefix.length + 1)
         this.handleRoomMessage(subTopic, payload)
@@ -621,9 +597,10 @@ class MqttService {
 
   /**
    * Publish to room-scoped topic.
+   * Phase 5: Uses v1 topic format.
    */
   private publishRoom(subTopic: string, payload: string): void {
-    const topic = `voice_assistant/room/${this.roomId}/${subTopic}`
+    const topic = `v1/voice_assistant/room/${this.roomId}/${subTopic}`
     this.publish(topic, payload)
   }
 
@@ -683,8 +660,8 @@ class MqttService {
    * @param callback - Callback function to handle STT requests
    */
   subscribeToSTTRequests(roomId: string, callback: (payload: any) => void): void {
-    // Use wildcard (+) to match any session ID
-    const topic = `voice_assistant/room/${roomId}/session/+/stt/request`;
+    // Phase 5: Use v1 topic format for hybrid STT
+    const topic = `v1/voice_assistant/room/${roomId}/session/+/stt/request`;
 
     this.client?.subscribe(topic, (err) => {
       if (err) {
@@ -696,8 +673,8 @@ class MqttService {
 
     // Store handler reference for cleanup
     const messageHandler = (receivedTopic: string, message: Buffer) => {
-      // Check if topic matches our wildcard pattern
-      if (receivedTopic.startsWith(`voice_assistant/room/${roomId}/session/`) &&
+      // Check if topic matches our wildcard pattern (v1 format)
+      if (receivedTopic.startsWith(`v1/voice_assistant/room/${roomId}/session/`) &&
           receivedTopic.endsWith('/stt/request')) {
         try {
           const payload = JSON.parse(message.toString());
@@ -724,7 +701,8 @@ class MqttService {
    * @param roomId - Room identifier
    */
   unsubscribeFromSTTRequests(roomId: string): void {
-    const topic = `voice_assistant/room/${roomId}/session/+/stt/request`;
+    // Phase 5: Use v1 topic format
+    const topic = `v1/voice_assistant/room/${roomId}/session/+/stt/request`;
 
     this.client?.unsubscribe(topic, (err) => {
       if (err) {
@@ -749,7 +727,8 @@ class MqttService {
    * @param confidence - Confidence score (0-1)
    */
   publishBrowserSTTResponse(roomId: string, sessionId: string, text: string, confidence: number): void {
-    const topic = `voice_assistant/room/${roomId}/session/${sessionId}/stt/response`;
+    // Phase 5: Use v1 topic format
+    const topic = `v1/voice_assistant/room/${roomId}/session/${sessionId}/stt/response`;
     const payload = {
       source: 'browser',
       text,

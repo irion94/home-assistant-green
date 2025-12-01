@@ -196,10 +196,12 @@ class ToolRegistry:
             if room_id and session_id:
                 try:
                     from app.services.mqtt_client import get_mqtt_client
+                    from app.config.mqtt_topics import get_mqtt_config
                     import json
 
                     mqtt = get_mqtt_client()
-                    topic = f"voice_assistant/room/{room_id}/session/{session_id}/tool_executed"
+                    topics = get_mqtt_config()
+                    topic = topics.tool_executed(room_id, session_id)
                     payload = {
                         "tool_name": tool_name,
                         "arguments": arguments,

@@ -111,6 +111,11 @@ services:
       - NEW_TOOLS_ENABLED=${NEW_TOOLS_ENABLED:-false}  # Feature flag for new BaseTool/ToolRegistry (includes ResearchTool)
       # Learning Systems (Phase 3)
       - LEARNING_ENABLED=${LEARNING_ENABLED:-false}  # Feature flag for ContextEngine/IntentAnalyzer/SuggestionEngine
+      # MQTT Topic Configuration (Phase 5)
+      - MQTT_TOPIC_VERSION=${MQTT_TOPIC_VERSION:-v1}  # Topic versioning (v1, v2, etc.)
+      - MQTT_BASE_PREFIX=${MQTT_BASE_PREFIX:-voice_assistant}  # Topic namespace
+      - MQTT_BROKER_URL=${MQTT_BROKER_URL:-mosquitto}  # MQTT broker hostname
+      - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}  # MQTT broker port
     secrets:
       - ha_token
       - openai_api_key
@@ -228,6 +233,9 @@ services:
       - VITE_HA_URL=http://localhost:8123
       # REMOVED: VITE_HA_TOKEN (Phase 1 - frontend should use AI Gateway proxy instead)
       - VITE_GATEWAY_URL=http://localhost:8080
+      # MQTT Topic Configuration (Phase 5)
+      - VITE_MQTT_TOPIC_VERSION=${VITE_MQTT_TOPIC_VERSION:-v1}  # Topic versioning (v1, v2, etc.)
+      - VITE_MQTT_BASE_PREFIX=${VITE_MQTT_BASE_PREFIX:-voice_assistant}  # Topic namespace
     depends_on:
       - ai-gateway
     restart: unless-stopped
