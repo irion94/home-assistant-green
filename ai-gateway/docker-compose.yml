@@ -6,8 +6,11 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ai_assistant
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}  # Fallback if secrets disabled
+      # POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password  # Use secret when SECRETS_MANAGER_ENABLED=true
       POSTGRES_DB: ai_assistant
+    secrets:
+      - postgres_password
     volumes:
       - /mnt/data-ssd/postgres-data:/var/lib/postgresql/data
     ports:
@@ -68,8 +71,10 @@ services:
     ports:
       - "8080:8080"
     environment:
+      # Security: Enable Docker Secrets (Phase 1 - disabled by default)
+      - SECRETS_MANAGER_ENABLED=${SECRETS_MANAGER_ENABLED:-false}
       # Home Assistant connection
-      - HA_TOKEN=${HA_TOKEN}
+      - HA_TOKEN=${HA_TOKEN}  # Fallback if secrets disabled
       - HA_BASE_URL=${HA_BASE_URL:-http://host.docker.internal:8123}
       # LLM Provider selection (ollama or openai)
       - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
@@ -77,15 +82,17 @@ services:
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
       # OpenAI configuration (used when LLM_PROVIDER=openai)
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}  # Fallback if secrets disabled
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
       # STT Provider selection (vosk or whisper)
       - STT_PROVIDER=${STT_PROVIDER:-vosk}
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
       - STT_CONFIDENCE_THRESHOLD=${STT_CONFIDENCE_THRESHOLD:-0.5}  # Vosk confidence for Whisper fallback (lowered for better Polish accuracy)
       # Web search (Brave Search API)
-      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      - BRAVE_API_KEY=${BRAVE_API_KEY:-}  # Fallback if secrets disabled
       - SEARCH_RESULTS_LIMIT=${SEARCH_RESULTS_LIMIT:-5}
+      # URL validation (Phase 1 - WebView allowlist)
+      - ALLOWED_DOMAINS=${ALLOWED_DOMAINS:-}  # Comma-separated custom domains (empty = use defaults)
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       # Database configuration (Phase 1)
@@ -93,7 +100,7 @@ services:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=ai_assistant
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}  # Fallback if secrets disabled
       - POSTGRES_DB=ai_assistant
       # Embeddings
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
@@ -104,6 +111,11 @@ services:
       - NEW_TOOLS_ENABLED=${NEW_TOOLS_ENABLED:-false}  # Feature flag for new BaseTool/ToolRegistry (includes ResearchTool)
       # Learning Systems (Phase 3)
       - LEARNING_ENABLED=${LEARNING_ENABLED:-false}  # Feature flag for ContextEngine/IntentAnalyzer/SuggestionEngine
+    secrets:
+      - ha_token
+      - openai_api_key
+      - brave_api_key
+      - postgres_password
     volumes:
       - ./config:/app/config:ro
     depends_on:
@@ -214,7 +226,7 @@ services:
       - "3000:3000"
     environment:
       - VITE_HA_URL=http://localhost:8123
-      - VITE_HA_TOKEN=${HA_TOKEN}
+      # REMOVED: VITE_HA_TOKEN (Phase 1 - frontend should use AI Gateway proxy instead)
       - VITE_GATEWAY_URL=http://localhost:8080
     depends_on:
       - ai-gateway
@@ -224,6 +236,21 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+# Docker Secrets Configuration (Phase 1)
+# To enable secrets:
+# 1. Create /run/secrets/ directory with proper permissions
+# 2. Create individual secret files (ha_token, openai_api_key, brave_api_key, postgres_password)
+# 3. Set SECRETS_MANAGER_ENABLED=true in .env
+secrets:
+  ha_token:
+    file: /run/secrets/ha_token
+  openai_api_key:
+    file: /run/secrets/openai_api_key
+  brave_api_key:
+    file: /run/secrets/brave_api_key
+  postgres_password:
+    file: /run/secrets/postgres_password
 
 # Volumes are now using SSD paths directly
 # /mnt/data-ssd/ha-data/ha-config

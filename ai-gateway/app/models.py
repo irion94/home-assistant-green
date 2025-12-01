@@ -7,6 +7,7 @@ throughout the application.
 from __future__ import annotations
 
 from typing import Any, Literal
+import os
 
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -15,12 +16,45 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Config(BaseSettings):
     """Application configuration from environment variables."""
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="allow")
 
     ha_token: str = Field(..., description="Home Assistant long-lived access token")
     ha_base_url: str = Field(
         default="http://homeassistant:8123", description="Home Assistant base URL"
     )
+
+    def __init__(self, **kwargs):
+        """Initialize config with optional secrets manager integration."""
+        # Check if secrets manager is enabled
+        secrets_enabled = os.getenv("SECRETS_MANAGER_ENABLED", "false").lower() == "true"
+
+        if secrets_enabled:
+            try:
+                from app.security.secrets_manager import get_secrets_manager
+                secrets = get_secrets_manager()
+
+                # Override with secrets (only if not already provided)
+                if "ha_token" not in kwargs:
+                    kwargs["ha_token"] = secrets.get_secret("ha_token")
+                if "postgres_password" not in kwargs:
+                    kwargs.setdefault("postgres_password", secrets.get_secret("postgres_password", required=False))
+
+                # Optional secrets
+                if "openai_api_key" not in kwargs:
+                    openai_key = secrets.get_secret("openai_api_key", required=False)
+                    if openai_key:
+                        kwargs["openai_api_key"] = openai_key
+
+                if "brave_api_key" not in kwargs:
+                    brave_key = secrets.get_secret("brave_api_key", required=False)
+                    if brave_key:
+                        kwargs["brave_api_key"] = brave_key
+            except Exception as e:
+                # Log but don't fail - allow fallback to environment variables
+                import logging
+                logging.warning(f"Failed to load secrets from SecretsManager: {e}")
+
+        super().__init__(**kwargs)
 
     # LLM Provider selection
     llm_provider: str = Field(

@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from app.services.tools.base import BaseTool, ToolResult
+from app.security.url_validator import get_url_validator
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class WebViewTool(BaseTool):
         room_id: str | None = None,
         session_id: str | None = None,
     ) -> ToolResult:
-        """Execute the webview tool.
+        """Execute the webview tool with URL validation.
 
         Args:
             arguments: Tool arguments with 'url' and optional 'title'
@@ -71,18 +72,20 @@ class WebViewTool(BaseTool):
         url = arguments.get("url", "")
         title = arguments.get("title", "Web View")
 
-        # Validate URL exists
-        if not url or not url.strip():
+        # Validate URL with security checks (Phase 1)
+        validator = get_url_validator()
+        is_valid, normalized_url, error = validator.validate(url)
+
+        if not is_valid:
+            logger.warning(f"WebView URL validation failed: {error} (url={url})")
             return ToolResult(
                 success=False,
-                content="No URL provided. Please specify a website to open.",
-                metadata={"error": "missing_url"},
+                content=f"Cannot open URL: {error}",
+                metadata={"error": "url_validation_failed", "details": error, "url": url},
             )
 
-        # Add protocol if missing
-        url = url.strip()
-        if not url.startswith(("http://", "https://")):
-            url = f"https://{url}"
+        # Use normalized URL (with https:// prefix added if missing)
+        url = normalized_url
 
         logger.info(f"Opening website: {url} (title: {title})")
 
