@@ -1,7 +1,8 @@
 import { useEffect, Suspense } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Loader2 } from 'lucide-react'
-import { useVoiceStore } from '@/stores/voiceStore'
+import { useUIStore } from '@/stores/uiStore'
+import { useDeviceStore } from '@/stores/deviceStore'
 import { panelRegistry } from './display-panels/registry'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import ToolPanel from './ToolPanel'
@@ -18,12 +19,10 @@ interface ToolPanelSliderProps {
 }
 
 export const ToolPanelSlider = ({ roomId }: ToolPanelSliderProps) => {
-  const {
-    displayAction,
-    activeTool,
-    showLeftPanel,
-    setAutoCloseTimer,
-  } = useVoiceStore()
+  const displayAction = useDeviceStore((state) => state.displayAction)
+  const activeTool = useUIStore((state) => state.activeTool)
+  const showLeftPanel = useUIStore((state) => state.showLeftPanel)
+  const setAutoCloseTimer = useUIStore((state) => state.setAutoCloseTimer)
 
   // Show specific panel when displayAction changes
   useEffect(() => {

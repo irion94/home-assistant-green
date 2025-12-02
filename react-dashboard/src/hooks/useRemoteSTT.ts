@@ -1,11 +1,12 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { useVoiceStore } from '../stores/voiceStore';
+import { useUIStore } from '../stores/uiStore';
+import { useDeviceStore } from '../stores/deviceStore';
 import { mqttService } from '../services/mqttService';
 
 export const useRemoteSTT = () => {
-  const roomId = useVoiceStore((state) => state.roomId);
-  const hybridSTTEnabled = useVoiceStore((state) => state.hybridSTTEnabled);
-  const setBrowserSTTAvailable = useVoiceStore((state) => state.setBrowserSTTAvailable);
+  const roomId = useDeviceStore((state) => state.roomId);
+  const hybridSTTEnabled = useUIStore((state) => state.hybridSTTEnabled);
+  const setBrowserSTTAvailable = useUIStore((state) => state.setBrowserSTTAvailable);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   useEffect(() => {

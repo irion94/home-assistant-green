@@ -12,7 +12,8 @@ import VoicePanel from '../components/kiosk/panels/VoicePanel'
 import MediaPanel from '../components/kiosk/panels/MediaPanel'
 import VoiceOverlay from '../components/kiosk/VoiceOverlay'
 import { mqttService } from '../services/mqttService'
-import { useVoiceStore } from '../stores/voiceStore'
+import { useUIStore } from '../stores/uiStore'
+import { useDeviceStore } from '../stores/deviceStore'
 import { useRemoteSTT } from '../hooks/useRemoteSTT'
 
 // Panel width configurations (in viewport width units)
@@ -30,15 +31,13 @@ export default function KioskHome() {
   const [searchParams] = useSearchParams()
   const [initialOffset, setInitialOffset] = useState(0)
 
-  // Zustand store - single source of truth for voice state
-  const {
-    overlayOpen,
-    startSessionOnOpen,
-    triggerState,
-    openOverlay,
-    closeOverlay,
-    setRoomId
-  } = useVoiceStore()
+  // Zustand stores - split for performance (Phase 6)
+  const overlayOpen = useUIStore((state) => state.overlayOpen)
+  const startSessionOnOpen = useUIStore((state) => state.startSessionOnOpen)
+  const triggerState = useUIStore((state) => state.triggerState)
+  const openOverlay = useUIStore((state) => state.openOverlay)
+  const closeOverlay = useUIStore((state) => state.closeOverlay)
+  const setRoomId = useDeviceStore((state) => state.setRoomId)
 
   // Initialize hybrid STT (auto-triggered by wake-word via MQTT)
   const { handleSTTRequest } = useRemoteSTT()

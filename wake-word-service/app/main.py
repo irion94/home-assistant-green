@@ -684,6 +684,12 @@ class WakeWordService:
                 if len(parts) >= 5:  # voice_assistant/room/{room_id}/command/{command}
                     room_id = parts[2]  # Extract room_id from topic
                     command = parts[-1]  # Get last part: start, stop
+
+                    # FILTER: Only process commands for THIS device's room
+                    if room_id != self.room_id:
+                        logger.debug(f"Ignoring command '{command}' for room '{room_id}' (this device is '{self.room_id}')")
+                        return
+
                     logger.info(f"Received command '{command}' for room '{room_id}'")
                     # Temporarily override room_id for this session
                     self._handle_command(command, payload, room_id)
@@ -693,6 +699,12 @@ class WakeWordService:
                 parts = normalized_topic.split("/")
                 if len(parts) >= 5:
                     room_id = parts[2]
+
+                    # FILTER: Only process config for THIS device's room
+                    if room_id != self.room_id:
+                        logger.debug(f"Ignoring conversation mode change for room '{room_id}' (this device is '{self.room_id}')")
+                        return
+
                     logger.info(f"Conversation mode change for room '{room_id}'")
                     self._handle_conversation_mode_change(payload)
 

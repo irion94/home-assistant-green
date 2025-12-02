@@ -9,7 +9,8 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { useDebugLogs, useVoiceStore, DebugLogType } from '../../stores/voiceStore'
+import { useDebugLogs, type DebugLogType } from '../../stores/uiStore'
+import { useUIStore } from '../../stores/uiStore'
 
 const formatTime = (date: Date): string => {
   const hours = date.getHours().toString().padStart(2, '0')
@@ -36,7 +37,7 @@ const getLogTypeColor = (type: DebugLogType): string => {
 
 export function DebugLogPanel() {
   const debugLogs = useDebugLogs()
-  const clearDebugLogs = useVoiceStore((s) => s.clearDebugLogs)
+  const clearDebugLogs = useUIStore((s) => s.clearDebugLogs)
   const logEndRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll to bottom on new logs

@@ -6,7 +6,7 @@
  */
 
 import { Lightbulb, LightbulbOff, Cloud, Moon, Coffee, Clock, Home, MapPin } from 'lucide-react';
-import { useVoiceStore } from '../../../../stores/voiceStore';
+import { useConversationStore } from '../../../../stores/conversationStore';
 
 interface QuickActionsPanelProps {
   roomId?: string;
@@ -71,9 +71,9 @@ const GLOBAL_ACTIONS: QuickAction[] = [
 ];
 
 export default function QuickActionsPanel({ roomId }: QuickActionsPanelProps) {
-  const addMessage = useVoiceStore((state) => state.addMessage);
-  const sessionId = useVoiceStore((state) => state.sessionId);
-  const setSessionId = useVoiceStore((state) => state.setSessionId);
+  const addMessage = useConversationStore((state) => state.addMessage);
+  const sessionId = useConversationStore((state) => state.sessionId);
+  const setSessionId = useConversationStore((state) => state.setSessionId);
 
   const handleAction = async (action: QuickAction) => {
     try {

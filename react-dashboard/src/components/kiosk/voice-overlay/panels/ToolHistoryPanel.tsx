@@ -6,7 +6,7 @@
  */
 
 import { Clock, CheckCircle, XCircle } from 'lucide-react';
-import { useVoiceStore } from '../../../../stores/voiceStore';
+import { useConversationStore } from '../../../../stores/conversationStore';
 
 interface ToolExecution {
   id: string;
@@ -20,7 +20,7 @@ interface ToolExecution {
 export default function ToolHistoryPanel() {
   // For Phase 4, we'll show conversation messages as a proxy for tool history
   // In Phase 5, this could be enhanced with actual tool execution tracking
-  const messages = useVoiceStore(state => state.messages);
+  const messages = useConversationStore(state => state.messages);
 
   // Extract tool-like messages (assistant responses that indicate actions)
   const toolMessages = messages
