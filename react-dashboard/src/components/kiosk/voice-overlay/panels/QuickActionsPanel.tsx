@@ -7,6 +7,7 @@
 
 import { Lightbulb, LightbulbOff, Cloud, Moon, Coffee, Clock, Home, MapPin } from 'lucide-react';
 import { useConversationStore } from '../../../../stores/conversationStore';
+import { useDeviceStore } from '../../../../stores/deviceStore';
 
 interface QuickActionsPanelProps {
   roomId?: string;
@@ -79,7 +80,16 @@ export default function QuickActionsPanel({ roomId }: QuickActionsPanelProps) {
     try {
       // Generate or use existing session ID
       const effectiveSessionId = sessionId || `quick-${Date.now()}`;
-      const effectiveRoomId = roomId || 'salon';
+      const storeRoomId = useDeviceStore.getState().roomId;
+      const effectiveRoomId = roomId || storeRoomId || 'salon';
+
+      console.log(`[QuickActions] Sending command:`, {
+        command: action.command,
+        roomId_prop: roomId,
+        roomId_store: storeRoomId,
+        effectiveRoomId,
+        sessionId: effectiveSessionId,
+      });
 
       // Set session ID if not already set (for display actions)
       if (!sessionId) {
@@ -142,8 +152,8 @@ export default function QuickActionsPanel({ roomId }: QuickActionsPanelProps) {
           onClick={() => handleAction(action)}
           className="
             flex flex-col items-center gap-2 p-4 rounded-lg
-            bg-white/5 hover:bg-white/10
-            border border-white/10 hover:border-white/20
+            bg-white/10 hover:bg-white/20
+            border border-white/20 hover:border-white/30
             transition-all duration-200
             group
           "

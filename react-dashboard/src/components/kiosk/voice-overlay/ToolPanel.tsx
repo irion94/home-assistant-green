@@ -25,7 +25,7 @@ export default function ToolPanel({ roomId, className = '' }: ToolPanelProps) {
   const [activeTab, setActiveTab] = useState<TabType>('actions');
 
   return (
-    <div className={`flex flex-col h-full bg-black/20 ${className}`}>
+    <div className={`flex flex-col h-full ${className}`}>
       {/* Tab Switcher */}
       <div className="flex border-b border-white/10">
         <TabButton

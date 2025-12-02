@@ -1,9 +1,11 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { mqttService, VoiceState } from '../../services/mqttService'
 import { useConversationStore } from '../../stores/conversationStore'
 import { useUIStore } from '../../stores/uiStore'
+import { useDeviceStore } from '../../stores/deviceStore'
 import { useBrowserTTS } from '../../hooks/useBrowserTTS'
+import { browserSTT } from '../../services/browserSTT'
 import ChatSection from './voice-overlay/ChatSection'
 import StatusIndicator from './voice-overlay/StatusIndicator'
 import { ToolPanelSlider } from './voice-overlay/ToolPanelSlider'
@@ -25,6 +27,12 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
   const conversationMode = useConversationStore((state) => state.conversationMode)
   const state = useUIStore((state) => state.state)
   const setVoiceState = useUIStore((state) => state.setVoiceState)
+
+  // Loading state for center button feedback
+  const [isStarting, setIsStarting] = useState(false)
+
+  // Interim transcript state for browser STT
+  const [interimTranscript, setInterimTranscript] = useState('')
 
   // Browser TTS for dashboard sessions
   const { speak, stop } = useBrowserTTS()
@@ -121,18 +129,135 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
 
   // Handle manual close
   const handleClose = () => {
+    browserSTT.stop() // Stop browser STT
     stop() // Cancel any ongoing browser TTS
     mqttService.stopSession()
     onClose()
   }
 
-  // Handle start session from center button
+  // Handle start session from center button (Browser-First Architecture)
   const handleStartSession = () => {
-    if (state === 'idle' && mqttService.isConnected()) {
-      mqttService.startSession('single')
-      console.log(`[VoiceOverlay] Starting session from center button`)
+    if (state !== 'idle') return
+
+    // Check browser STT availability
+    if (!browserSTT.isAvailable()) {
+      console.error('[VoiceOverlay] Browser STT not available')
+      // TODO: Show error to user
+      return
+    }
+
+    // Clear previous messages
+    useConversationStore.getState().clearMessages()
+
+    // Start listening state
+    setVoiceState('listening')
+    setInterimTranscript('')
+
+    // Start browser speech recognition
+    const success = browserSTT.start({
+      lang: 'pl-PL',
+      continuous: false,
+
+      onStart: () => {
+        console.log('[VoiceOverlay] Browser STT started')
+        setVoiceState('listening')
+      },
+
+      onInterim: (transcript) => {
+        console.log('[VoiceOverlay] Interim:', transcript)
+        setInterimTranscript(transcript)
+      },
+
+      onFinal: async (transcript) => {
+        console.log('[VoiceOverlay] Final:', transcript)
+        setInterimTranscript('')
+
+        if (!transcript || transcript.trim().length === 0) {
+          setVoiceState('idle')
+          return
+        }
+
+        // Add user message
+        useConversationStore.getState().addMessage({
+          id: `user-${Date.now()}`,
+          type: 'user',
+          text: transcript,
+          timestamp: Date.now(),
+        })
+
+        // Send to AI Gateway
+        setVoiceState('processing')
+
+        try {
+          const sessionId = useConversationStore.getState().sessionId || `browser-${Date.now()}`
+          const storeRoomId = useDeviceStore.getState().roomId
+
+          const response = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/conversation`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text: transcript,
+              session_id: sessionId,
+              room_id: storeRoomId,
+            }),
+          })
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`)
+          }
+
+          const data = await response.json()
+
+          // Validate response (backend returns 'text' field)
+          if (!data.text || typeof data.text !== 'string') {
+            console.error('[VoiceOverlay] Invalid response from AI Gateway:', data)
+            setVoiceState('idle')
+            return
+          }
+
+          // Add assistant message
+          useConversationStore.getState().addMessage({
+            id: `assistant-${Date.now()}`,
+            type: 'assistant',
+            text: data.text,
+            timestamp: Date.now(),
+          })
+
+          // Speak response via browser TTS
+          speak(data.text)
+
+          setVoiceState('idle')
+
+        } catch (error) {
+          console.error('[VoiceOverlay] Error:', error)
+          setVoiceState('idle')
+        }
+      },
+
+      onError: (error) => {
+        console.error('[VoiceOverlay] STT error:', error)
+        setVoiceState('idle')
+        setInterimTranscript('')
+      },
+
+      onEnd: () => {
+        console.log('[VoiceOverlay] Browser STT ended')
+        // State already handled in onFinal or onError
+      },
+    })
+
+    if (!success) {
+      console.error('[VoiceOverlay] Failed to start browser STT')
+      setVoiceState('idle')
     }
   }
+
+  // Clear loading state when state changes from idle
+  useEffect(() => {
+    if (state !== 'idle') {
+      setIsStarting(false)
+    }
+  }, [state])
 
   // Calculate panel width in pixels (same for both panels)
   const panelWidth = typeof window !== 'undefined' ? (window.innerWidth * 0.5) - 100 : 0
@@ -192,7 +317,7 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
               {/* StatusIndicator at bottom */}
               <div className="absolute bottom-0 left-0 right-0 flex items-end justify-center pb-6">
                 <StatusIndicator
-                  state={state}
+                  state={isStarting ? 'waiting' : state}
                   conversationMode={conversationMode}
                   onStartSession={handleStartSession}
                 />
@@ -214,6 +339,12 @@ export default function VoiceOverlay({ isOpen, onClose, roomId = 'default', star
               <div className="h-full overflow-y-auto scrollbar-hide">
                 {/* Rounded wrapper with subtle background */}
                 <div className="h-full bg-black/[0.25] backdrop-blur-md border-l border-white/20 shadow-xl p-6 overflow-y-auto scrollbar-hide flex flex-col rounded-l-3xl">
+                  {/* Show interim transcript while listening */}
+                  {interimTranscript && state === 'listening' && (
+                    <div className="text-white/60 italic p-4 border-b border-white/10">
+                      {interimTranscript}
+                    </div>
+                  )}
                   <ChatSection messages={messages} />
                 </div>
               </div>

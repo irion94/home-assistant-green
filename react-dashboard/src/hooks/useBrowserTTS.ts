@@ -16,23 +16,32 @@ export const useBrowserTTS = () => {
    * @param onEnd - Optional callback when speech finishes
    */
   const speak = useCallback((text: string, onEnd?: () => void) => {
+    // Validate text input
+    if (!text || typeof text !== 'string' || text.trim().length === 0) {
+      console.warn('[BrowserTTS] Invalid text, skipping:', text);
+      return;
+    }
+
     if (!window.speechSynthesis) {
       console.warn('[BrowserTTS] Web Speech Synthesis API not available');
       return;
     }
 
+    // Ensure text is a string (handle undefined/null)
+    const safeText = String(text).trim();
+
     // Cancel any ongoing speech
     window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    const utterance = new SpeechSynthesisUtterance(safeText);
 
     // Auto-detect language (Polish vs English)
     // Check 1: Polish special characters
-    const hasPolishChars = /[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(text);
+    const hasPolishChars = /[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(safeText);
 
     // Check 2: Common Polish words (case-insensitive)
     const polishWords = /\b(jest|która|godzina|teraz|dzisiaj|jutro|wczoraj|tak|nie|proszę|dziękuję|dobry|dzień|rano|wieczór|włącz|wyłącz|temperatura|pogoda)\b/i;
-    const hasPolishWords = polishWords.test(text);
+    const hasPolishWords = polishWords.test(safeText);
 
     // Use Polish if either check matches
     utterance.lang = (hasPolishChars || hasPolishWords) ? 'pl-PL' : 'en-US';
@@ -42,7 +51,7 @@ export const useBrowserTTS = () => {
 
     utterance.onstart = () => {
       isSpeakingRef.current = true;
-      console.log(`[BrowserTTS] Speaking: "${text.substring(0, 50)}..." (${utterance.lang})`);
+      console.log(`[BrowserTTS] Speaking: "${safeText.substring(0, 50)}..." (${utterance.lang})`);
     };
 
     utterance.onend = () => {

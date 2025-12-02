@@ -690,8 +690,7 @@ class WakeWordService:
                         logger.debug(f"Ignoring command '{command}' for room '{room_id}' (this device is '{self.room_id}')")
                         return
 
-                    logger.info(f"Received command '{command}' for room '{room_id}'")
-                    # Temporarily override room_id for this session
+                    logger.info(f"Received command '{command}' for my room '{room_id}'")
                     self._handle_command(command, payload, room_id)
 
             # Room-scoped config topics
@@ -705,7 +704,7 @@ class WakeWordService:
                         logger.debug(f"Ignoring conversation mode change for room '{room_id}' (this device is '{self.room_id}')")
                         return
 
-                    logger.info(f"Conversation mode change for room '{room_id}'")
+                    logger.info(f"Conversation mode change for my room '{room_id}'")
                     self._handle_conversation_mode_change(payload)
 
             # Legacy topics (backward compatibility)
@@ -1652,7 +1651,7 @@ class WakeWordService:
             while self.running:
                 # Check for external trigger (MQTT command)
                 if self.conversation_start_requested:
-                    # Only respond to commands for MY room (device ownership check)
+                    # FILTER: Only respond to commands for MY room
                     if self._session_room_id == self.room_id:
                         logger.info(f"MQTT session trigger for my room '{self.room_id}'")
                         self.conversation_start_requested = False  # Clear flag
@@ -1667,10 +1666,11 @@ class WakeWordService:
                         # Reset audio stream
                         self._reset_audio_stream()
                         chunk_count = 0
+                        continue
                     else:
                         logger.info(f"Ignoring MQTT command for room '{self._session_room_id}' (my room: '{self.room_id}')")
-                        self.conversation_start_requested = False  # Clear flag
-                    continue
+                        self.conversation_start_requested = False
+                        continue
 
                 # Get audio chunk
                 audio_chunk = self.audio_capture.get_chunk()

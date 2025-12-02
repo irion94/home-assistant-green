@@ -8,6 +8,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { VoiceState } from '../services/mqttService'
+import { useConversationStore } from './conversationStore'
 
 export type DebugLogType = 'STATE' | 'MQTT' | 'TIMING' | 'ERROR'
 
@@ -82,7 +83,7 @@ export const useUIStore = create<UIState>()(
       // Voice state actions
       setVoiceState: (state) => {
         // Import from conversationStore to avoid circular dependency
-        const conversationStore = require('./conversationStore').useConversationStore.getState()
+        const conversationStore = useConversationStore.getState()
         const { messages, conversationMode, isStreaming } = conversationStore
         const { overlayOpen, closeOverlay } = get()
 
@@ -111,7 +112,7 @@ export const useUIStore = create<UIState>()(
 
         // Clear messages if starting new session
         if (startSession) {
-          const conversationStore = require('./conversationStore').useConversationStore.getState()
+          const conversationStore = useConversationStore.getState()
           conversationStore.clearMessages()
           conversationStore.setLastComparison(null)
         }
@@ -137,7 +138,7 @@ export const useUIStore = create<UIState>()(
         // Close overlay after short delay when session ends
         if (overlayOpen) {
           setTimeout(() => {
-            const conversationStore = require('./conversationStore').useConversationStore.getState()
+            const conversationStore = useConversationStore.getState()
             conversationStore.setSessionId(null)
 
             set({
@@ -148,7 +149,7 @@ export const useUIStore = create<UIState>()(
             })
           }, 1500)
         } else {
-          const conversationStore = require('./conversationStore').useConversationStore.getState()
+          const conversationStore = useConversationStore.getState()
           conversationStore.setSessionId(null)
           set({ state: 'idle' })
         }

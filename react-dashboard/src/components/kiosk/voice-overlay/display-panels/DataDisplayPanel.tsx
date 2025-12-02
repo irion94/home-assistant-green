@@ -3,13 +3,18 @@ import { motion } from 'framer-motion'
 import { DisplayPanelProps, DataDisplayAction, TimeData, HomeData, EntityData, DataDisplayMode } from '../types'
 
 export default function DataDisplayPanel({ action }: DisplayPanelProps) {
+  console.log('[DataDisplayPanel] Rendering with action:', action)
+
   // Type guard to ensure this is a data_display action
   if (action.type !== 'data_display') {
+    console.log('[DataDisplayPanel] Wrong action type, returning null')
     return null
   }
 
   const dataAction = action as DataDisplayAction
   const { mode, content } = dataAction.data
+
+  console.log('[DataDisplayPanel] Mode:', mode, 'Content:', content)
 
   // Icon and title based on mode
   const config: Record<DataDisplayMode, { icon: typeof Clock; title: string; color: string }> = {
@@ -45,6 +50,7 @@ export default function DataDisplayPanel({ action }: DisplayPanelProps) {
 
 // Time display
 function TimeContent({ data }: { data: TimeData }) {
+  console.log('[TimeContent] Rendering with data:', data)
   return (
     <div className="space-y-6">
       {/* Large clock */}

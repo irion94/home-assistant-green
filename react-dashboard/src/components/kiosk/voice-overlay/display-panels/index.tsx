@@ -8,8 +8,9 @@ import { ComponentType, lazy } from 'react'
 import { DisplayPanelProps } from '../types'
 import { panelRegistry } from './registry'
 
-// Import default panel eagerly (always needed)
+// Import default panel and DataDisplayPanel eagerly (frequently used)
 import DefaultDisplayPanel from './DefaultDisplayPanel'
+import DataDisplayPanel from './DataDisplayPanel'
 
 // Lazy load all other panels for code splitting
 const LightControlPanel = lazy(() => import('./LightControlPanel'))
@@ -21,7 +22,6 @@ const TimeDisplayPanel = lazy(() => import('./TimeDisplayPanel'))
 const HomeDataPanel = lazy(() => import('./HomeDataPanel'))
 const EntityDetailPanel = lazy(() => import('./EntityDetailPanel'))
 const ResearchResultsPanel = lazy(() => import('./ResearchResultsPanel'))
-const DataDisplayPanel = lazy(() => import('./DataDisplayPanel'))
 
 // Register all panels with auto-close timeouts
 // This runs at module load time
