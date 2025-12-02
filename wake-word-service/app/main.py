@@ -445,34 +445,41 @@ class WakeWordService:
                 logger.warning(f"Failed to publish MQTT status: {e}")
 
     def publish_session_state(self, status: str, session_id: Optional[str] = None, text: str = ""):
-        """Publish session state to room-scoped MQTT topics.
+        """Publish session state to room-scoped MQTT topics (v0 + v1).
 
-        New topic structure:
-        - voice_assistant/room/{room_id}/session/active -> session_id or "none"
-        - voice_assistant/room/{room_id}/session/{session_id}/state -> status string
+        Publishes to BOTH v0 (legacy) and v1 (Phase 5 migration) topics:
+        - v0: voice_assistant/room/{room_id}/session/active
+        - v1: v1/voice_assistant/room/{room_id}/session/active
+        - v0: voice_assistant/room/{room_id}/session/{session_id}/state
+        - v1: v1/voice_assistant/room/{room_id}/session/{session_id}/state
         """
         if not self.mqtt_client:
             return
 
         try:
-            base_topic = f"voice_assistant/room/{self._session_room_id}"
+            # Publish to BOTH v0 (legacy) and v1 (new) topics for migration period
+            base_topics = [
+                f"voice_assistant/room/{self._session_room_id}",  # v0
+                f"v1/voice_assistant/room/{self._session_room_id}",  # v1
+            ]
 
-            # Publish active session ID
-            active_session = session_id if session_id else "none"
-            self.mqtt_client.publish(f"{base_topic}/session/active", active_session, retain=True)
+            for base_topic in base_topics:
+                # Publish active session ID
+                active_session = session_id if session_id else "none"
+                self.mqtt_client.publish(f"{base_topic}/session/active", active_session, retain=True)
 
-            # Publish session state if we have a session
-            if session_id:
-                state_data = json.dumps({
-                    "status": status,
-                    "text": text,
-                    "timestamp": time.time()
-                })
-                self.mqtt_client.publish(
-                    f"{base_topic}/session/{session_id}/state",
-                    state_data,
-                    retain=False
-                )
+                # Publish session state if we have a session
+                if session_id:
+                    state_data = json.dumps({
+                        "status": status,
+                        "text": text,
+                        "timestamp": time.time()
+                    })
+                    self.mqtt_client.publish(
+                        f"{base_topic}/session/{session_id}/state",
+                        state_data,
+                        retain=False
+                    )
         except Exception as e:
             logger.warning(f"Failed to publish session state: {e}")
 

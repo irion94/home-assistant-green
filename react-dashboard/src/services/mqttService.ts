@@ -297,15 +297,15 @@ class MqttService {
       // Debug log state transition
       uiStore.addDebugLog('STATE', `${prevState} → ${state}`)
 
-      // Write to store - this handles auto-opening overlay
-      uiStore.setVoiceState(state)
-
-      // Auto-open overlay on voice activity (replaces KioskHome callback logic)
+      // Auto-open overlay BEFORE updating state (prevents stale read)
       const { overlayOpen } = uiStore
       if ((state === 'wake_detected' || state === 'listening' || state === 'waiting') && !overlayOpen) {
-        console.log(`[MQTT] Voice activity detected (${state}), opening overlay via store`)
+        console.log(`[MQTT] Voice activity detected (${state}), opening overlay`)
         uiStore.openOverlay(false, state)  // false = don't start session (wake-word already did)
       }
+
+      // Update state AFTER overlay logic (prevents race condition)
+      uiStore.setVoiceState(state)
 
       // Legacy callback
       this.callbacks.onStateChange?.(state, sessionId)
