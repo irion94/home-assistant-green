@@ -1633,16 +1633,24 @@ class WakeWordService:
             while self.running:
                 # Check for external trigger (MQTT command)
                 if self.conversation_start_requested:
-                    logger.info("MQTT session trigger detected")
-                    self.conversation_start_requested = False  # Clear flag
+                    # Only respond to commands for MY room (device ownership check)
+                    if self._session_room_id == self.room_id:
+                        logger.info(f"MQTT session trigger for my room '{self.room_id}'")
+                        self.conversation_start_requested = False  # Clear flag
 
-                    # Start session via MQTT (uses current conversation_mode_enabled setting)
-                    session_id = str(uuid.uuid4())[:8]
-                    self.run_session(session_id, self.conversation_mode_enabled)
+                        # Start session via MQTT (uses current conversation_mode_enabled setting)
+                        session_id = str(uuid.uuid4())[:8]
+                        mode = "conversation" if self.conversation_mode_enabled else "single"
+                        logger.info(f"Starting {mode} session (id={session_id})")
 
-                    # Reset audio stream
-                    self._reset_audio_stream()
-                    chunk_count = 0
+                        self.run_session(session_id, self.conversation_mode_enabled)
+
+                        # Reset audio stream
+                        self._reset_audio_stream()
+                        chunk_count = 0
+                    else:
+                        logger.info(f"Ignoring MQTT command for room '{self._session_room_id}' (my room: '{self.room_id}')")
+                        self.conversation_start_requested = False  # Clear flag
                     continue
 
                 # Get audio chunk
