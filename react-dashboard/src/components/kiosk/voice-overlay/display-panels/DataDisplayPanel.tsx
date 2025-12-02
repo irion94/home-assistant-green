@@ -1,14 +1,15 @@
 import { Clock, Home, Info } from 'lucide-react'
 import { motion } from 'framer-motion'
-import { DataDisplayAction, TimeData, HomeData, EntityData, DataDisplayMode } from '../types'
+import { DisplayPanelProps, DataDisplayAction, TimeData, HomeData, EntityData, DataDisplayMode } from '../types'
 
-interface DataDisplayPanelProps {
-  action: DataDisplayAction
-  onClose?: () => void
-}
+export default function DataDisplayPanel({ action }: DisplayPanelProps) {
+  // Type guard to ensure this is a data_display action
+  if (action.type !== 'data_display') {
+    return null
+  }
 
-export default function DataDisplayPanel({ action }: DataDisplayPanelProps) {
-  const { mode, content } = action.data
+  const dataAction = action as DataDisplayAction
+  const { mode, content } = dataAction.data
 
   // Icon and title based on mode
   const config: Record<DataDisplayMode, { icon: typeof Clock; title: string; color: string }> = {

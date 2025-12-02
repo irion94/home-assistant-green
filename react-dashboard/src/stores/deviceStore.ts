@@ -8,6 +8,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { DisplayAction } from '../components/kiosk/voice-overlay/types'
+import { useUIStore } from './uiStore'
 
 interface DeviceState {
   // Connection state
@@ -41,8 +42,8 @@ export const useDeviceStore = create<DeviceState>()(
       },
 
       setDisplayAction: (action) => {
-        // Import uiStore to log and manage left panel
-        const uiStore = require('./uiStore').useUIStore.getState()
+        // Get uiStore to log and manage left panel
+        const uiStore = useUIStore.getState()
         uiStore.addDebugLog('MQTT', `display_action: ${action?.type ?? 'null'}`)
 
         // Show left panel when display action is received

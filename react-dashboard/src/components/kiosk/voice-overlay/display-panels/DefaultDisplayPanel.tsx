@@ -1,11 +1,13 @@
 import { Wifi, WifiOff, Radio, MessageCircle, X } from 'lucide-react'
-import { useVoiceStore } from '../../../../stores/voiceStore'
+import { useConversationStore } from '../../../../stores/conversationStore'
+import { useDeviceStore } from '../../../../stores/deviceStore'
 import { mqttService } from '../../../../services/mqttService'
 import { classNames } from '../../../../utils/formatters'
 import { DisplayPanelProps } from '../types'
 
 export default function DefaultDisplayPanel({ roomId, onClose }: DisplayPanelProps) {
-  const { sessionId, conversationMode, mqttConnected } = useVoiceStore()
+  const { sessionId, conversationMode } = useConversationStore()
+  const { mqttConnected } = useDeviceStore()
 
   return (
     <div className="flex items-center justify-between p-4 bg-black/20 backdrop-blur-md border-b border-white/10">

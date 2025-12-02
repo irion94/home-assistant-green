@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pythonjsonlogger import jsonlogger
 
 from app.models import Config
-from app.routers import ask, voice, conversation, memory, session, tools
+from app.routers import ask, voice, conversation, memory, session, tools, health
 from app.services.database import db_service
 from app.services.embeddings import embedding_service
 
@@ -63,6 +63,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger = logging.getLogger(__name__)
 
     logger.info("AI Gateway starting up")
+
+    # Phase 8: Load and validate feature flags
+    from app.config.features import get_feature_flags
+    feature_flags = get_feature_flags()
+    app.state.feature_flags = feature_flags  # Store in app state
+
     logger.info(f"Home Assistant URL: {config.ha_base_url}")
     logger.info(f"LLM Provider: {config.llm_provider}")
     if config.llm_provider.lower() == "openai":
@@ -167,6 +173,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(health.router)  # Phase 8: Health checks
 app.include_router(ask.router, tags=["ask"])
 app.include_router(voice.router, tags=["voice"])
 app.include_router(conversation.router, tags=["conversation"])
