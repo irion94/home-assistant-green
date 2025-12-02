@@ -382,9 +382,12 @@ class WakeWordService:
                 self.mqtt_client.on_message = self._on_mqtt_message
                 self.mqtt_client.connect(mqtt_host, mqtt_port, 60)
                 # Subscribe to ALL rooms using wildcard (+) for multi-device support
+                # v1 topics (Phase 5 migration)
+                self.mqtt_client.subscribe(f"v1/voice_assistant/room/+/command/#")
+                self.mqtt_client.subscribe(f"v1/voice_assistant/room/+/config/conversation_mode")
+                # v0 legacy topics (backward compatibility)
                 self.mqtt_client.subscribe(f"voice_assistant/room/+/command/#")
                 self.mqtt_client.subscribe(f"voice_assistant/room/+/config/conversation_mode")
-                # Also subscribe to legacy topics for backward compatibility during migration
                 self.mqtt_client.subscribe("voice_assistant/command")
                 self.mqtt_client.subscribe("voice_assistant/config/conversation_mode")
                 self.mqtt_client.loop_start()
@@ -654,7 +657,8 @@ class WakeWordService:
 
         Handles both legacy and room-scoped topics:
         - Legacy: voice_assistant/command, voice_assistant/config/conversation_mode
-        - Room-scoped: voice_assistant/room/{room_id}/command/*, voice_assistant/room/{room_id}/config/*
+        - v0: voice_assistant/room/{room_id}/command/*, voice_assistant/room/{room_id}/config/*
+        - v1: v1/voice_assistant/room/{room_id}/command/*, v1/voice_assistant/room/{room_id}/config/*
 
         Now supports multi-room using wildcard subscriptions - extracts room_id from topic.
         """
@@ -663,10 +667,13 @@ class WakeWordService:
             payload = msg.payload.decode('utf-8')
             logger.info(f"MQTT message received: {topic} = {payload}")
 
+            # Remove v1 prefix if present (Phase 5 migration support)
+            normalized_topic = topic.replace("v1/", "", 1) if topic.startswith("v1/") else topic
+
             # Room-scoped command topics (multi-room support via wildcard)
             # Topic format: voice_assistant/room/{room_id}/command/{command}
-            if topic.startswith("voice_assistant/room/") and "/command/" in topic:
-                parts = topic.split("/")
+            if normalized_topic.startswith("voice_assistant/room/") and "/command/" in normalized_topic:
+                parts = normalized_topic.split("/")
                 if len(parts) >= 5:  # voice_assistant/room/{room_id}/command/{command}
                     room_id = parts[2]  # Extract room_id from topic
                     command = parts[-1]  # Get last part: start, stop
@@ -675,20 +682,20 @@ class WakeWordService:
                     self._handle_command(command, payload, room_id)
 
             # Room-scoped config topics
-            elif topic.startswith("voice_assistant/room/") and "/config/conversation_mode" in topic:
-                parts = topic.split("/")
+            elif normalized_topic.startswith("voice_assistant/room/") and "/config/conversation_mode" in normalized_topic:
+                parts = normalized_topic.split("/")
                 if len(parts) >= 5:
                     room_id = parts[2]
                     logger.info(f"Conversation mode change for room '{room_id}'")
                     self._handle_conversation_mode_change(payload)
 
             # Legacy topics (backward compatibility)
-            elif topic == "voice_assistant/command":
+            elif normalized_topic == "voice_assistant/command":
                 if payload == "start_conversation":
                     self._handle_command("start", "", self.room_id)
                 elif payload == "stop_conversation":
                     self._handle_command("stop", "", self.room_id)
-            elif topic == "voice_assistant/config/conversation_mode":
+            elif normalized_topic == "voice_assistant/config/conversation_mode":
                 self._handle_conversation_mode_change(payload)
 
         except Exception as e:
