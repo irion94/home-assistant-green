@@ -25,7 +25,7 @@ services:
   # To use external HA: don't include 'ha' profile, set HA_BASE_URL to external address
   # To use embedded HA: docker compose --profile ha up -d
   homeassistant:
-    image: ghcr.io/home-assistant/home-assistant:2024.11.3
+    image: ghcr.io/home-assistant/home-assistant:2025.11.3
     container_name: homeassistant
     network_mode: host
     cap_add:
@@ -120,6 +120,8 @@ services:
       - MQTT_BASE_PREFIX=${MQTT_BASE_PREFIX:-voice_assistant}  # Topic namespace
       - MQTT_BROKER_URL=${MQTT_BROKER_URL:-mosquitto}  # MQTT broker hostname
       - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}  # MQTT broker port
+      # Client Configuration (React Dashboard)
+      - CLIENT_CONFIG_DIR=/data/clients  # Directory for client JSON configs
     # secrets:  # Disabled for local dev (no /run/secrets on macOS)
     #   - ha_token
     #   - openai_api_key
@@ -127,6 +129,7 @@ services:
     #   - postgres_password
     volumes:
       - ./config:/app/config:ro
+      - ./data/clients:/data/clients:ro  # Client configuration files
     depends_on:
       postgres:
         condition: service_healthy
@@ -228,23 +231,51 @@ services:
       retries: 3
       start_period: 30s
 
-  # React Dashboard
+  # Matter Server (for Thread/Matter devices like Aqara)
+  # Replaces the HA OS Matter Server add-on
+  matter-server:
+    image: ghcr.io/home-assistant-libs/python-matter-server:stable
+    container_name: matter-server
+    restart: unless-stopped
+    network_mode: host  # Required for Matter/Thread discovery
+    volumes:
+      - ./data/matter-server:/data
+    environment:
+      - TZ=${TZ:-Europe/Warsaw}
+    # Note: Matter may require Bluetooth for commissioning new devices
+    # On Raspberry Pi, add: /run/dbus:/run/dbus:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 5580)); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # React Dashboard (Multi-Client Architecture)
+  # To use a specific client branch:
+  #   1. Set REACT_DASHBOARD_BRANCH=client/your_client in .env
+  #   2. Or build manually: ./scripts/build-client.sh your_client
   react-dashboard:
     build:
       context: ../react-dashboard
       dockerfile: Dockerfile
+      args:
+        # Client configuration (passed at build time)
+        VITE_CLIENT_ID: ${CLIENT_ID:-default}
+        VITE_CLIENT_NAME: ${CLIENT_NAME:-Smart Home Dashboard}
+        # Service URLs
+        VITE_HA_URL: ${HA_BASE_URL:-http://localhost:8123}
+        VITE_GATEWAY_URL: ${GATEWAY_URL:-http://localhost:8080}
+        VITE_MQTT_URL: ${MQTT_WS_URL:-ws://localhost:9001}
+        # Feature flags
+        VITE_FEATURE_VOICE: ${VITE_FEATURE_VOICE:-true}
+        VITE_FEATURE_MEDIA: ${VITE_FEATURE_MEDIA:-true}
+        VITE_FEATURE_DEBUG: ${VITE_FEATURE_DEBUG:-false}
     container_name: react-dashboard
     ports:
       - "3000:3000"
-    environment:
-      - VITE_HA_URL=http://localhost:8123
-      # REMOVED: VITE_HA_TOKEN (Phase 1 - frontend should use AI Gateway proxy instead)
-      - VITE_GATEWAY_URL=http://localhost:8080
-      # MQTT Topic Configuration (Phase 5)
-      - VITE_MQTT_TOPIC_VERSION=${VITE_MQTT_TOPIC_VERSION:-v1}  # Topic versioning (v1, v2, etc.)
-      - VITE_MQTT_BASE_PREFIX=${VITE_MQTT_BASE_PREFIX:-voice_assistant}  # Topic namespace
     depends_on:
       - ai-gateway
+      - mosquitto
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/health"]
