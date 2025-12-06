@@ -198,3 +198,60 @@ def get_suggestion_engine(request: Request):
         SuggestionEngine instance or None
     """
     return getattr(request.app.state, "suggestion_engine", None)
+
+
+# =============================================================================
+# Phase 5: Backend Abstraction Dependencies
+# =============================================================================
+
+
+def get_backend(config: Config = Depends(get_config)):
+    """Dependency to get the active home automation backend.
+
+    Uses the backend abstraction layer if enabled (USE_BACKEND_ABSTRACTION=true),
+    otherwise returns a compatibility wrapper around the legacy HA client.
+
+    Args:
+        config: Application configuration
+
+    Returns:
+        HomeAutomationBackend (or compatibility wrapper)
+
+    Raises:
+        BackendUnavailableError: If backend abstraction is enabled but no backend is active
+    """
+    if config.use_backend_abstraction:
+        from app.services.backend_service import BackendService
+        return BackendService.get_backend()
+    else:
+        # Return legacy HA client wrapped for compatibility
+        return HomeAssistantClient(config)
+
+
+def get_backend_service():
+    """Dependency to get the BackendService class for static method access.
+
+    Use this when you need access to BackendService static methods.
+
+    Returns:
+        BackendService class
+    """
+    from app.services.backend_service import BackendService
+    return BackendService
+
+
+async def check_backend_health(config: Config = Depends(get_config)) -> bool:
+    """Dependency to check backend health.
+
+    Args:
+        config: Application configuration
+
+    Returns:
+        True if backend is healthy
+    """
+    if config.use_backend_abstraction:
+        from app.services.backend_service import BackendService
+        return await BackendService.health_check()
+    else:
+        ha_client = HomeAssistantClient(config)
+        return await ha_client.health_check()

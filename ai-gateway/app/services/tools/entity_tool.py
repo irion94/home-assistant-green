@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from app.services.tools.base import BaseTool, ToolResult
 from app.services.ha_client import HomeAssistantClient
@@ -11,16 +11,37 @@ from app.services.ha_client import HomeAssistantClient
 logger = logging.getLogger(__name__)
 
 
+@runtime_checkable
+class BackendProtocol(Protocol):
+    """Protocol for backend abstraction layer."""
+
+    async def get_entity_state(self, entity_id: str) -> Any: ...
+    async def get_all_states(self) -> list[Any]: ...
+    async def get_entities(self, domain: str | None = None) -> list[Any]: ...
+
+
 class GetEntityTool(BaseTool):
     """Tool for getting state of any Home Assistant entity."""
 
-    def __init__(self, ha_client: HomeAssistantClient) -> None:
+    def __init__(
+        self,
+        ha_client: HomeAssistantClient | None = None,
+        backend: BackendProtocol | None = None,
+    ) -> None:
         """Initialize entity tool.
 
         Args:
-            ha_client: Home Assistant API client
+            ha_client: Legacy Home Assistant API client (optional)
+            backend: New backend abstraction (optional)
+
+        Raises:
+            ValueError: If neither ha_client nor backend is provided
         """
+        if ha_client is None and backend is None:
+            raise ValueError("Either ha_client or backend must be provided")
         self.ha_client = ha_client
+        self.backend = backend
+        self._use_backend = backend is not None
 
     @property
     def name(self) -> str:
@@ -95,18 +116,11 @@ class GetEntityTool(BaseTool):
             )
 
         try:
-            # Get entities
-            if domain == "all":
-                entities = await self.ha_client.get_states()
-            elif entity_id:
-                entity = await self.ha_client.get_state(entity_id)
-                entities = [entity] if entity else []
+            # Get entities based on mode
+            if self._use_backend:
+                entities = await self._get_entities_via_backend(domain, entity_id)
             else:
-                all_states = await self.ha_client.get_states()
-                entities = [
-                    e for e in all_states
-                    if e.get("entity_id", "").startswith(f"{domain}.")
-                ]
+                entities = await self._get_entities_via_ha_client(domain, entity_id)
 
             if not entities:
                 return ToolResult(
@@ -223,3 +237,64 @@ class GetEntityTool(BaseTool):
             lines.append(f"... and {len(entities) - 10} more")
 
         return "\n".join(lines)
+
+    async def _get_entities_via_backend(
+        self, domain: str, entity_id: str | None
+    ) -> list[dict[str, Any]]:
+        """Get entities via backend abstraction.
+
+        Args:
+            domain: Entity domain or 'all'
+            entity_id: Optional specific entity ID
+
+        Returns:
+            List of entity state dicts
+        """
+        if domain == "all":
+            states = await self.backend.get_all_states()  # type: ignore
+        elif entity_id:
+            state = await self.backend.get_entity_state(entity_id)  # type: ignore
+            states = [state] if state else []
+        else:
+            states = await self.backend.get_all_states()  # type: ignore
+            states = [s for s in states if s.entity_id.startswith(f"{domain}.")]
+
+        # Convert EntityState objects to dicts for compatibility
+        result = []
+        for state in states:
+            if hasattr(state, "entity_id"):
+                # EntityState object
+                result.append({
+                    "entity_id": state.entity_id,
+                    "state": state.state,
+                    "attributes": state.attributes or {},
+                })
+            else:
+                # Already a dict
+                result.append(state)
+
+        return result
+
+    async def _get_entities_via_ha_client(
+        self, domain: str, entity_id: str | None
+    ) -> list[dict[str, Any]]:
+        """Get entities via legacy HA client.
+
+        Args:
+            domain: Entity domain or 'all'
+            entity_id: Optional specific entity ID
+
+        Returns:
+            List of entity state dicts
+        """
+        if domain == "all":
+            return await self.ha_client.get_states()  # type: ignore
+        elif entity_id:
+            entity = await self.ha_client.get_state(entity_id)  # type: ignore
+            return [entity] if entity else []
+        else:
+            all_states = await self.ha_client.get_states()  # type: ignore
+            return [
+                e for e in all_states
+                if e.get("entity_id", "").startswith(f"{domain}.")
+            ]

@@ -16,6 +16,7 @@ dependencies = [
     "vosk>=0.3.45",
     "pytz>=2023.3",
     "paho-mqtt>=1.6.1",
+    "pyyaml>=6.0.0",
     # Database
     "asyncpg>=0.29.0",
     "pgvector>=0.2.0",
@@ -82,6 +83,10 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = "pythonjsonlogger.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "yaml.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

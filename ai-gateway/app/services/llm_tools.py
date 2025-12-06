@@ -12,7 +12,7 @@ from typing import Any
 
 from app.services.web_search import get_web_search_client
 from app.services.ha_client import HomeAssistantClient
-from app.services.entities import ROOM_ENTITIES, ROOM_NAMES, SENSOR_ENTITIES
+from app.services.entities import ROOM_ENTITIES, ROOM_NAMES, SENSOR_ENTITIES, get_all_light_entities
 from app.services.mqtt_client import get_mqtt_client, ensure_mqtt_connected
 
 logger = logging.getLogger(__name__)
@@ -209,16 +209,8 @@ class ToolExecutor:
         from app.models import HAAction
 
         if entity_id == "all":
-            # Control all lights - pass list of entities in data field
-            all_light_entities = [
-                "light.yeelight_color_0x80156a9",  # salon
-                "light.yeelight_color_0x49c27e1",  # kuchnia
-                "light.yeelight_color_0x80147dd",  # sypialnia
-                "light.yeelight_lamp15_0x1b37d19d_ambilight",  # biurko
-                "light.yeelight_lamp15_0x1b37d19d",  # biurko ambient
-                "light.yeelight_color_0x801498b",  # lamp 1
-                "light.yeelight_color_0x8015154",  # lamp 2
-            ]
+            # Control all lights - get from config
+            all_light_entities = get_all_light_entities()
 
             ha_action = HAAction(
                 action="call_service",

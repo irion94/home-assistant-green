@@ -3,25 +3,44 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from app.services.tools.base import BaseTool, ToolResult
 from app.services.ha_client import HomeAssistantClient
-from app.services.entities import SENSOR_ENTITIES
+from app.services.entities import SENSOR_ENTITIES, get_all_light_entities
 
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class BackendProtocol(Protocol):
+    """Protocol for backend abstraction layer."""
+
+    async def get_entity_state(self, entity_id: str) -> Any: ...
 
 
 class GetHomeDataTool(BaseTool):
     """Tool for getting sensor data from smart home."""
 
-    def __init__(self, ha_client: HomeAssistantClient) -> None:
+    def __init__(
+        self,
+        ha_client: HomeAssistantClient | None = None,
+        backend: BackendProtocol | None = None,
+    ) -> None:
         """Initialize home data tool.
 
         Args:
-            ha_client: Home Assistant API client
+            ha_client: Legacy Home Assistant API client (optional)
+            backend: New backend abstraction (optional)
+
+        Raises:
+            ValueError: If neither ha_client nor backend is provided
         """
+        if ha_client is None and backend is None:
+            raise ValueError("Either ha_client or backend must be provided")
         self.ha_client = ha_client
+        self.backend = backend
+        self._use_backend = backend is not None
 
     @property
     def name(self) -> str:
@@ -90,22 +109,17 @@ class GetHomeDataTool(BaseTool):
                         results[s_type] = data
 
                 # Always get light states count (even if sensors fail)
-                # Use the same complete light list as control_light tool
-                all_lights = [
-                    "light.yeelight_color_0x80156a9",  # salon
-                    "light.yeelight_color_0x49c27e1",  # kuchnia
-                    "light.yeelight_color_0x80147dd",  # sypialnia
-                    "light.yeelight_lamp15_0x1b37d19d_ambilight",  # biurko
-                    "light.yeelight_lamp15_0x1b37d19d",  # biurko ambient
-                    "light.yeelight_color_0x801498b",  # lamp 1
-                    "light.yeelight_color_0x8015154",  # lamp 2
-                ]
+                # Get light entities from config
+                all_lights = get_all_light_entities()
                 lights_on = 0
                 lights_total = len(all_lights)
-                for entity_id in all_lights:
-                    state = await self.ha_client.get_state(entity_id)
-                    if state and state.get("state") == "on":
-                        lights_on += 1
+                for eid in all_lights:
+                    state = await self._get_entity_state(eid)
+                    if state:
+                        # Handle both dict and EntityState formats
+                        state_val = state.state if hasattr(state, "state") else state.get("state")
+                        if state_val == "on":
+                            lights_on += 1
 
                 results["lights"] = {"on": lights_on, "total": lights_total}
                 logger.info(f"Home data - lights: {lights_on}/{lights_total} on, total results: {len(results)}")
@@ -228,12 +242,33 @@ class GetHomeDataTool(BaseTool):
             return None
 
         # Try each entity until we find one that exists
-        for entity_id in entity_ids:
-            state = await self.ha_client.get_state(entity_id)
+        for eid in entity_ids:
+            state = await self._get_entity_state(eid)
             if state:
+                # Convert EntityState to dict if needed
+                if hasattr(state, "entity_id"):
+                    return {
+                        "entity_id": state.entity_id,
+                        "state": state.state,
+                        "attributes": state.attributes or {},
+                    }
                 return state
 
         return None
+
+    async def _get_entity_state(self, entity_id: str) -> Any | None:
+        """Get entity state from backend or HA client.
+
+        Args:
+            entity_id: Entity ID to query
+
+        Returns:
+            Entity state dict or EntityState object
+        """
+        if self._use_backend:
+            return await self.backend.get_entity_state(entity_id)  # type: ignore
+        else:
+            return await self.ha_client.get_state(entity_id)  # type: ignore
 
     def _format_sensor_data(self, sensor_type: str, data: dict[str, Any]) -> str:
         """Format sensor data for LLM response.

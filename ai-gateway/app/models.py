@@ -113,6 +113,32 @@ class Config(BaseSettings):
 
     log_level: str = Field(default="INFO", description="Logging level")
 
+    # Backend abstraction configuration (Phase 5+)
+    use_backend_abstraction: bool = Field(
+        default=False,
+        description="Use new backend abstraction layer instead of direct HA client",
+    )
+    backend_adapter: str = Field(
+        default="homeassistant",
+        description="Backend adapter to use: 'mock', 'homeassistant', etc.",
+    )
+    backend_source: str = Field(
+        default="builtin",
+        description="How to load adapter: 'builtin', 'path', 'package', 'git'",
+    )
+    backend_path: str | None = Field(
+        default=None,
+        description="Path to adapter (for backend_source='path')",
+    )
+    backend_git_url: str | None = Field(
+        default=None,
+        description="Git URL for adapter (for backend_source='git')",
+    )
+    backend_git_ref: str = Field(
+        default="main",
+        description="Git branch/tag/commit (for backend_source='git')",
+    )
+
 
 class AskRequest(BaseModel):
     """Request schema for /ask endpoint."""

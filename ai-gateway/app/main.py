@@ -85,6 +85,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         logger.info("Database disabled (DATABASE_ENABLED=false)")
 
+    # Initialize backend abstraction layer (if enabled via feature flag - Phase 5+)
+    # Must be initialized BEFORE tools so they can use the backend
+    backend = None
+    if config.use_backend_abstraction:
+        try:
+            from app.services.backend_service import initialize_backend, BackendService
+            await initialize_backend()
+            backend = BackendService.get_backend()
+            logger.info(f"Backend abstraction enabled: adapter={config.backend_adapter}")
+        except Exception as e:
+            # Fail fast: backend is required when abstraction is enabled
+            logger.error(f"Failed to initialize backend: {e}")
+            raise RuntimeError(f"Backend initialization failed: {e}") from e
+    else:
+        logger.info("Using legacy HA client (USE_BACKEND_ABSTRACTION=false)")
+
     # Register new tool architecture (if enabled via feature flag - Phase 2)
     if os.getenv("NEW_TOOLS_ENABLED", "false").lower() == "true":
         from app.services.tools.registry import tool_registry
@@ -98,18 +114,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from app.services.tools.research_tool import ResearchTool
         from app.services.ha_client import HomeAssistantClient
 
-        # Initialize HA client for tools
-        ha_client = HomeAssistantClient(config)
-
-        # Register all tools
-        tool_registry.register(WebSearchTool())
-        tool_registry.register(ControlLightTool(ha_client))
-        tool_registry.register(GetTimeTool())
-        tool_registry.register(GetHomeDataTool(ha_client))
-        tool_registry.register(GetEntityTool(ha_client))
-        tool_registry.register(WebViewTool())
-        tool_registry.register(MediaControlTool(ha_client))
-        tool_registry.register(ResearchTool())
+        # Initialize tools with either backend or legacy HA client
+        if backend is not None:
+            # Use new backend abstraction
+            tool_registry.register(WebSearchTool())
+            tool_registry.register(ControlLightTool(backend=backend))
+            tool_registry.register(GetTimeTool())
+            tool_registry.register(GetHomeDataTool(backend=backend))
+            tool_registry.register(GetEntityTool(backend=backend))
+            tool_registry.register(WebViewTool())
+            tool_registry.register(MediaControlTool(backend=backend))
+            tool_registry.register(ResearchTool())
+            logger.info("Tools registered with backend abstraction")
+        else:
+            # Use legacy HA client
+            ha_client = HomeAssistantClient(config)
+            tool_registry.register(WebSearchTool())
+            tool_registry.register(ControlLightTool(ha_client=ha_client))
+            tool_registry.register(GetTimeTool())
+            tool_registry.register(GetHomeDataTool(ha_client=ha_client))
+            tool_registry.register(GetEntityTool(ha_client=ha_client))
+            tool_registry.register(WebViewTool())
+            tool_registry.register(MediaControlTool(ha_client=ha_client))
+            tool_registry.register(ResearchTool())
+            logger.info("Tools registered with legacy HA client")
 
         logger.info(f"New tool architecture enabled: {len(tool_registry)} tools registered")
         logger.info(f"Registered tools: {', '.join(tool_registry.list_tools())}")
@@ -138,6 +166,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Shutdown
     logger.info("AI Gateway shutting down")
+
+    # Shutdown backend abstraction layer
+    if config.use_backend_abstraction:
+        from app.services.backend_service import shutdown_backend
+        await shutdown_backend()
+        logger.info("Backend shutdown complete")
 
     # Close database connection
     await db_service.disconnect()

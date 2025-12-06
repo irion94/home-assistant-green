@@ -43,6 +43,9 @@ COPY --from=builder /opt/venv /opt/venv
 # Copy application code
 COPY app/ ./app/
 
+# Copy configuration files
+COPY config/ ./config/
+
 # Copy database migrations
 COPY migrations/ ./migrations/
 
