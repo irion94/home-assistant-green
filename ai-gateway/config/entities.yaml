@@ -1,0 +1,290 @@
+# Entity Configuration for AI Gateway
+#
+# This file defines the mapping between friendly names and Home Assistant entity IDs.
+# Edit this file to customize your smart home setup without modifying code.
+#
+# Sections:
+# - lights: Room-based light entities with aliases
+# - sensors: Sensor entities for home data queries
+# - media_players: Media player devices
+# - keywords: Intent detection keywords (turn on/off, conversation)
+
+# =============================================================================
+# LIGHTS
+# =============================================================================
+# Define lights by room with aliases for voice recognition
+# Each room has:
+#   entity_id: The Home Assistant entity ID
+#   aliases: List of names that map to this light (English/Polish)
+
+lights:
+  # Living Room / Salon
+  salon:
+    entity_id: light.yeelight_color_0x80156a9
+    display_name: living room
+    aliases:
+      - living room
+      - living room lights
+      - salon
+      - salonie  # Polish locative
+      - lights  # Default when no room specified
+      - the lights
+      - "światło"  # Polish: light
+      - "światła"  # Polish: lights
+
+  # Kitchen / Kuchnia
+  kuchnia:
+    entity_id: light.yeelight_color_0x49c27e1
+    display_name: kitchen
+    aliases:
+      - kitchen
+      - kitchen lights
+      - kuchnia
+      - kuchni  # Polish locative
+
+  # Bedroom / Sypialnia
+  sypialnia:
+    entity_id: light.yeelight_color_0x80147dd
+    display_name: bedroom
+    aliases:
+      - bedroom
+      - bedroom lights
+      - sypialnia
+      - sypialni  # Polish locative
+
+  # Desk / Biurko (main light is _ambilight entity)
+  biurko:
+    entity_id: light.yeelight_lamp15_0x1b37d19d_ambilight
+    display_name: desk
+    aliases:
+      - desk
+      - desk lamp
+      - biurko
+      - biurku  # Polish locative
+      - lampka
+      - "lampkę"  # Polish accusative
+
+  # Desk Ambient (background light)
+  biurko_ambient:
+    entity_id: light.yeelight_lamp15_0x1b37d19d
+    display_name: desk ambient
+    aliases:
+      - ambient
+      - ambilight
+      - biurko ambient
+
+  # Lamp 1
+  lampa_1:
+    entity_id: light.yeelight_color_0x801498b
+    display_name: lamp 1
+    aliases:
+      - lamp 1
+      - lampa 1
+      - "lampę 1"  # Polish accusative
+
+  # Lamp 2
+  lampa_2:
+    entity_id: light.yeelight_color_0x8015154
+    display_name: lamp 2
+    aliases:
+      - lamp 2
+      - lampa 2
+      - "lampę 2"  # Polish accusative
+
+  # LED Strip
+  led_strip:
+    entity_id: light.elk_bledom_led
+    display_name: LED strip
+    aliases:
+      - led strip
+      - led
+      - "taśma"
+      - "taśma led"
+      - "taśmę"  # Polish accusative
+      - "taśmę led"
+      - elk
+
+# Special "all lights" group - lists all controllable lights
+all_lights:
+  - light.yeelight_color_0x80156a9    # salon
+  - light.yeelight_color_0x49c27e1    # kuchnia
+  - light.yeelight_color_0x80147dd    # sypialnia
+  - light.yeelight_lamp15_0x1b37d19d_ambilight  # biurko
+  - light.yeelight_lamp15_0x1b37d19d  # biurko ambient
+  - light.yeelight_color_0x801498b    # lamp 1
+  - light.yeelight_color_0x8015154    # lamp 2
+
+# Aliases for controlling all lights at once
+all_lights_aliases:
+  - all lights
+  - all
+  - everything
+  - wszystko
+  - wszystkie
+  - "wszystkie światła"
+  - "wszędzie"
+
+# =============================================================================
+# LED COLOR SCRIPTS
+# =============================================================================
+# Scripts for setting LED strip colors
+
+led_scripts:
+  red:
+    entity_id: script.elk_led_red
+    aliases: [led red, "taśma czerwona"]
+  green:
+    entity_id: script.elk_led_green
+    aliases: [led green, "taśma zielona"]
+  blue:
+    entity_id: script.elk_led_blue
+    aliases: [led blue, "taśma niebieska"]
+  white:
+    entity_id: script.elk_led_white
+    aliases: [led white, "taśma biała"]
+  yellow:
+    entity_id: script.elk_led_yellow
+    aliases: [led yellow, "taśma żółta"]
+  purple:
+    entity_id: script.elk_led_purple
+    aliases: [led purple, "taśma fioletowa"]
+  cyan:
+    entity_id: script.elk_led_cyan
+    aliases: [led cyan]
+  orange:
+    entity_id: script.elk_led_orange
+    aliases: [led orange]
+  pink:
+    entity_id: script.elk_led_pink
+    aliases: [led pink]
+
+# =============================================================================
+# SENSORS
+# =============================================================================
+# Sensor entities for home data queries
+# Multiple options per type for flexibility across different HA setups
+
+sensors:
+  temperature_outside:
+    - sensor.outside_temperature
+    - sensor.outdoor_temperature
+    - sensor.weather_temperature
+    - weather.home  # Weather integration fallback
+
+  temperature_inside:
+    - sensor.indoor_temperature
+    - sensor.living_room_temperature
+    - sensor.temperature
+
+  humidity:
+    - sensor.outdoor_humidity
+    - sensor.humidity
+    - sensor.living_room_humidity
+
+  weather:
+    - weather.home
+    - weather.forecast_home
+
+# =============================================================================
+# MEDIA PLAYERS
+# =============================================================================
+# Media player devices with aliases
+
+media_players:
+  nest_hub:
+    entity_id: media_player.living_room_display
+    display_name: Nest Hub
+    aliases:
+      - nest hub
+      - speaker
+      - "głośnik"  # Polish: speaker
+
+  tv_salon:
+    entity_id: media_player.telewizor_w_salonie
+    display_name: Living Room TV
+    aliases:
+      - living room tv
+      - telewizor
+      - telewizor salon
+      - tv salon
+      - tv
+
+  tv_sypialnia:
+    entity_id: media_player.telewizor_w_sypialni
+    display_name: Bedroom TV
+    aliases:
+      - bedroom tv
+      - telewizor sypialnia
+      - tv sypialnia
+
+# =============================================================================
+# KEYWORDS
+# =============================================================================
+# Keywords for intent detection (English and Polish)
+
+keywords:
+  turn_on:
+    - zapal
+    - "włącz"
+    - "włacz"
+    - wlacz
+    - "zaświeć"
+    - "włącz się"
+    - turn on
+    - switch on
+    - light up
+    # Common misrecognitions
+    - "zapadł"
+    - zaball
+    - zaopal
+    - za pal
+    - za pan
+
+  turn_off:
+    - "zgaś"
+    - "wyłącz"
+    - wylacz
+    - "gaś"
+    - "wyłącz się"
+    - turn off
+    - switch off
+    # Common misrecognitions
+    - "zgaść"
+    - sgas
+    - "z gaś"
+
+  conversation_start:
+    - let's talk
+    - lets talk
+    - talk to me
+    - let's chat
+    - lets chat
+    - pogadajmy
+    - porozmawiajmy
+    - "porozmawiaj ze mną"
+    - "pogadaj ze mną"
+    - "chcę porozmawiać"
+    - "chce porozmawiać"
+
+  conversation_end:
+    - bye
+    - goodbye
+    - stop
+    - end
+    - that's all
+    - thats all
+    - thank you
+    - pa
+    - do widzenia
+    - koniec
+    - "zakończ"
+    - "kończymy"
+    - to wszystko
+    - "dzięki"
+    - "dziękuję"
+
+  interrupt:
+    - stop
+    - przerwij
+    - cicho
+    - cisza

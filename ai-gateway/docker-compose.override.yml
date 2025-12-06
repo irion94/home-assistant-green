@@ -1,0 +1,40 @@
+# Docker Compose Override for Local Development
+#
+# This file provides development-specific configuration that extends
+# the base docker-compose.yml. It is automatically loaded by docker-compose.
+#
+# Features:
+# - Backend abstraction layer enabled
+# - Local adapter volume mount (for live development)
+# - Debug logging
+#
+# Usage:
+#   1. Place your adapter code in ../home-assistant-service (or adjust path)
+#   2. Run: docker-compose up -d
+#   3. Changes to adapter code are reflected immediately (no rebuild needed)
+#
+# To use git-based deployment instead (production):
+#   docker-compose -f docker-compose.yml up -d  (skip this override file)
+
+services:
+  ai-gateway:
+    environment:
+      # Backend Abstraction (Phase 5+)
+      - USE_BACKEND_ABSTRACTION=${USE_BACKEND_ABSTRACTION:-true}
+      - BACKEND_ADAPTER=${BACKEND_ADAPTER:-homeassistant}
+      - BACKEND_SOURCE=${BACKEND_SOURCE:-path}
+      - BACKEND_PATH=${BACKEND_PATH:-/app/adapters/home-assistant-service}
+      # Backend-specific config (JSON format)
+      # - BACKEND_CONFIG={"base_url": "http://host.docker.internal:8123", "token": "${HA_TOKEN}"}
+      # Git-based deployment (alternative to path)
+      # - BACKEND_SOURCE=git
+      # - BACKEND_GIT_URL=https://github.com/yourorg/home-assistant-service.git
+      # - BACKEND_GIT_REF=main
+      # Debug logging for development
+      - LOG_LEVEL=${LOG_LEVEL:-DEBUG}
+    volumes:
+      # Mount local adapter for live development
+      # Changes to adapter code are reflected immediately
+      - ${LOCAL_ADAPTER_PATH:-../home-assistant-service}:/app/adapters/home-assistant-service:ro
+      # Keep config volume from base compose
+      - ./config:/app/config:ro

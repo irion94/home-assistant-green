@@ -1,0 +1,31 @@
+{
+  "display": {
+    "url": "http://localhost:8123/lovelace/kiosk",
+    "rotation": 0,
+    "brightness": 100,
+    "timeout_seconds": 0
+  },
+  "chromium": {
+    "extra_flags": [],
+    "zoom_level": 1.0,
+    "cache_size_mb": 100
+  },
+  "power_management": {
+    "screen_blank_enabled": false,
+    "dpms_enabled": false,
+    "idle_timeout_minutes": 0
+  },
+  "cursor": {
+    "hide_when_idle": true,
+    "idle_timeout_seconds": 0.5
+  },
+  "notes": {
+    "rotation_values": "0=normal, 90=right, 180=inverted, 270=left",
+    "zoom_level": "1.0=100%, 1.25=125%, etc.",
+    "url_examples": [
+      "http://localhost:8123/lovelace/kiosk",
+      "http://localhost:8123/lovelace/voice-assistant",
+      "http://localhost:8123/dashboard-kiosk/0"
+    ]
+  }
+}

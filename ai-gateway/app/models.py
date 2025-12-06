@@ -1,0 +1,199 @@
+"""Pydantic models for AI Gateway.
+
+This module defines all request/response schemas and data models used
+throughout the application.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Literal
+import os
+
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Config(BaseSettings):
+    """Application configuration from environment variables."""
+
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="allow")
+
+    ha_token: str = Field(..., description="Home Assistant long-lived access token")
+    ha_base_url: str = Field(
+        default="http://homeassistant:8123", description="Home Assistant base URL"
+    )
+
+    def __init__(self, **kwargs):
+        """Initialize config with optional secrets manager integration."""
+        # Check if secrets manager is enabled
+        secrets_enabled = os.getenv("SECRETS_MANAGER_ENABLED", "false").lower() == "true"
+
+        if secrets_enabled:
+            try:
+                from app.security.secrets_manager import get_secrets_manager
+                secrets = get_secrets_manager()
+
+                # Override with secrets (only if not already provided)
+                if "ha_token" not in kwargs:
+                    kwargs["ha_token"] = secrets.get_secret("ha_token")
+                if "postgres_password" not in kwargs:
+                    kwargs.setdefault("postgres_password", secrets.get_secret("postgres_password", required=False))
+
+                # Optional secrets
+                if "openai_api_key" not in kwargs:
+                    openai_key = secrets.get_secret("openai_api_key", required=False)
+                    if openai_key:
+                        kwargs["openai_api_key"] = openai_key
+
+                if "brave_api_key" not in kwargs:
+                    brave_key = secrets.get_secret("brave_api_key", required=False)
+                    if brave_key:
+                        kwargs["brave_api_key"] = brave_key
+            except Exception as e:
+                # Log but don't fail - allow fallback to environment variables
+                import logging
+                logging.warning(f"Failed to load secrets from SecretsManager: {e}")
+
+        super().__init__(**kwargs)
+
+    # LLM Provider selection
+    llm_provider: str = Field(
+        default="ollama", description="LLM provider to use: 'ollama' or 'openai'"
+    )
+
+    # Ollama configuration
+    ollama_base_url: str = Field(
+        default="http://host.docker.internal:11434", description="Ollama API base URL"
+    )
+    ollama_model: str = Field(default="llama3.2:3b", description="Ollama model to use")
+
+    # OpenAI configuration
+    openai_api_key: str | None = Field(
+        default=None, description="OpenAI API key (required if llm_provider=openai)"
+    )
+    openai_model: str = Field(default="gpt-4o-mini", description="OpenAI model to use")
+
+    # STT Provider selection
+    stt_provider: str = Field(
+        default="vosk", description="STT provider to use: 'whisper' or 'vosk'"
+    )
+
+    # Whisper configuration
+    whisper_model: str = Field(
+        default="small", description="Whisper model size: tiny, base, small, medium, large"
+    )
+
+    # Vosk configuration
+    vosk_model_path: str | None = Field(
+        default=None, description="Path to Vosk model directory (auto-downloads if not set)"
+    )
+
+    # Timeout configuration
+    ollama_timeout: float = Field(
+        default=90.0, description="Timeout for Ollama API requests in seconds"
+    )
+    openai_timeout: float = Field(
+        default=30.0, description="Timeout for OpenAI API requests in seconds"
+    )
+    ha_timeout: float = Field(
+        default=10.0, description="Timeout for Home Assistant API requests in seconds"
+    )
+    conversation_timeout: float = Field(
+        default=30.0, description="Timeout for conversation API requests in seconds"
+    )
+
+    # Pipeline configuration
+    intent_confidence_threshold: float = Field(
+        default=0.8, description="Minimum confidence threshold for intent matching"
+    )
+    stt_confidence_threshold: float = Field(
+        default=0.7,
+        description="Minimum Vosk confidence to accept result (triggers Whisper fallback if below)",
+    )
+
+    log_level: str = Field(default="INFO", description="Logging level")
+
+    # Backend abstraction configuration (Phase 5+)
+    use_backend_abstraction: bool = Field(
+        default=False,
+        description="Use new backend abstraction layer instead of direct HA client",
+    )
+    backend_adapter: str = Field(
+        default="homeassistant",
+        description="Backend adapter to use: 'mock', 'homeassistant', etc.",
+    )
+    backend_source: str = Field(
+        default="builtin",
+        description="How to load adapter: 'builtin', 'path', 'package', 'git'",
+    )
+    backend_path: str | None = Field(
+        default=None,
+        description="Path to adapter (for backend_source='path')",
+    )
+    backend_git_url: str | None = Field(
+        default=None,
+        description="Git URL for adapter (for backend_source='git')",
+    )
+    backend_git_ref: str = Field(
+        default="main",
+        description="Git branch/tag/commit (for backend_source='git')",
+    )
+
+
+class AskRequest(BaseModel):
+    """Request schema for /ask endpoint."""
+
+    text: str = Field(..., description="Natural language command", min_length=1)
+
+
+class HAAction(BaseModel):
+    """Home Assistant action plan generated by Ollama."""
+
+    action: Literal[
+        "call_service", "none", "conversation_start", "conversation_end", "create_scene"
+    ] = Field(..., description="Type of action to perform")
+    service: str | None = Field(
+        None, description="HA service to call (e.g., 'light.turn_on')"
+    )
+    entity_id: str | None = Field(None, description="Target entity ID")
+    data: dict[str, Any] | None = Field(default_factory=dict, description="Service data")
+    actions: list["HAAction"] | None = Field(
+        None, description="List of sub-actions for create_scene"
+    )
+
+
+# Rebuild model to resolve forward references
+HAAction.model_rebuild()
+
+
+class AskResponse(BaseModel):
+    """Response schema for /ask endpoint."""
+
+    status: Literal["success", "error"] = Field(..., description="Request status")
+    plan: HAAction | None = Field(None, description="Generated action plan")
+    message: str | None = Field(None, description="Error or status message (Polish for TTS)")
+    text: str | None = Field(None, description="AI response text for conversation fallback")
+    ha_response: dict[str, Any] | list[Any] | None = Field(
+        None, description="Response from Home Assistant API"
+    )
+
+
+class OllamaRequest(BaseModel):
+    """Request schema for Ollama API."""
+
+    model: str = Field(..., description="Model name")
+    messages: list[dict[str, str]] = Field(..., description="Chat messages")
+    stream: bool = Field(default=False, description="Enable streaming")
+    format: Literal["json"] = Field(default="json", description="Force JSON output")
+
+
+class OllamaResponse(BaseModel):
+    """Response schema from Ollama API."""
+
+    model: str
+    message: dict[str, str]
+    done: bool
+    total_duration: int | None = None
+    load_duration: int | None = None
+    prompt_eval_duration: int | None = None
+    eval_duration: int | None = None

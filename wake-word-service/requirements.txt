@@ -1,0 +1,33 @@
+# Wake-Word Detection Service Dependencies
+
+# Core wake-word detection
+openwakeword==0.6.0
+onnxruntime>=1.15.0  # For ONNX model support
+
+# Audio processing
+pyaudio==0.2.14
+numpy>=1.24.0,<2.0.0
+scipy>=1.11.0
+
+# HTTP client for AI Gateway
+httpx>=0.25.0
+
+# MQTT for status updates
+paho-mqtt>=1.6.0
+
+# Speech-to-text transcription
+vosk>=0.3.45
+faster-whisper>=1.0.0  # Efficient Whisper implementation for parallel STT
+
+# Text-to-speech synthesis
+TTS>=0.22.0
+
+# Logging
+python-json-logger>=2.0.7
+
+# Configuration
+python-dotenv>=1.0.0
+
+# LED control for ReSpeaker
+pixel-ring>=0.1.0
+spidev>=3.6

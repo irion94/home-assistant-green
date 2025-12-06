@@ -1,0 +1,48 @@
+# ELK-BLEDOM LED Controller via Bluetooth
+# Device: ELK-BLEDOM02
+# Service UUID: FFF0
+# Control Characteristic: FFF3
+
+bluetooth:
+  adapters:
+    - hci0  # Raspberry Pi built-in Bluetooth
+
+# BLE Tracker for device discovery
+ble_tracker:
+  track_new_devices: true
+
+# Light entity using ESPHome Bluetooth Proxy or custom component
+# Note: This requires additional setup - see Option 3 for custom component approach
+
+# Manual control via scripts
+script:
+  elk_bledom_turn_on:
+    alias: "Turn On ELK-BLEDOM"
+    sequence:
+      - service: mqtt.publish
+        data:
+          topic: "homeassistant/light/elk_bledom/set"
+          payload: "ON"
+
+  elk_bledom_turn_off:
+    alias: "Turn Off ELK-BLEDOM"
+    sequence:
+      - service: mqtt.publish
+        data:
+          topic: "homeassistant/light/elk_bledom/set"
+          payload: "OFF"
+
+# Automation to log when device is detected
+automation:
+  - alias: "ELK-BLEDOM Detected"
+    trigger:
+      - platform: event
+        event_type: ble_tracker_new_device
+    condition:
+      - condition: template
+        value_template: "{{ trigger.event.data.name == 'ELK-BLEDOM02' }}"
+    action:
+      - service: persistent_notification.create
+        data:
+          title: "Bluetooth Device Detected"
+          message: "ELK-BLEDOM02 found: {{ trigger.event.data.address }}"

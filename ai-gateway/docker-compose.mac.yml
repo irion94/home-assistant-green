@@ -1,0 +1,144 @@
+# macOS Local Development - Docker Compose
+# Usage: docker compose -f docker-compose.mac.yml up -d
+#
+# Prerequisites:
+#   1. mkdir -p ~/ha-local-data/{ha-config,mosquitto/config,mosquitto/data,mosquitto/log,postgres-data}
+#   2. mkdir -p /tmp/secrets && echo "dummy" | tee /tmp/secrets/{ha_token,openai_api_key,brave_api_key,postgres_password}
+#   3. cp .env.example .env && edit with your tokens
+#   4. Create mosquitto config: see below
+
+services:
+  # PostgreSQL with pgvector for AI memory
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ai_assistant
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ai_assistant
+    volumes:
+      - ~/ha-local-data/postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ai_assistant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Home Assistant
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2024.11.3
+    container_name: homeassistant
+    volumes:
+      - ~/ha-local-data/ha-config:/config
+    environment:
+      - TZ=Europe/Warsaw
+    ports:
+      - "8123:8123"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/manifest.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # MQTT Broker (Mosquitto)
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ~/ha-local-data/mosquitto/config:/mosquitto/config
+      - ~/ha-local-data/mosquitto/data:/mosquitto/data
+      - ~/ha-local-data/mosquitto/log:/mosquitto/log
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # AI Gateway
+  ai-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SECRETS_MANAGER_ENABLED=false
+      - HA_TOKEN=${HA_TOKEN}
+      - HA_BASE_URL=${HA_BASE_URL:-http://host.docker.internal:8123}
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:3b}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - STT_PROVIDER=${STT_PROVIDER:-vosk}
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - STT_CONFIDENCE_THRESHOLD=${STT_CONFIDENCE_THRESHOLD:-0.5}
+      - BRAVE_API_KEY=${BRAVE_API_KEY:-}
+      - SEARCH_RESULTS_LIMIT=${SEARCH_RESULTS_LIMIT:-5}
+      - ALLOWED_DOMAINS=${ALLOWED_DOMAINS:-}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATABASE_ENABLED=${DATABASE_ENABLED:-false}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=ai_assistant
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - POSTGRES_DB=ai_assistant
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS:-384}
+      - CACHE_TTL_SECONDS=${CACHE_TTL_SECONDS:-3600}
+      - NEW_TOOLS_ENABLED=${NEW_TOOLS_ENABLED:-false}
+      - LEARNING_ENABLED=${LEARNING_ENABLED:-false}
+      - MQTT_TOPIC_VERSION=${MQTT_TOPIC_VERSION:-v1}
+      - MQTT_BASE_PREFIX=${MQTT_BASE_PREFIX:-voice_assistant}
+      - MQTT_BROKER_URL=${MQTT_BROKER_URL:-mosquitto}
+      - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}
+    volumes:
+      - ./config:/app/config:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      homeassistant:
+        condition: service_healthy
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8080/health', timeout=5).raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # React Dashboard
+  react-dashboard:
+    build:
+      context: ../react-dashboard
+      dockerfile: Dockerfile
+    container_name: react-dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_HA_URL=http://localhost:8123
+      - VITE_GATEWAY_URL=http://localhost:8080
+      - VITE_MQTT_TOPIC_VERSION=${VITE_MQTT_TOPIC_VERSION:-v1}
+      - VITE_MQTT_BASE_PREFIX=${VITE_MQTT_BASE_PREFIX:-voice_assistant}
+    depends_on:
+      - ai-gateway
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# Note: wake-word service removed (requires RPi hardware)

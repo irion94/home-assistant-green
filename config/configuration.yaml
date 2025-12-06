@@ -7,7 +7,7 @@ homeassistant:
   time_zone: Europe/Warsaw
   packages: !include_dir_named packages
   external_url: "https://ha.casksoft.pl"
-  internal_url: "http://homeassistant.local:8123"
+  internal_url: "http://192.168.1.31:8123"
 
 http:
   use_x_forwarded_for: true
@@ -16,6 +16,7 @@ http:
     - 172.30.33.0/24
     - 127.0.0.1
     - ::1
+    - 192.168.1.0/24  # Local network
 
 # Enable default config
 default_config:
