@@ -1,8 +1,0 @@
----
-# Touch-Friendly Lights Dashboard
-# Large switches optimized for touchscreen control
-# Resolution: 1280x800+
-
-title: Touch Lights
-views:
-  - !include views/touch_lights_view.yaml

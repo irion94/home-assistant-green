@@ -1,9 +1,0 @@
-title: Tuya
-path: tuya
-icon: mdi:power-socket-eu
-cards:
-  - type: entities
-    title: Tuya Devices
-    entities:
-      - sensor.tuya_devices_count
-      - automation.tuya_example_automation
