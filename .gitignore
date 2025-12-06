@@ -101,3 +101,12 @@ config/.ha_run.lock
 
 #entities
 entities.csv
+
+# Local development data
+ai-gateway/data/
+
+# Separate repo (cloned by init-ha-service.sh)
+home-assistant-service/
+
+# Local Claude settings
+.claude/settings.local.json
