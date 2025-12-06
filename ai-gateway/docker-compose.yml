@@ -9,10 +9,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}  # Fallback if secrets disabled
       # POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password  # Use secret when SECRETS_MANAGER_ENABLED=true
       POSTGRES_DB: ai_assistant
-    secrets:
-      - postgres_password
+    # secrets:  # Disabled for local dev (no /run/secrets on macOS)
+    #   - postgres_password
     volumes:
-      - /mnt/data-ssd/postgres-data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
@@ -21,7 +21,9 @@ services:
       timeout: 5s
       retries: 5
 
-  # Home Assistant
+  # Home Assistant (Optional - can run from separate home-assistant-service repo)
+  # To use external HA: don't include 'ha' profile, set HA_BASE_URL to external address
+  # To use embedded HA: docker compose --profile ha up -d
   homeassistant:
     image: ghcr.io/home-assistant/home-assistant:2024.11.3
     container_name: homeassistant
@@ -31,11 +33,11 @@ services:
       - NET_RAW
       - SYS_ADMIN
     volumes:
-      - /mnt/data-ssd/ha-data/ha-config:/config
+      - ${HA_CONFIG_PATH:-../home-assistant-service/config}:/config
       - /var/run/docker.sock:/var/run/docker.sock
       - /run/dbus:/run/dbus:rw  # Bluetooth support via D-Bus (read-write)
     environment:
-      - TZ=Europe/Warsaw
+      - TZ=${TZ:-Europe/Warsaw}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8123/manifest.json"]
@@ -43,6 +45,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    profiles:
+      - ha
 
   # MQTT Broker (Mosquitto)
   mosquitto:
@@ -52,9 +56,9 @@ services:
       - "1883:1883"
       - "9001:9001"
     volumes:
-      - /mnt/data-ssd/ha-data/mosquitto/config:/mosquitto/config
-      - /mnt/data-ssd/ha-data/mosquitto/data:/mosquitto/data
-      - /mnt/data-ssd/ha-data/mosquitto/log:/mosquitto/log
+      - ./data/mosquitto/config:/mosquitto/config
+      - ./data/mosquitto/data:/mosquitto/data
+      - ./data/mosquitto/log:/mosquitto/log
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-i", "healthcheck", "-W", "3"]
@@ -116,18 +120,18 @@ services:
       - MQTT_BASE_PREFIX=${MQTT_BASE_PREFIX:-voice_assistant}  # Topic namespace
       - MQTT_BROKER_URL=${MQTT_BROKER_URL:-mosquitto}  # MQTT broker hostname
       - MQTT_BROKER_PORT=${MQTT_BROKER_PORT:-1883}  # MQTT broker port
-    secrets:
-      - ha_token
-      - openai_api_key
-      - brave_api_key
-      - postgres_password
+    # secrets:  # Disabled for local dev (no /run/secrets on macOS)
+    #   - ha_token
+    #   - openai_api_key
+    #   - brave_api_key
+    #   - postgres_password
     volumes:
       - ./config:/app/config:ro
     depends_on:
       postgres:
         condition: service_healthy
-      homeassistant:
-        condition: service_healthy
+      # Note: homeassistant dependency removed - HA can run externally
+      # Use --profile ha if running HA from this compose file
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -138,7 +142,8 @@ services:
       retries: 3
       start_period: 10s
 
-  # Wake-Word Detection Service
+  # Wake-Word Detection Service (Optional - requires audio hardware)
+  # To enable: docker compose --profile wake-word up -d
   wake-word:
     build:
       context: ../wake-word-service
@@ -157,6 +162,8 @@ services:
       # - /dev/spidev0.0:/dev/spidev0.0
       # - /dev/spidev0.1:/dev/spidev0.1
       # - /dev/gpiomem:/dev/gpiomem
+    profiles:
+      - wake-word
     environment:
       # Room identification for multi-device support
       - ROOM_ID=${ROOM_ID:-salon}
@@ -209,9 +216,9 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ../wake-word-service/sounds:/app/sounds:ro
-      - /mnt/data-ssd/ha-data/wake-word-models:/app/models
-      # Persist TTS models on SSD (XTTS v2 ~2GB)
-      - /mnt/data-ssd/ha-data/tts-cache:/app/tts-cache
+      - ./data/wake-word-models:/app/models
+      # Persist TTS models (XTTS v2 ~2GB)
+      - ./data/tts-cache:/app/tts-cache
     group_add:
       - audio
     healthcheck:
@@ -245,20 +252,21 @@ services:
       timeout: 10s
       retries: 3
 
-# Docker Secrets Configuration (Phase 1)
-# To enable secrets:
+# Docker Secrets Configuration (Phase 1) - Disabled for local dev
+# To enable secrets on production (Raspberry Pi):
 # 1. Create /run/secrets/ directory with proper permissions
 # 2. Create individual secret files (ha_token, openai_api_key, brave_api_key, postgres_password)
 # 3. Set SECRETS_MANAGER_ENABLED=true in .env
-secrets:
-  ha_token:
-    file: /run/secrets/ha_token
-  openai_api_key:
-    file: /run/secrets/openai_api_key
-  brave_api_key:
-    file: /run/secrets/brave_api_key
-  postgres_password:
-    file: /run/secrets/postgres_password
+# 4. Uncomment secrets sections in services and below
+# secrets:
+#   ha_token:
+#     file: /run/secrets/ha_token
+#   openai_api_key:
+#     file: /run/secrets/openai_api_key
+#   brave_api_key:
+#     file: /run/secrets/brave_api_key
+#   postgres_password:
+#     file: /run/secrets/postgres_password
 
 # Volumes are now using SSD paths directly
 # /mnt/data-ssd/ha-data/ha-config
