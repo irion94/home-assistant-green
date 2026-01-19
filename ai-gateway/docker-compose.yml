@@ -145,91 +145,16 @@ services:
       retries: 3
       start_period: 10s
 
-  # Wake-Word Detection Service (Optional - requires audio hardware)
-  # To enable: docker compose --profile wake-word up -d
-  wake-word:
-    build:
-      context: ../wake-word-service
-      dockerfile: Dockerfile
-    container_name: wake-word
-    # Security: Replace privileged mode with specific capabilities
-    cap_add:
-      - SYS_RAWIO     # Required for GPIO access
-      - IPC_LOCK      # Required for audio device access
-    security_opt:
-      - seccomp:unconfined  # Required for some audio operations
-    devices:
-      - /dev/snd:/dev/snd
-      - /dev/bus/usb:/dev/bus/usb
-      # SPI devices for ReSpeaker LED control (optional, may not exist on all systems)
-      # - /dev/spidev0.0:/dev/spidev0.0
-      # - /dev/spidev0.1:/dev/spidev0.1
-      # - /dev/gpiomem:/dev/gpiomem
-    profiles:
-      - wake-word
-    environment:
-      # Room identification for multi-device support
-      - ROOM_ID=${ROOM_ID:-salon}
-      # MQTT broker connection
-      - MQTT_HOST=mosquitto
-      - MQTT_PORT=1883
-      # Audio device configuration
-      - AUDIO_DEVICE=hw:2,0
-      - CHANNELS=6
-      - SAMPLE_RATE=16000
-      - CHUNK_SIZE=1280
-      - WAKE_WORD_MODEL=hey_jarvis
-      - DETECTION_THRESHOLD=0.50  # Increased from 0.35 to reduce false wake-ups
-      - INFERENCE_FRAMEWORK=tflite
-      - AI_GATEWAY_URL=http://host.docker.internal:8080
-      - REQUEST_TIMEOUT=120
-      - RECORDING_DURATION=10
-      - ENABLE_BEEP=true
-      - BEEP_VOLUME=0.8
-      - LOG_LEVEL=INFO
-      # Vosk local transcription (only Polish model available, 50MB on SSD)
-      - VOSK_MODEL_PATH=/app/models/vosk/vosk-model-small-pl-0.22
-      # Use Whisper for parallel STT (set to false for faster, Vosk-only mode)
-      - USE_WHISPER=false
-      # Whisper Model Selection
-      # Options: tiny, base, small, medium, large-v3, or HuggingFace repo ID
-      # Testing: large-v3 (standard OpenAI model, best for Polish)
-      - WHISPER_MODEL_SIZE=large-v3
-      # Whisper timeout in seconds (fallback to Vosk if Whisper takes longer)
-      - WHISPER_TIMEOUT=15.0
-      # TTS cache directory (persists XTTS v2 model across rebuilds)
-      - TTS_HOME=/app/tts-cache
-      # Conversation mode configuration (false = single command, true = multi-turn)
-      - CONVERSATION_MODE_DEFAULT=false
-      # Conversation timeout in seconds
-      - CONVERSATION_TIMEOUT=30
-      # Parallel TTS Configuration (reduces latency via background synthesis)
-      - PARALLEL_TTS_ENABLED=true                 # Feature flag (default: disabled)
-      - PARALLEL_TTS_WORKERS=1                    # Synthesis thread pool size (1-2) - REDUCED to 1 to prevent OOM
-      - PARALLEL_TTS_FORCE_XTTS=false             # Use VITS for short text (<15 words) to save memory
-      - PARALLEL_TTS_QUEUE_TIMEOUT=30             # Synthesis timeout (seconds) - XTTS can take 10-15s
-      # Hybrid STT Configuration (Phase 2: Browser STT with RPI fallback)
-      - HYBRID_STT_ENABLED=true                   # Enable browser Web Speech API
-      - HYBRID_STT_TIMEOUT_MS=5000                # Browser response timeout in milliseconds
-    depends_on:
-      - ai-gateway
-      - mosquitto
-    restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - ../wake-word-service/sounds:/app/sounds:ro
-      - ./data/wake-word-models:/app/models
-      # Persist TTS models (XTTS v2 ~2GB)
-      - ./data/tts-cache:/app/tts-cache
-    group_add:
-      - audio
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "python.*main.py"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+  # Wake-Word Detection Service
+  # NOTE: Wake-word service has been moved to a standalone compose file for
+  # better multi-platform support (macOS, Linux, RPi).
+  #
+  # To run wake-word service:
+  #   cd ../wake-word-service
+  #   docker compose up -d
+  #
+  # See: wake-word-service/docker-compose.yml
+  # See: wake-word-service/.env.example
 
   # React Dashboard (Multi-Client Architecture)
   # To use a specific client branch:

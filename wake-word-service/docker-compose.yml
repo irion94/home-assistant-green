@@ -1,0 +1,124 @@
+# Wake-Word Service - Standalone Docker Compose
+# Multi-platform voice wake-word detection service
+#
+# Usage:
+#   macOS:     docker compose up -d
+#   Linux/RPi: docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d
+#
+# Or use shortcuts:
+#   ./run.sh         # Auto-detects platform
+#   ./run.sh macos   # Force macOS mode
+#   ./run.sh linux   # Force Linux mode
+#   ./run.sh rpi     # Force RPi mode
+#
+# Requires:
+#   - Audio input device (microphone)
+#   - MQTT broker (mosquitto) running
+#   - AI Gateway service running
+
+services:
+  wake-word:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wake-word
+    restart: unless-stopped
+
+    # Note: Linux-specific device mappings are in docker-compose.linux.yml
+    # macOS uses host audio passthrough differently
+
+    environment:
+      # === Platform Configuration ===
+      # Override automatic detection: auto, macos, linux, rpi
+      - PLATFORM=${PLATFORM:-auto}
+
+      # === Room Identification ===
+      - ROOM_ID=${ROOM_ID:-default}
+
+      # === Audio Input Configuration ===
+      # Comma-separated device name preferences (matched case-insensitive)
+      - AUDIO_DEVICE_PREFERENCE=${AUDIO_DEVICE_PREFERENCE:-ReSpeaker,USB Audio,Built-in Microphone}
+      # Legacy: Direct ALSA device (used if preference matching fails)
+      - AUDIO_DEVICE=${AUDIO_DEVICE:-hw:2,0}
+      # Physical input channels (ReSpeaker=6, most USB mics=1-2)
+      - AUDIO_INPUT_CHANNELS=${AUDIO_INPUT_CHANNELS:-6}
+      - SAMPLE_RATE=${SAMPLE_RATE:-16000}
+      - CHUNK_SIZE=${CHUNK_SIZE:-1280}
+
+      # === Audio Output Configuration ===
+      # Output device (ALSA format for Linux, ignored on macOS)
+      - AUDIO_OUTPUT_DEVICE=${AUDIO_OUTPUT_DEVICE:-plughw:2,0}
+      # Playback backend: auto, alsa, pyaudio
+      - PLAYBACK_BACKEND=${PLAYBACK_BACKEND:-auto}
+
+      # === Wake-Word Detection ===
+      - WAKE_WORD_MODEL=${WAKE_WORD_MODEL:-hey_jarvis}
+      - DETECTION_THRESHOLD=${DETECTION_THRESHOLD:-0.50}
+      - INFERENCE_FRAMEWORK=${INFERENCE_FRAMEWORK:-tflite}
+
+      # === Recording ===
+      - RECORDING_DURATION=${RECORDING_DURATION:-10}
+      - VAD_SILENCE_THRESHOLD=${VAD_SILENCE_THRESHOLD:-1000}
+      - VAD_SILENCE_CHUNKS=${VAD_SILENCE_CHUNKS:-12}
+      - VAD_MIN_SPEECH_CHUNKS=${VAD_MIN_SPEECH_CHUNKS:-8}
+
+      # === AI Gateway Connection ===
+      - AI_GATEWAY_URL=${AI_GATEWAY_URL:-http://host.docker.internal:8080}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-120}
+
+      # === MQTT Broker ===
+      - MQTT_HOST=${MQTT_HOST:-host.docker.internal}
+      - MQTT_PORT=${MQTT_PORT:-1883}
+
+      # === STT Configuration ===
+      - VOSK_MODEL_PATH=${VOSK_MODEL_PATH:-/app/models/vosk/vosk-model-small-pl-0.22}
+      - USE_WHISPER=${USE_WHISPER:-false}
+      - WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE:-base}
+      - WHISPER_TIMEOUT=${WHISPER_TIMEOUT:-15.0}
+      - STREAMING_STT_ENABLED=${STREAMING_STT_ENABLED:-true}
+      - STREAMING_STT_CONFIDENCE_THRESHOLD=${STREAMING_STT_CONFIDENCE_THRESHOLD:-0.7}
+
+      # === TTS Configuration ===
+      - TTS_HOME=${TTS_HOME:-/app/tts-cache}
+      - PARALLEL_TTS_ENABLED=${PARALLEL_TTS_ENABLED:-false}
+      - PARALLEL_TTS_WORKERS=${PARALLEL_TTS_WORKERS:-1}
+      - PARALLEL_TTS_FORCE_XTTS=${PARALLEL_TTS_FORCE_XTTS:-false}
+      - PARALLEL_TTS_QUEUE_TIMEOUT=${PARALLEL_TTS_QUEUE_TIMEOUT:-30}
+
+      # === Conversation Mode ===
+      - CONVERSATION_MODE_DEFAULT=${CONVERSATION_MODE_DEFAULT:-false}
+      - CONVERSATION_TIMEOUT=${CONVERSATION_TIMEOUT:-30}
+
+      # === Hybrid STT (Browser fallback) ===
+      - HYBRID_STT_ENABLED=${HYBRID_STT_ENABLED:-true}
+      - HYBRID_STT_TIMEOUT_MS=${HYBRID_STT_TIMEOUT_MS:-5000}
+
+      # === Feedback ===
+      # Enable console-based feedback (for development)
+      - FEEDBACK_CONSOLE=${FEEDBACK_CONSOLE:-false}
+      - ENABLE_BEEP=${ENABLE_BEEP:-true}
+      - BEEP_VOLUME=${BEEP_VOLUME:-0.8}
+
+      # === Logging ===
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+    volumes:
+      - ./sounds:/app/sounds:ro
+      - wake-word-models:/app/models
+      - tts-cache:/app/tts-cache
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python.*main.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  wake-word-models:
+    name: wake-word-models
+  tts-cache:
+    name: wake-word-tts-cache

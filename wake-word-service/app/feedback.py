@@ -13,12 +13,20 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Try to import pixel_ring for LED control
+# Note: pixel_ring initializes SPI hardware on import, which fails on non-RPi
+PIXEL_RING_AVAILABLE = False
+pixel_ring = None
+
 try:
     from pixel_ring import pixel_ring
     PIXEL_RING_AVAILABLE = True
 except ImportError:
-    PIXEL_RING_AVAILABLE = False
-    logger.warning("pixel_ring not available - LED feedback disabled")
+    logger.warning("pixel_ring module not installed - LED feedback disabled")
+except (FileNotFoundError, OSError) as e:
+    # SPI device not available (non-RPi platform)
+    logger.info(f"pixel_ring hardware not available (non-RPi platform): {e}")
+except Exception as e:
+    logger.warning(f"pixel_ring initialization failed: {e}")
 
 
 class AudioFeedback:

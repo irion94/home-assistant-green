@@ -54,7 +54,11 @@ class AudioCapture:
             device_index = self._find_device_index()
 
             if device_index is None:
-                raise ValueError(f"Audio device not found: {self.device}")
+                raise ValueError(
+                    f"No audio input devices found. "
+                    f"Searched for: ReSpeaker, {self.device}, Built-in Microphone, or any input device. "
+                    f"On macOS Docker Desktop, host microphone is not accessible."
+                )
 
             logger.info(f"Found audio device at index {device_index}")
 
@@ -63,8 +67,17 @@ class AudioCapture:
             raise
 
     def _find_device_index(self) -> Optional[int]:
-        """Find ALSA device index"""
+        """Find audio device index.
+
+        Priority:
+        1. ReSpeaker device (for RPi)
+        2. Device matching the configured name (ALSA or preference)
+        3. Built-in Microphone (macOS)
+        4. Any device with input channels (fallback)
+        """
         found_device = None
+        fallback_device = None
+        builtin_device = None
 
         for i in range(self.pyaudio.get_device_count()):
             info = self.pyaudio.get_device_info_by_index(i)
@@ -73,19 +86,47 @@ class AudioCapture:
 
             logger.debug(f"Device {i}: {name}, input channels: {max_input}")
 
-            # Match by device name
-            if "ReSpeaker" in name or self.device in name:
+            # Priority 1: ReSpeaker (RPi)
+            if "ReSpeaker" in name or "seeed" in name.lower():
                 found_device = i
-                # Prefer device with input channels if available
                 if max_input > 0:
-                    logger.info(f"Found capture device: {name} with {max_input} input channels")
+                    logger.info(f"Found ReSpeaker device: {name} with {max_input} input channels")
                     return i
+
+            # Priority 2: Match configured device name
+            elif self.device in name:
+                found_device = i
+                if max_input > 0:
+                    logger.info(f"Found configured device: {name} with {max_input} input channels")
+                    return i
+
+            # Priority 3: Built-in Microphone (macOS)
+            elif max_input > 0 and ("Built-in" in name or "MacBook" in name):
+                builtin_device = i
+                logger.debug(f"Found built-in device: {name}")
+
+            # Priority 4: Any input device as fallback
+            elif max_input > 0 and fallback_device is None:
+                fallback_device = i
+                logger.debug(f"Found fallback device: {name}")
 
         # If we found a device but it reported 0 input channels, use it anyway
         # (PyAudio sometimes reports wrong capabilities for ALSA devices)
         if found_device is not None:
             logger.warning(f"Device {found_device} reports 0 input channels, attempting to use anyway")
             return found_device
+
+        # Use built-in microphone if available (macOS)
+        if builtin_device is not None:
+            info = self.pyaudio.get_device_info_by_index(builtin_device)
+            logger.info(f"Using built-in microphone: {info.get('name')}")
+            return builtin_device
+
+        # Fallback to any available input device
+        if fallback_device is not None:
+            info = self.pyaudio.get_device_info_by_index(fallback_device)
+            logger.info(f"Using fallback audio device: {info.get('name')}")
+            return fallback_device
 
         return None
 
@@ -96,11 +137,21 @@ class AudioCapture:
         try:
             device_index = self._find_device_index()
 
-            logger.info(f"Opening stream: device={device_index}, channels={self.channels}, rate={self.sample_rate}, chunk={self.chunk_size}")
+            # Auto-detect channels if device doesn't support configured count
+            channels = self.channels
+            if device_index is not None:
+                info = self.pyaudio.get_device_info_by_index(device_index)
+                max_channels = int(info.get("maxInputChannels", 0))
+                if max_channels > 0 and max_channels < channels:
+                    logger.info(f"Device supports {max_channels} channels, adjusting from {channels}")
+                    channels = max_channels
+                    self.channels = channels  # Update instance for downstream use
+
+            logger.info(f"Opening stream: device={device_index}, channels={channels}, rate={self.sample_rate}, chunk={self.chunk_size}")
 
             self.stream = self.pyaudio.open(
                 format=pyaudio.paInt16,
-                channels=self.channels,
+                channels=channels,
                 rate=self.sample_rate,
                 input=True,
                 input_device_index=device_index,

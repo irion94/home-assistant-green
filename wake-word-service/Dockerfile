@@ -1,9 +1,21 @@
 # Wake-Word Detection Service
-# Optimized for Raspberry Pi 5 with ReSpeaker 4 Mic Array
+# Multi-platform support: macOS, Linux, Raspberry Pi
+#
+# Platforms:
+#   - RPi: Full features (ReSpeaker LEDs, ALSA, USB reset)
+#   - Linux: ALSA audio, auto-detect microphone
+#   - macOS: PyAudio via CoreAudio
+#
+# Build:
+#   docker build -t wake-word-service .
+#   PLATFORM=rpi docker compose up
+#   PLATFORM=macos docker compose up
 
 FROM python:3.11-slim
 
 # Install system dependencies for audio and build tools
+# Note: ALSA utils are included for Linux compatibility
+#       On macOS containers, PyAudio uses CoreAudio directly
 RUN apt-get update && apt-get install -y \
     alsa-utils \
     portaudio19-dev \
@@ -14,6 +26,7 @@ RUN apt-get update && apt-get install -y \
     make \
     libusb-1.0-0 \
     curl \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Rust (required for Coqui TTS dependencies)

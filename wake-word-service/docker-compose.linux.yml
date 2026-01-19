@@ -1,0 +1,26 @@
+# Wake-Word Service - Linux/RPi Override
+# This file adds Linux-specific configurations for audio device access
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.linux.yml up -d
+#
+# Or use the run.sh script:
+#   ./run.sh linux
+#   ./run.sh rpi
+
+services:
+  wake-word:
+    # Linux audio device access
+    devices:
+      - /dev/snd:/dev/snd
+
+    # Audio group for ALSA access
+    group_add:
+      - audio
+
+    # Security capabilities for hardware access
+    cap_add:
+      - SYS_RAWIO     # GPIO access (RPi LEDs)
+      - IPC_LOCK      # Audio device locking
+    security_opt:
+      - seccomp:unconfined  # Required for ALSA operations
