@@ -21,8 +21,6 @@ jobs:
         run: |
           cat > config/secrets.yaml << 'EOF'
           # Auto-generated secrets for CI validation
-          strava_client_id: ${{ secrets.STRAVA_CLIENT_ID || 'test_strava_client_id' }}
-          strava_client_secret: ${{ secrets.STRAVA_CLIENT_SECRET || 'test_strava_client_secret' }}
           tuya_client_id: ${{ secrets.TUYA_CLIENT_ID || 'test_value' }}
           tuya_client_secret: ${{ secrets.TUYA_CLIENT_SECRET || 'test_value' }}
           tuya_user_id: test_value
@@ -156,32 +154,6 @@ jobs:
           # Currently measuring config/automation tests (no script execution yet)
           # Will add script tests and increase threshold in future iterations
           coverage report --fail-under=0 || echo "::warning::Coverage below target (current: $(coverage report | grep TOTAL | awk '{print $NF}'), target: 30%)"
-
-  test-custom-integration:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install test deps
-        working-directory: ha-strava-coach
-        run: |
-          pip install -e .[test]
-      - name: Run tests with coverage
-        working-directory: ha-strava-coach
-        run: pytest --cov --cov-report=xml --cov-report=term
-
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v4
-        if: always()
-        with:
-          file: ./ha-strava-coach/coverage.xml
-          flags: strava-coach
-          name: strava-coach-coverage
-          fail_ci_if_error: false
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   lint-yaml:
     runs-on: ubuntu-latest

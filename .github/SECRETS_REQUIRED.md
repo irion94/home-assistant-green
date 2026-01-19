@@ -11,15 +11,6 @@ These secrets are **required** for the `deploy-ssh.yml` workflow:
 | `HA_SSH_KEY` | SSH private key | Generate with `ssh-keygen` and add public key to HA |
 | `HA_SSH_PORT` | SSH port (optional) | Default: `22` |
 
-## For Strava Coach Integration
-
-Add these to enable Strava Coach:
-
-| Secret Name | Description | How to Get |
-|-------------|-------------|------------|
-| `STRAVA_CLIENT_ID` | Strava API Client ID | https://www.strava.com/settings/api → Create App |
-| `STRAVA_CLIENT_SECRET` | Strava API Client Secret | Same page as Client ID |
-
 ## How to Add Secrets
 
 1. **Repository Settings** → **Secrets and variables** → **Actions**
@@ -35,8 +26,6 @@ After adding secrets, they should appear in the list (values hidden):
 ✓ HA_HOST              ••••••••••••
 ✓ HA_SSH_USER          ••••
 ✓ HA_SSH_KEY           ••••••••••••••••••••••••••••
-✓ STRAVA_CLIENT_ID     ••••••
-✓ STRAVA_CLIENT_SECRET ••••••••••••••••••••••••••••
 ```
 
 ## Deployment Flow
@@ -46,7 +35,7 @@ GitHub Secrets
     ↓
 GitHub Actions Workflow (deploy-ssh.yml)
     ↓
-Environment Variables (STRAVA_CLIENT_ID, etc.)
+Environment Variables
     ↓
 deploy_secrets.sh
     ↓
@@ -62,6 +51,5 @@ Home Assistant reads via !secret references
 After adding secrets:
 1. Update `config/configuration.yaml` with `!secret` references
 2. Run deployment workflow or `./scripts/deploy_via_ssh.sh`
-3. Add Strava Coach integration in Home Assistant
 
 See [QUICK_START_SECRETS.md](../QUICK_START_SECRETS.md) for complete guide.

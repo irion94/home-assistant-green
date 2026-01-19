@@ -109,7 +109,6 @@ home-assistant-green/
 ├── scripts/                # Deployment and utility scripts
 ├── tests/                  # Test suite
 ├── docs/                   # Documentation
-├── ha-strava-coach/        # Subproject for Strava Coach integration
 ├── pyproject.toml          # Python project configuration
 ├── .pre-commit-config.yaml # Pre-commit hooks configuration
 └── CLAUDE.md               # AI assistant guidance
@@ -165,13 +164,12 @@ git commit -m "feat: add new automation for X"
 
 ### Custom Component Development
 
-For custom integrations (like `strava_coach`):
+For custom integrations:
 
-1. Develop in `ha-strava-coach/` subproject (if applicable)
-2. Copy to `config/custom_components/` for deployment
-3. Follow Home Assistant component development guidelines
-4. Add tests in `tests/` directory
-5. Update manifest.json with proper version and dependencies
+1. Develop in `config/custom_components/your_component/`
+2. Follow Home Assistant component development guidelines
+3. Add tests in `tests/` directory
+4. Update manifest.json with proper version and dependencies
 
 ## Testing
 

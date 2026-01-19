@@ -1,0 +1,25 @@
+# Matter Server - Thread/Matter device support
+# Optional service for Matter-compatible smart home devices
+#
+# Usage:
+#   docker compose up -d
+#
+# Requirements:
+#   - Matter/Thread devices (Aqara, Eve, Nanoleaf, etc.)
+#   - Home Assistant Matter integration configured
+
+services:
+  matter-server:
+    image: ghcr.io/home-assistant-libs/python-matter-server:stable
+    container_name: matter-server
+    restart: unless-stopped
+    network_mode: host  # Required for Matter/Thread discovery
+    volumes:
+      - ./data:/data
+    environment:
+      - TZ=${TZ:-Europe/Warsaw}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 5580)); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

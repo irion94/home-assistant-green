@@ -35,13 +35,6 @@ This guide explains how to store sensitive credentials (API keys, passwords) in 
 | `HA_SSH_KEY` | SSH private key (entire file) | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
 | `HA_SSH_PORT` | SSH port (optional) | `22` |
 
-#### Strava Coach Integration
-
-| Secret Name | Description | Where to Get |
-|-------------|-------------|--------------|
-| `STRAVA_CLIENT_ID` | Strava API Client ID | https://www.strava.com/settings/api |
-| `STRAVA_CLIENT_SECRET` | Strava API Client Secret | https://www.strava.com/settings/api |
-
 #### Other Integrations (Optional)
 
 Add as needed for your setup:
@@ -68,11 +61,7 @@ TELEGRAM_BOT_TOKEN
 In `config/configuration.yaml`, reference secrets:
 
 ```yaml
-strava_coach:
-  client_id: !secret strava_client_id
-  client_secret: !secret strava_client_secret
-
-# Other integrations using secrets
+# Example integrations using secrets
 tuya:
   username: !secret tuya_client_id
   password: !secret tuya_client_secret
@@ -95,10 +84,6 @@ Set environment variables and deploy:
 export HA_HOST="192.168.1.100"
 export HA_SSH_USER="root"
 export HA_SSH_KEY="$HOME/.ssh/id_homeassistant"
-
-# Set Strava credentials
-export STRAVA_CLIENT_ID="123456"
-export STRAVA_CLIENT_SECRET="abc123def456..."
 
 # Deploy
 ./scripts/deploy_via_ssh.sh
@@ -129,9 +114,7 @@ ssh root@192.168.1.100
 # Check secrets.yaml was created
 cat /root/config/secrets.yaml
 
-# Should contain:
-# strava_client_id: "123456"
-# strava_client_secret: "abc123..."
+# Should contain your configured secrets
 ```
 
 ## Security Best Practices
@@ -212,15 +195,15 @@ weather:
 **Check environment variables are set:**
 ```bash
 # In your workflow or local terminal
-echo $STRAVA_CLIENT_ID
-echo $STRAVA_CLIENT_SECRET
+echo $HA_HOST
+echo $HA_SSH_USER
 ```
 
 **Check deploy_secrets.sh ran:**
 ```bash
 # Look for this in deployment logs:
 # [deploy] Generating secrets.yaml from environment variables...
-# [secrets] ✓ Added Strava credentials
+# [secrets] ✓ Added credentials
 ```
 
 ### Home Assistant can't read secrets
@@ -234,12 +217,12 @@ cat /root/config/secrets.yaml
 **Check configuration.yaml syntax:**
 ```yaml
 # Correct
-strava_coach:
-  client_id: !secret strava_client_id
+mqtt:
+  broker: !secret mqtt_broker
 
 # Incorrect (missing space after colon)
-strava_coach:
-  client_id:!secret strava_client_id
+mqtt:
+  broker:!secret mqtt_broker
 ```
 
 **Restart Home Assistant:**
@@ -266,8 +249,9 @@ For local development, create `config/secrets.yaml` manually:
 
 ```yaml
 # config/secrets.yaml (gitignored)
-strava_client_id: "123456"
-strava_client_secret: "abc123def456..."
+mqtt_broker: "localhost"
+mqtt_username: "homeassistant"
+mqtt_password: "your_password"
 ```
 
 **Note:** This file won't be committed to git. Use GitHub Secrets for production deployments.
@@ -276,4 +260,3 @@ strava_client_secret: "abc123def456..."
 
 - [GitHub Encrypted Secrets](https://docs.github.com/en/actions/security-guides/encrypted-secrets)
 - [Home Assistant Secrets](https://www.home-assistant.io/docs/configuration/secrets/)
-- [Strava API Settings](https://www.strava.com/settings/api)

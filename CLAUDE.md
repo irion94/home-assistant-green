@@ -22,7 +22,7 @@ All services run via Docker with persistent SSD storage.
 - ✅ AI Gateway (FastAPI app in `ai-gateway/` connecting Ollama ↔ Home Assistant)
 - ✅ MQTT Broker (Mosquitto for IoT device communication)
 - ✅ Comprehensive CI/CD pipeline (validation, testing, deployment)
-- ✅ Custom components (Strava Coach, Daikin, Solarman, etc.)
+- ✅ Custom components (Daikin, Solarman, Tauron, etc.)
 - ✅ **Wake-Word Detection (OpenWakeWord - "Hey Jarvis", 90-98% accuracy)**
 - ✅ **Audio Recording (7 seconds after wake-word)**
 - ✅ **Audio Transcription (Vosk - offline speech-to-text, Whisper fallback)**

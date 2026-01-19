@@ -80,7 +80,7 @@ Each package file contains:
 
 - **Documentation**: CLAUDE.md explains pattern and rationale
 - **Examples**: config/packages/ contains well-documented examples
-- **Naming**: Clear, descriptive package names (mqtt.yaml, strava_coach_dashboard.yaml)
+- **Naming**: Clear, descriptive package names (mqtt.yaml, climate.yaml)
 - **Comments**: Each package has header explaining purpose
 
 ## Package Guidelines
@@ -95,7 +95,6 @@ Each package file contains:
 
 Current packages in this repository:
 - `mqtt.yaml` - MQTT broker and related sensors
-- `strava_coach_dashboard.yaml` - Strava Coach integration and dashboard
 - `tuya.yaml` - Tuya smart home devices
 - `xiaomi.yaml` - Xiaomi devices
 - `solarman.yaml` - Solar inverter monitoring

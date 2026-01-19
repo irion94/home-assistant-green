@@ -231,25 +231,6 @@ services:
       retries: 3
       start_period: 30s
 
-  # Matter Server (for Thread/Matter devices like Aqara)
-  # Replaces the HA OS Matter Server add-on
-  matter-server:
-    image: ghcr.io/home-assistant-libs/python-matter-server:stable
-    container_name: matter-server
-    restart: unless-stopped
-    network_mode: host  # Required for Matter/Thread discovery
-    volumes:
-      - ./data/matter-server:/data
-    environment:
-      - TZ=${TZ:-Europe/Warsaw}
-    # Note: Matter may require Bluetooth for commissioning new devices
-    # On Raspberry Pi, add: /run/dbus:/run/dbus:ro
-    healthcheck:
-      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 5580)); s.close()"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   # React Dashboard (Multi-Client Architecture)
   # To use a specific client branch:
   #   1. Set REACT_DASHBOARD_BRANCH=client/your_client in .env

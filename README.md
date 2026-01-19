@@ -50,8 +50,8 @@ Production-ready voice control system with:
 - **Conversation mode**: Multi-turn dialogue for complex interactions
 
 **Quick Links**:
-- **[Voice Assistant Overview](VOICE_ASSISTANT.md)** - Getting started guide
-- **[Streaming STT Details](docs/STREAMING_STT.md)** - Phase 8 implementation (NEW!)
+- **[Streaming STT Details](docs/STREAMING_STT.md)** - Real-time transcription
+- **[Voice Architecture](docs/VOICE_WAKEWORD_ARCHITECTURE.md)** - Wake-word system design
 - **[Development Guide](CLAUDE.md)** - Architecture and AI integration
 
 ### CI/CD Pipeline
@@ -127,8 +127,8 @@ The voice assistant system provides hands-free voice control with real-time stre
 
 ### Documentation
 
-- **[Voice Assistant Overview](VOICE_ASSISTANT.md)** - Complete guide
 - **[Streaming STT Implementation](docs/STREAMING_STT.md)** - Technical details
+- **[Voice Architecture](docs/VOICE_WAKEWORD_ARCHITECTURE.md)** - Wake-word system
 - **[Development Guide](CLAUDE.md)** - Architecture and integration
 
 ### Troubleshooting
@@ -150,7 +150,7 @@ docker compose exec mosquitto mosquitto_sub -t "voice_assistant/room/+/session/+
 docker compose restart wake-word
 ```
 
-See [VOICE_ASSISTANT.md](VOICE_ASSISTANT.md) for complete troubleshooting guide.
+See [docs/STREAMING_STT.md](docs/STREAMING_STT.md) for complete troubleshooting guide.
 
 ## Deployment Setup
 

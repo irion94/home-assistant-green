@@ -14,7 +14,7 @@ This PR implements a comprehensive set of enterprise-grade improvements across 5
 - **Security Scanning**: Implemented CodeQL workflow for automated vulnerability detection
 - **Code Quality**: Added yamllint and shellcheck to CI pipeline
 - **Cleanup**: Added SSH key cleanup in deployment workflow
-- **Documentation**: Clarified dual Strava integration configuration
+- **Documentation**: Updated integration configuration guides
 
 **Files Changed**: 8 files modified/created
 
@@ -134,7 +134,7 @@ This PR implements a comprehensive set of enterprise-grade improvements across 5
 - `pyproject.toml` - Comprehensive tooling configuration
 - `.gitignore` - Coverage artifacts
 - `CLAUDE.md` - Updated project documentation
-- `config/configuration.yaml` - Clarified Strava integrations
+- `config/configuration.yaml` - Updated integrations configuration
 - `config/secrets.yaml.example` - Enhanced secret template
 - `scripts/deploy_via_ssh.sh` - Health checks
 - 5 shell scripts - SSH security hardening

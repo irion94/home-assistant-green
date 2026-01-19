@@ -31,21 +31,6 @@ updates:
       prefix: "deps"
       include: "scope"
 
-  # Python dependencies (ha-strava-coach subproject)
-  - package-ecosystem: "pip"
-    directory: "/ha-strava-coach"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 10
-    labels:
-      - "dependencies"
-      - "python"
-      - "strava-coach"
-    commit-message:
-      prefix: "deps"
-      include: "scope"
-
   # Docker base image updates
   - package-ecosystem: "docker"
     directory: "/.github/workflows"

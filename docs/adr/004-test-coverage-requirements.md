@@ -50,7 +50,7 @@ fail_under = 30  # Build fails if coverage < 30%
 source = ["scripts"]  # Infrastructure code only
 ```
 
-**Rationale**: The existing custom components (`strava_coach`, etc.) were created before the testing infrastructure was implemented. Rather than block all improvements until we write tests for thousands of lines of existing code, we start with infrastructure testing and progressively add component tests.
+**Rationale**: The existing custom components were created before the testing infrastructure was implemented. Rather than block all improvements until we write tests for thousands of lines of existing code, we start with infrastructure testing and progressively add component tests.
 
 ### Phase 2: Custom Component Testing (Future)
 
@@ -114,7 +114,7 @@ exclude_lines = [
 
 - **Root Project (Infrastructure)**: 30% minimum (Phase 1, enforced in CI)
 - **Root Project (Future, Full)**: 70% target (Phase 2, when custom component tests added)
-- **ha-strava-coach**: Own coverage requirements (already has ~80%+)
+- **ai-gateway**: Own coverage requirements in subproject pyproject.toml
 
 ## Implementation
 
