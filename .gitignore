@@ -108,5 +108,8 @@ ai-gateway/data/
 # Separate repo (cloned by init-ha-service.sh)
 home-assistant-service/
 
+# React Dashboard (separate repo: git@github.com:irion94/react-dashboard.git)
+react-dashboard/
+
 # Local Claude settings
 .claude/settings.local.json
