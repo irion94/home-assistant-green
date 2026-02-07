@@ -1,5 +1,5 @@
 # Home Assistant Inventory Summary
-**Generated:** 2026-02-06 05:01:52
+**Generated:** 2026-02-07 04:52:03
 **Source:** `data/inventory/raw/latest/`
 
 ## Totals
